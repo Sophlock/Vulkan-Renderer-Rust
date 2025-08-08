@@ -20,9 +20,9 @@ pub struct QueueFamilyIndices {
 }
 
 pub struct QueueCollection {
-    //graphics_queue: Arc<Queue>,
-    //present_queue: Arc<Queue>,
-    //compute_queue: Arc<Queue>,
+    pub graphics_queue: Arc<Queue>,
+    pub present_queue: Arc<Queue>,
+    pub compute_queue: Arc<Queue>,
 }
 
 impl QueueFamilyIndices {
@@ -87,10 +87,18 @@ impl QueueFamilyIndices {
 }
 
 impl QueueCollection {
-    pub fn new(queues: Vec<Arc<Queue>>) -> Self {
+    pub fn new(queues: Vec<Arc<Queue>>, queue_family_indices: &QueueFamilyIndices) -> Self {
         Self {
-
+            graphics_queue: Self::find_queue_of_family(&queues, queue_family_indices.graphics_family),
+            present_queue: Self::find_queue_of_family(&queues, queue_family_indices.present_family),
+            compute_queue: Self::find_queue_of_family(&queues, queue_family_indices.compute_family),
         }
+    }
+    
+    fn find_queue_of_family(queues: &Vec<Arc<Queue>>, queue_family_index: u32) -> Arc<Queue> {
+        queues.into_iter().filter(|queue| {
+            queue.queue_family_index() == queue_family_index
+        }).last().unwrap().clone()
     }
 
 }

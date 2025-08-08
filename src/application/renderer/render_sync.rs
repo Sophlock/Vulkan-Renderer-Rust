@@ -9,9 +9,9 @@ use vulkano::{
 };
 
 pub struct RenderSync {
-    image_available_semaphore: Semaphore,
-    render_finished_semaphore: Semaphore,
-    in_flight_fence: Fence,
+    pub image_available_semaphore: Arc<Semaphore>,
+    pub render_finished_semaphore: Semaphore,
+    pub in_flight_fence: Fence,
 }
 
 impl RenderSync {
@@ -22,7 +22,7 @@ impl RenderSync {
     }
     pub fn new(device: &Arc<Device>) -> Self {
         let image_available_semaphore =
-            Semaphore::new(device.clone(), SemaphoreCreateInfo::default()).unwrap();
+            Semaphore::new(device.clone(), SemaphoreCreateInfo::default()).unwrap().into();
         let render_finished_semaphore =
             Semaphore::new(device.clone(), SemaphoreCreateInfo::default()).unwrap();
         let in_flight_fence = Fence::new(

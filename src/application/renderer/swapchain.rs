@@ -20,6 +20,8 @@ use vulkano::{
     swapchain::Swapchain as VKSwapchain
 };
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
+use vulkano::swapchain::{acquire_next_image, AcquireNextImageInfo, AcquiredImage, SwapchainAcquireFuture};
+use vulkano::sync::semaphore::Semaphore;
 use vulkano::sync::Sharing;
 use winit::window::Window;
 use crate::application::renderer::queue::QueueFamilyIndices;
@@ -82,6 +84,10 @@ impl Swapchain {
             image_count
         }
     }
+    
+    pub fn acquire_next_image(&self) -> (u32, bool, SwapchainAcquireFuture) {
+        acquire_next_image(self.swapchain.clone(), None).unwrap()
+    }
 
     fn choose_surface_format(formats: &Vec<(Format, ColorSpace)>) -> (Format, ColorSpace) {
         formats.iter().filter(|(format, colorspace)| {
@@ -119,6 +125,10 @@ impl Swapchain {
             Framebuffer::new(render_pass.clone(), create_info)
         }).flatten();
         frame_buffers.collect()
+    }
+    
+    pub fn raw(&self) -> &Arc<VKSwapchain> {
+        &self.swapchain
     }
 }
 

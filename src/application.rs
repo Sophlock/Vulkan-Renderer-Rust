@@ -61,7 +61,7 @@ impl ApplicationHandler for Application {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.renderer.as_ref().unwrap().redraw();
+                self.renderer.as_mut().unwrap().redraw();
             }
         }
     }

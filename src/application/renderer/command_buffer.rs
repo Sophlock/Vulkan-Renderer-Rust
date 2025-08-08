@@ -1,22 +1,21 @@
 use std::sync::Arc;
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer,
+};
 use vulkano::{
-    command_buffer::{
-        CommandBufferLevel,
-        allocator::{
-            CommandBufferAlloc, CommandBufferAllocator, StandardCommandBufferAllocator,
-            StandardCommandBufferAllocatorCreateInfo,
-        }
+    command_buffer::allocator::{
+        StandardCommandBufferAllocator,
+        StandardCommandBufferAllocatorCreateInfo,
     },
-    device::Device
+    device::Device,
 };
 
 pub struct CommandBufferInterface {
-    allocator: StandardCommandBufferAllocator,
-    primary_command_buffer_allocation: CommandBufferAlloc,
+    allocator: Arc<StandardCommandBufferAllocator>,
 }
 
 impl CommandBufferInterface {
-    pub fn new(device: Arc<Device>, image_count: usize, queue_family_index: u32) -> Self {
+    pub fn new(device: Arc<Device>, image_count: usize) -> Self {
         let allocator = StandardCommandBufferAllocator::new(
             device,
             StandardCommandBufferAllocatorCreateInfo {
@@ -24,14 +23,20 @@ impl CommandBufferInterface {
                 secondary_buffer_count: 0,
                 ..StandardCommandBufferAllocatorCreateInfo::default()
             },
-        );
-        let primary_command_buffer_allocation = allocator
-            .allocate(queue_family_index, CommandBufferLevel::Primary)
-            .unwrap();
+        )
+        .into();
+        Self { allocator }
+    }
 
-        Self {
-            allocator,
-            primary_command_buffer_allocation,
-        }
+    pub fn primary_command_buffer(
+        &self,
+        queue_family_index: u32,
+    ) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
+        AutoCommandBufferBuilder::primary(
+            self.allocator.clone(),
+            queue_family_index,
+            CommandBufferUsage::OneTimeSubmit,
+        )
+        .unwrap()
     }
 }
