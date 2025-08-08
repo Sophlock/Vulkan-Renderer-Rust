@@ -112,7 +112,7 @@ impl Renderer {
     fn draw_frame(&mut self) {
         self.current_frame = (self.current_frame + 1) % self.frames_in_flight;
 
-        &self.in_flight_future.as_ref().map(|f| f.flush().unwrap());
+        self.in_flight_future.as_ref().map(|f| f.flush().unwrap());
 
         let (swapchain_image_index, suboptimal, image_available_future) =
             self.swapchain.acquire_next_image();
