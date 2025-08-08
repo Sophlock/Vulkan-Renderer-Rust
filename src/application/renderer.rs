@@ -10,37 +10,40 @@ use command_buffer::CommandBufferInterface;
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
+use smallvec::smallvec;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use swapchain::Swapchain;
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+    SubpassContents, SubpassEndInfo,
+};
+use vulkano::format::ClearValue;
+use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
+use vulkano::sync::future::FenceSignalFuture;
 use vulkano::{
+    ValidationError, VulkanLibrary,
     device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
     },
     format::Format,
     image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsage,
-        SampleCount,
+        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
+        ImageType, ImageUsage, SampleCount,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     render_pass::{Framebuffer, RenderPass},
-    swapchain::{
-        present,
-        Surface,
-        SwapchainPresentInfo
-    },
+    swapchain::{Surface, SwapchainPresentInfo, present},
     sync::Sharing,
-    sync::{now, GpuFuture},
-    VulkanLibrary
+    sync::{GpuFuture, now},
 };
-use vulkano::sync::future::FenceSignalFuture;
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
-
 pub struct Renderer {
+    current_image: usize,
     frames_in_flight: usize,
-    current_frame: usize,
     window: Arc<Window>,
     instance: Arc<Instance>,
     surface: Arc<Surface>,
@@ -87,7 +90,7 @@ impl Renderer {
             CommandBufferInterface::new(device.clone(), frames_in_flight);
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
         Self {
-            current_frame: 0,
+            current_image: 0,
             frames_in_flight,
             window,
             instance,
@@ -105,22 +108,25 @@ impl Renderer {
     }
 
     pub fn redraw(&mut self) {
-        self.draw_frame();
+        (self.current_image, self.in_flight_future) = self.draw_frame();
         self.window.as_ref().request_redraw();
     }
 
-    fn draw_frame(&mut self) {
-        self.current_frame = (self.current_frame + 1) % self.frames_in_flight;
-
-        self.in_flight_future.as_ref().map(|f| f.flush().unwrap());
+    fn draw_frame(&self) -> (usize, Option<FenceSignalFuture<Box<dyn GpuFuture>>>) {
+        let next_image = (self.current_image + 1) % self.frames_in_flight;
+        self.in_flight_future
+            .as_ref()
+            .map(|f| f.wait(None).unwrap());
 
         let (swapchain_image_index, suboptimal, image_available_future) =
             self.swapchain.acquire_next_image();
-        let command_buffer = self
+        let mut command_buffer = self
             .command_buffer_interface
             .primary_command_buffer(self.queue_family_indices.graphics_family);
 
-        //unsafe { sync.in_flight_fence.reset() }.unwrap();
+        self.record_draw_command_buffer(&mut command_buffer)
+            .unwrap();
+
         let draw_finished_future = image_available_future
             .then_execute(
                 self.queues.graphics_queue.clone(),
@@ -137,8 +143,46 @@ impl Renderer {
             ),
         );
 
-        let in_flight_future = present_future.boxed().then_signal_fence_and_flush().unwrap();
-        self.in_flight_future = Some(in_flight_future);
+        let in_flight_future = present_future
+            .boxed()
+            .then_signal_fence_and_flush()
+            .unwrap();
+        (next_image, Some(in_flight_future))
+    }
+
+    fn record_draw_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) -> Result<(), Box<ValidationError>> {
+        command_buffer
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    render_area_offset: [0, 0],
+                    render_area_extent: self.swapchain.extent,
+                    clear_values: vec![
+                        Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0])),
+                        Some(ClearValue::DepthStencil((1.0, 0))),
+                    ],
+                    ..RenderPassBeginInfo::framebuffer(
+                        self.framebuffers[self.current_image].clone(),
+                    )
+                },
+                SubpassBeginInfo {
+                    contents: SubpassContents::Inline,
+                    ..SubpassBeginInfo::default()
+                },
+            )?
+            .set_viewport_with_count(smallvec![Viewport {
+                offset: [0., 0.],
+                extent: self.swapchain.extent.map(|u| u as f32),
+                depth_range: 0.0f32..=1.0f32,
+            }])?
+            .set_scissor_with_count(smallvec![Scissor {
+                offset: [0, 0],
+                extent: self.swapchain.extent,
+            }])?
+            .end_render_pass(SubpassEndInfo::default())
+            .map(|_| ())
     }
 
     fn create_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
