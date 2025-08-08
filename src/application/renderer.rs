@@ -1,32 +1,52 @@
+mod command_buffer;
+mod image;
 mod physical_device;
-mod swapchain;
 mod queue;
 mod render_pass;
+mod render_sync;
+mod swapchain;
 
-use crate::application::renderer::swapchain::Swapchain;
-use queue::{
-    QueueCollection,
-    QueueFamilyIndices
-};
+use physical_device::find_depth_format;
+use command_buffer::CommandBufferInterface;
+use queue::{QueueCollection, QueueFamilyIndices};
+use render_pass::RenderPassBuilder;
+use render_sync::RenderSync;
 use std::sync::Arc;
+use swapchain::Swapchain;
 use vulkano::{
+    format::Format,
+    image::{
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        Image,
+        ImageAspects,
+        ImageCreateInfo,
+        ImageLayout,
+        ImageSubresourceRange,
+        ImageTiling,
+        ImageType,
+        ImageUsage,
+        SampleCount
+    },
+    memory::allocator::{
+        AllocationCreateInfo, MemoryTypeFilter,
+        StandardMemoryAllocator,
+    },
+    sync::Sharing,
     device::{
-        physical::PhysicalDevice,
-        Device,
-        DeviceCreateInfo,
-        DeviceExtensions,
-        DeviceFeatures
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
+    render_pass::{
+        Framebuffer,
+        RenderPass
+    },
     swapchain::Surface,
     VulkanLibrary
 };
-use vulkano::command_buffer::pool::{CommandPool, CommandPoolCreateFlags, CommandPoolCreateInfo};
-use vulkano::render_pass::RenderPass;
 use winit::{event_loop::ActiveEventLoop, window::Window};
-use crate::application::renderer::render_pass::RenderPassBuilder;
 
 pub struct Renderer {
+    frames_in_flight: usize,
     window: Arc<Window>,
     instance: Arc<Instance>,
     surface: Arc<Surface>,
@@ -35,7 +55,9 @@ pub struct Renderer {
     queues: QueueCollection,
     swapchain: Swapchain,
     render_pass: Arc<RenderPass>,
-    command_pool: CommandPool,
+    command_buffer_interface: CommandBufferInterface,
+    framebuffers: Vec<Arc<Framebuffer>>,
+    sync_objects: Vec<RenderSync>,
 }
 
 impl Renderer {
@@ -44,13 +66,37 @@ impl Renderer {
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
         let surface = Self::create_surface(&instance, &window);
         let physical_device = Self::pick_physical_device(&instance, &surface);
-        let queue_family_indices = QueueFamilyIndices::find_queue_indices(&physical_device, &surface);
+        let queue_family_indices =
+            QueueFamilyIndices::find_queue_indices(&physical_device, &surface);
         let (device, queues) = Self::create_logical_device(&physical_device, &queue_family_indices);
-        let swapchain = Swapchain::new(&device, &physical_device, &surface, &window, &queue_family_indices);
-        let render_pass = RenderPassBuilder::build_default_render_pass(&device, &physical_device, swapchain.format)
-            .build();
-        let command_pool = Self::create_command_pool(&device, &queue_family_indices);
+        let swapchain = Swapchain::new(
+            &device,
+            &physical_device,
+            &surface,
+            &window,
+            &queue_family_indices,
+        );
+        let frames_in_flight = swapchain.image_count.try_into().unwrap();
+        let render_pass = RenderPassBuilder::build_default_render_pass(
+            &device,
+            &physical_device,
+            swapchain.format,
+        )
+        .build();
+        let depth_image_view = Self::create_depth_resources(
+            &device,
+            find_depth_format(&physical_device),
+            swapchain.extent,
+        );
+        let command_buffer_interface = CommandBufferInterface::new(
+            device.clone(),
+            frames_in_flight,
+            queue_family_indices.graphics_family,
+        );
+        let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
+        let sync_objects = RenderSync::create_sync_objects(&device, frames_in_flight);
         Self {
+            frames_in_flight,
             window,
             instance,
             surface,
@@ -59,7 +105,9 @@ impl Renderer {
             queues,
             swapchain,
             render_pass,
-            command_pool,
+            command_buffer_interface,
+            framebuffers,
+            sync_objects,
         }
     }
 
@@ -110,7 +158,8 @@ impl Renderer {
     }
 
     fn create_logical_device(
-        physical_device: &Arc<PhysicalDevice>, queue_indices: &QueueFamilyIndices
+        physical_device: &Arc<PhysicalDevice>,
+        queue_indices: &QueueFamilyIndices,
     ) -> (Arc<Device>, QueueCollection) {
         let queue_create_infos = queue_indices.generate_create_infos();
         let device_extensions = DeviceExtensions {
@@ -133,12 +182,41 @@ impl Renderer {
         (device, QueueCollection::new(queues.collect()))
     }
 
-    fn create_command_pool(device: &Arc<Device>, queue_family_indices: &QueueFamilyIndices) -> CommandPool {
-        let create_info = CommandPoolCreateInfo {
-            flags: CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-            queue_family_index: queue_family_indices.graphics_family,
-            ..CommandPoolCreateInfo::default()
+    fn create_depth_resources(
+        device: &Arc<Device>,
+        depth_format: Format,
+        extent: [u32; 2],
+    ) -> Arc<ImageView> {
+        let image_create_info = ImageCreateInfo {
+            image_type: ImageType::Dim2d,
+            format: depth_format,
+            extent: [extent[0], extent[1], 1],
+            array_layers: 1,
+            mip_levels: 1,
+            samples: SampleCount::Sample1,
+            tiling: ImageTiling::Optimal,
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            sharing: Sharing::Exclusive,
+            initial_layout: ImageLayout::Undefined,
+            ..ImageCreateInfo::default()
         };
-        CommandPool::new(device.clone(), create_info).unwrap()
+        let allocation_info = AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+            ..AllocationCreateInfo::default()
+        };
+        let image_view_create_info = ImageViewCreateInfo {
+            view_type: ImageViewType::Dim2d,
+            format: depth_format,
+            subresource_range: ImageSubresourceRange {
+                aspects: ImageAspects::DEPTH,
+                mip_levels: 0..1,
+                array_layers: 0..1,
+            },
+            ..ImageViewCreateInfo::default()
+        };
+        let alloc = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let depth_image = Image::new(alloc, image_create_info, allocation_info).unwrap();
+        let depth_image_view = ImageView::new(depth_image, image_view_create_info).unwrap();
+        depth_image_view
     }
 }

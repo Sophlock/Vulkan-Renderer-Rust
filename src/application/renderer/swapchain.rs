@@ -19,6 +19,7 @@ use vulkano::{
     format::Format,
     swapchain::Swapchain as VKSwapchain
 };
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
 use vulkano::sync::Sharing;
 use winit::window::Window;
 use crate::application::renderer::queue::QueueFamilyIndices;
@@ -28,6 +29,7 @@ pub struct Swapchain {
     pub format: Format,
     pub color_space: ColorSpace,
     pub extent: [u32; 2],
+    pub image_count: u32,
     images: Vec<Arc<Image>>,
     image_views: Vec<Arc<ImageView>>,
 }
@@ -38,9 +40,10 @@ impl Swapchain {
         let (format, color_space) = Self::choose_surface_format(&swapchain_support.formats);
         let present_mode = Self::choose_present_mode(&swapchain_support.present_modes);
         let extent = Self::choose_extent(&swapchain_support.capabilities, window);
+        let image_count = Self::decide_image_count(&swapchain_support.capabilities);
 
         let create_info = SwapchainCreateInfo {
-            min_image_count: Self::decide_image_count(&swapchain_support.capabilities),
+            min_image_count: image_count,
             image_format: format,
             image_color_space: color_space,
             image_extent: extent,
@@ -76,6 +79,7 @@ impl Swapchain {
             extent,
             images,
             image_views,
+            image_count
         }
     }
 
@@ -102,6 +106,19 @@ impl Swapchain {
         let desired_image_count = surface_capabilities.min_image_count + 1;
         surface_capabilities.max_image_count
             .map_or(desired_image_count, |max_image_count| { max(max_image_count, desired_image_count) })
+    }
+    
+    pub fn create_framebuffers(&self, render_pass: &Arc<RenderPass>, depth_image_view: &Arc<ImageView>) -> Vec<Arc<Framebuffer>> {
+        let frame_buffers = self.image_views.iter().map(|image_view| {
+            let create_info = FramebufferCreateInfo{
+                attachments: vec![image_view.clone(), depth_image_view.clone()],
+                extent: self.extent,
+                layers: 1,
+                ..FramebufferCreateInfo::default()
+            };
+            Framebuffer::new(render_pass.clone(), create_info)
+        }).flatten();
+        frame_buffers.collect()
     }
 }
 
