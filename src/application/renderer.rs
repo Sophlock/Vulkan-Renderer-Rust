@@ -11,37 +11,38 @@ use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
 use smallvec::smallvec;
-use std::ops::DerefMut;
 use std::sync::Arc;
 use swapchain::Swapchain;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents, SubpassEndInfo,
-};
-use vulkano::format::ClearValue;
-use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
-use vulkano::sync::future::FenceSignalFuture;
 use vulkano::{
-    ValidationError, VulkanLibrary,
-    device::{
-        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
-    },
-    format::Format,
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    }, device::{
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
+    }, format::ClearValue, format::Format,
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsage, SampleCount,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsage,
+        SampleCount,
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    pipeline::graphics::viewport::{Scissor, Viewport},
     render_pass::{Framebuffer, RenderPass},
-    swapchain::{Surface, SwapchainPresentInfo, present},
+    swapchain::{present, Surface, SwapchainPresentInfo},
+    sync::future::FenceSignalFuture,
     sync::Sharing,
-    sync::{GpuFuture, now},
+    sync::GpuFuture,
+    Validated,
+    ValidationError,
+    VulkanError,
+    VulkanLibrary,
 };
+use vulkano::image::ImageFormatInfo;
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
 pub struct Renderer {
+    should_recreate_swapchain: bool,
     current_image: usize,
     frames_in_flight: usize,
     window: Arc<Window>,
@@ -52,6 +53,7 @@ pub struct Renderer {
     queues: QueueCollection,
     queue_family_indices: QueueFamilyIndices,
     swapchain: Swapchain,
+    depth_image_view: Arc<ImageView>,
     render_pass: Arc<RenderPass>,
     command_buffer_interface: CommandBufferInterface,
     framebuffers: Vec<Arc<Framebuffer>>,
@@ -90,6 +92,7 @@ impl Renderer {
             CommandBufferInterface::new(device.clone(), frames_in_flight);
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
         Self {
+            should_recreate_swapchain: false,
             current_image: 0,
             frames_in_flight,
             window,
@@ -100,6 +103,7 @@ impl Renderer {
             queues,
             queue_family_indices,
             swapchain,
+            depth_image_view,
             render_pass,
             command_buffer_interface,
             framebuffers,
@@ -108,23 +112,39 @@ impl Renderer {
     }
 
     pub fn redraw(&mut self) {
-        (self.current_image, self.in_flight_future) = self.draw_frame();
+        self.in_flight_future = self.draw_frame();
         self.window.as_ref().request_redraw();
     }
 
-    fn draw_frame(&self) -> (usize, Option<FenceSignalFuture<Box<dyn GpuFuture>>>) {
-        let next_image = (self.current_image + 1) % self.frames_in_flight;
+    fn draw_frame(&mut self) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
+        if self.should_recreate_swapchain {
+            //self.recreate_swapchain_internal();
+        }
+        self.current_image = (self.current_image + 1) % self.frames_in_flight;
         self.in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
 
-        let (swapchain_image_index, suboptimal, image_available_future) =
-            self.swapchain.acquire_next_image();
+        let acquire_image_result = self.swapchain.acquire_next_image();
+        let (swapchain_image_index, suboptimal, image_available_future) = acquire_image_result
+            .map_or_else(
+                |e| match e {
+                    Validated::Error(VulkanError::OutOfDate) => {
+                        self.recreate_swapchain();
+                        None
+                    }
+                    _ => panic!("Error acquiring swapchain image"),
+                },
+                |v| Some(v),
+            )?;
+        if suboptimal {
+            self.recreate_swapchain();
+        }
         let mut command_buffer = self
             .command_buffer_interface
             .primary_command_buffer(self.queue_family_indices.graphics_family);
 
-        self.record_draw_command_buffer(&mut command_buffer)
+        self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize)
             .unwrap();
 
         let draw_finished_future = image_available_future
@@ -146,13 +166,23 @@ impl Renderer {
         let in_flight_future = present_future
             .boxed()
             .then_signal_fence_and_flush()
-            .unwrap();
-        (next_image, Some(in_flight_future))
+            .map_or_else(
+                |e| match e {
+                    Validated::Error(VulkanError::OutOfDate) => {
+                        self.recreate_swapchain();
+                        None
+                    }
+                    _ => panic!("Error presenting swapchain image"),
+                },
+                Some,
+            );
+        in_flight_future
     }
 
     fn record_draw_command_buffer(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(
@@ -163,8 +193,9 @@ impl Renderer {
                         Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0])),
                         Some(ClearValue::DepthStencil((1.0, 0))),
                     ],
+                    render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(
-                        self.framebuffers[self.current_image].clone(),
+                        self.framebuffers[image_index].clone(),
                     )
                 },
                 SubpassBeginInfo {
@@ -183,6 +214,39 @@ impl Renderer {
             }])?
             .end_render_pass(SubpassEndInfo::default())
             .map(|_| ())
+    }
+
+    pub fn recreate_swapchain(&mut self) {
+        self.should_recreate_swapchain = true;
+    }
+
+    fn recreate_swapchain_internal(&mut self) {
+        unsafe { self.device.wait_idle().unwrap() }
+        self.swapchain = self.swapchain.recreate(
+            &self.physical_device,
+            &self.surface,
+            &self.window,
+            &self.queue_family_indices,
+        );
+        let image_format_properties = self.physical_device.image_format_properties(ImageFormatInfo {
+            image_type: ImageType::Dim2d,
+            tiling: ImageTiling::Optimal,
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            ..ImageFormatInfo::default()
+        });
+        println!("{:?}", image_format_properties);
+        if image_format_properties.unwrap().is_none() {
+            return;
+        }
+        self.depth_image_view = Self::create_depth_resources(
+            &self.device,
+            self.swapchain.format,
+            self.swapchain.extent,
+        );
+        self.framebuffers = self
+            .swapchain
+            .create_framebuffers(&self.render_pass, &self.depth_image_view);
+        self.should_recreate_swapchain = false;
     }
 
     fn create_window(event_loop: &ActiveEventLoop) -> Arc<Window> {

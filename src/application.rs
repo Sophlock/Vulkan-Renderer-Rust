@@ -34,7 +34,9 @@ impl ApplicationHandler for Application {
     ) {
         match event {
             WindowEvent::ActivationTokenDone { .. } => {}
-            WindowEvent::Resized(_) => {}
+            WindowEvent::Resized(_) => {
+                self.renderer.as_mut().unwrap().recreate_swapchain()
+            }
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Destroyed => {}

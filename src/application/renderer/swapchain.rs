@@ -2,23 +2,17 @@ use std::{
     cmp::max,
     sync::Arc
 };
-use vulkano::{
-    device::{
-        Device,
-        physical::PhysicalDevice
-    },
-    image::{
-        view::{ImageViewCreateInfo, ImageViewType},
-        ImageAspects,
-        ImageSubresourceRange,
-        ImageUsage,
-        view::ImageView,
-        Image
-    },
-    swapchain::{ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo, SwapchainCreateInfo},
-    format::Format,
-    swapchain::Swapchain as VKSwapchain
-};
+use vulkano::{device::{
+    Device,
+    physical::PhysicalDevice
+}, image::{
+    view::{ImageViewCreateInfo, ImageViewType},
+    ImageAspects,
+    ImageSubresourceRange,
+    ImageUsage,
+    view::ImageView,
+    Image
+}, swapchain::{ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo, SwapchainCreateInfo}, format::Format, swapchain::Swapchain as VKSwapchain, VulkanError, Validated};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
 use vulkano::swapchain::{acquire_next_image, AcquireNextImageInfo, AcquiredImage, SwapchainAcquireFuture};
 use vulkano::sync::semaphore::Semaphore;
@@ -38,6 +32,22 @@ pub struct Swapchain {
 
 impl Swapchain {
     pub fn new(device: &Arc<Device>, physical_device: &PhysicalDevice, surface: &Arc<Surface>, window: &Window, queue_family_indices: &QueueFamilyIndices) -> Self {
+        let create_info = Self::create_info(physical_device, surface, window, queue_family_indices);
+        let (swapchain, images) = VKSwapchain::new(device.clone(), surface.clone(), create_info.clone()).unwrap();
+        Self::from_raw(swapchain, images, create_info)
+    }
+    
+    pub fn acquire_next_image(&self) -> Result<(u32, bool, SwapchainAcquireFuture), Validated<VulkanError>> {
+        acquire_next_image(self.swapchain.clone(), None)
+    }
+    
+    pub fn recreate(&self, physical_device: &PhysicalDevice, surface: &Arc<Surface>, window: &Window, queue_family_indices: &QueueFamilyIndices) -> Self {
+        let create_info = Self::create_info(physical_device, surface, window, queue_family_indices);
+        let (swapchain, images) = self.swapchain.recreate(create_info.clone()).unwrap();
+        Self::from_raw(swapchain, images, create_info)
+    }
+    
+    fn create_info(physical_device: &PhysicalDevice, surface: &Arc<Surface>, window: &Window, queue_family_indices: &QueueFamilyIndices) -> SwapchainCreateInfo {
         let swapchain_support = SwapchainSupportDetails::query_swapchain_support(&physical_device, &surface);
         let (format, color_space) = Self::choose_surface_format(&swapchain_support.formats);
         let present_mode = Self::choose_present_mode(&swapchain_support.present_modes);
@@ -58,11 +68,14 @@ impl Swapchain {
             clipped: true,
             ..SwapchainCreateInfo::default()
         };
-        let (swapchain, images) = VKSwapchain::new(device.clone(), surface.clone(), create_info).unwrap();
+        create_info
+    }
+    
+    fn from_raw(swapchain: Arc<VKSwapchain>, images: Vec<Arc<Image>>, create_info: SwapchainCreateInfo) -> Self {
         let image_views = images.iter().map(|image| {
             let image_view_create_info = ImageViewCreateInfo {
                 view_type: ImageViewType::Dim2d,
-                format,
+                format: create_info.image_format,
                 subresource_range: ImageSubresourceRange {
                     aspects: ImageAspects::COLOR,
                     mip_levels: 0..1,
@@ -76,17 +89,13 @@ impl Swapchain {
         }).collect();
         Self {
             swapchain,
-            format,
-            color_space,
-            extent,
+            format: create_info.image_format,
+            color_space: create_info.image_color_space,
+            extent: create_info.image_extent,
             images,
             image_views,
-            image_count
+            image_count: create_info.min_image_count
         }
-    }
-    
-    pub fn acquire_next_image(&self) -> (u32, bool, SwapchainAcquireFuture) {
-        acquire_next_image(self.swapchain.clone(), None).unwrap()
     }
 
     fn choose_surface_format(formats: &Vec<(Format, ColorSpace)>) -> (Format, ColorSpace) {
