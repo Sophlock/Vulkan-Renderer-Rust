@@ -30,15 +30,16 @@ use vulkano::{
     pipeline::graphics::viewport::{Scissor, Viewport},
     render_pass::{Framebuffer, RenderPass},
     swapchain::{present, Surface, SwapchainPresentInfo},
-    sync::future::FenceSignalFuture,
-    sync::Sharing,
-    sync::GpuFuture,
+    sync::{
+        future::FenceSignalFuture,
+        GpuFuture,
+        Sharing
+    },
     Validated,
     ValidationError,
     VulkanError,
     VulkanLibrary,
 };
-use vulkano::image::ImageFormatInfo;
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
 pub struct Renderer {
@@ -116,7 +117,7 @@ impl Renderer {
 
     fn draw_frame(&mut self) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
         if self.should_recreate_swapchain {
-            //self.recreate_swapchain_internal();
+            self.recreate_swapchain_internal();
         }
         self.in_flight_future
             .as_ref()
@@ -225,19 +226,9 @@ impl Renderer {
             &self.window,
             &self.queue_family_indices,
         );
-        let image_format_properties = self.physical_device.image_format_properties(ImageFormatInfo {
-            image_type: ImageType::Dim2d,
-            tiling: ImageTiling::Optimal,
-            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-            ..ImageFormatInfo::default()
-        });
-        println!("{:?}", image_format_properties);
-        if image_format_properties.unwrap().is_none() {
-            return;
-        }
         self.depth_image_view = Self::create_depth_resources(
             &self.device,
-            self.swapchain.format,
+            find_depth_format(&self.physical_device),
             self.swapchain.extent,
         );
         self.framebuffers = self
