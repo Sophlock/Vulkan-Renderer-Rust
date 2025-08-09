@@ -5,6 +5,7 @@ mod queue;
 mod render_pass;
 mod render_sync;
 mod swapchain;
+mod layers;
 
 use command_buffer::CommandBufferInterface;
 use physical_device::find_depth_format;
