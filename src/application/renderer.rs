@@ -43,7 +43,6 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
-    current_image: usize,
     frames_in_flight: usize,
     window: Arc<Window>,
     instance: Arc<Instance>,
@@ -93,7 +92,6 @@ impl Renderer {
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
         Self {
             should_recreate_swapchain: false,
-            current_image: 0,
             frames_in_flight,
             window,
             instance,
@@ -120,7 +118,6 @@ impl Renderer {
         if self.should_recreate_swapchain {
             //self.recreate_swapchain_internal();
         }
-        self.current_image = (self.current_image + 1) % self.frames_in_flight;
         self.in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
