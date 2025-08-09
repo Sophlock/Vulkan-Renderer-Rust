@@ -41,6 +41,7 @@ use vulkano::{
     VulkanLibrary,
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
+use winit::dpi::PhysicalSize;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -219,7 +220,10 @@ impl Renderer {
     }
 
     fn recreate_swapchain_internal(&mut self) {
-        unsafe { self.device.wait_idle().unwrap() }
+        //unsafe { self.device.wait_idle().unwrap() }
+        if self.window.inner_size() == PhysicalSize::new(0, 0) {
+            return;
+        }
         self.swapchain = self.swapchain.recreate(
             &self.physical_device,
             &self.surface,
