@@ -1,4 +1,5 @@
 mod renderer;
+mod scene;
 
 use winit::{
     application::ApplicationHandler,
@@ -32,6 +33,7 @@ impl ApplicationHandler for Application {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        self.renderer.as_mut().unwrap().gui().update(&event);
         match event {
             WindowEvent::ActivationTokenDone { .. } => {}
             WindowEvent::Resized(_) => {

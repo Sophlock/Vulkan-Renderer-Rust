@@ -40,6 +40,10 @@ impl Swapchain {
     pub fn acquire_next_image(&self) -> Result<(u32, bool, SwapchainAcquireFuture), Validated<VulkanError>> {
         acquire_next_image(self.swapchain.clone(), None)
     }
+
+    pub fn image_view(&self, index: usize) -> &Arc<ImageView> {
+        &self.image_views[index]
+    }
     
     pub fn recreate(&self, physical_device: &PhysicalDevice, surface: &Arc<Surface>, window: &Window, queue_family_indices: &QueueFamilyIndices) -> Self {
         let create_info = Self::create_info(physical_device, surface, window, queue_family_indices);

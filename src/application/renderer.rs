@@ -1,13 +1,14 @@
 mod command_buffer;
 mod image;
+mod layers;
 mod physical_device;
 mod queue;
 mod render_pass;
 mod render_sync;
 mod swapchain;
-mod layers;
 
 use command_buffer::CommandBufferInterface;
+use egui_winit_vulkano::{Gui, GuiConfig, egui};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
@@ -15,34 +16,29 @@ use smallvec::smallvec;
 use std::sync::Arc;
 use swapchain::Swapchain;
 use vulkano::{
+    Validated, ValidationError, VulkanError, VulkanLibrary,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
-    }, device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
-    }, format::ClearValue, format::Format,
+    },
+    device::{
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
+    },
+    format::ClearValue,
+    format::Format,
     image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsage,
-        SampleCount,
+        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
+        ImageType, ImageUsage, SampleCount,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     pipeline::graphics::viewport::{Scissor, Viewport},
     render_pass::{Framebuffer, RenderPass},
-    swapchain::{present, Surface, SwapchainPresentInfo},
-    sync::{
-        future::FenceSignalFuture,
-        GpuFuture,
-        Sharing
-    },
-    Validated,
-    ValidationError,
-    VulkanError,
-    VulkanLibrary,
+    swapchain::{Surface, SwapchainPresentInfo, present},
+    sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
-use winit::{event_loop::ActiveEventLoop, window::Window};
-use winit::dpi::PhysicalSize;
+use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -60,6 +56,7 @@ pub struct Renderer {
     command_buffer_interface: CommandBufferInterface,
     framebuffers: Vec<Arc<Framebuffer>>,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
+    gui: Gui,
 }
 
 impl Renderer {
@@ -93,6 +90,13 @@ impl Renderer {
         let command_buffer_interface =
             CommandBufferInterface::new(device.clone(), frames_in_flight);
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
+        let gui = Gui::new(
+            event_loop,
+            surface.clone(),
+            queues.graphics_queue.clone(),
+            swapchain.format,
+            GuiConfig::default(),
+        );
         Self {
             should_recreate_swapchain: false,
             frames_in_flight,
@@ -109,6 +113,7 @@ impl Renderer {
             command_buffer_interface,
             framebuffers,
             in_flight_future: None,
+            gui,
         }
     }
 
@@ -124,6 +129,22 @@ impl Renderer {
         self.in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
+
+        self.gui.immediate_ui(|ui| {
+            let ctx = ui.context();
+            egui::CentralPanel::default().show(&ctx, |ui| {
+                ui.heading("My egui Application");
+                ui.horizontal(|ui| {
+                    ui.label("Your name: ");
+                    //ui.text_edit_singleline(&mut name);
+                });
+                //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
+                if ui.button("Increment").clicked() {
+                    // age += 1;
+                }
+                //ui.label(format!("Hello '{name}', age {age}"));
+            });
+        });
 
         let acquire_image_result = self.swapchain.acquire_next_image();
         let (swapchain_image_index, suboptimal, image_available_future) = acquire_image_result
@@ -154,8 +175,15 @@ impl Renderer {
             )
             .unwrap();
 
-        let present_future = present(
+        let gui_draw_future = self.gui.draw_on_image(
             draw_finished_future,
+            self.swapchain
+                .image_view(swapchain_image_index as usize)
+                .clone(),
+        );
+
+        let present_future = present(
+            gui_draw_future,
             self.queues.present_queue.clone(),
             SwapchainPresentInfo::swapchain_image_index(
                 self.swapchain.raw().clone(),
@@ -182,7 +210,7 @@ impl Renderer {
     fn record_draw_command_buffer(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        image_index: usize
+        image_index: usize,
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(
@@ -194,9 +222,7 @@ impl Renderer {
                         Some(ClearValue::DepthStencil((1.0, 0))),
                     ],
                     render_pass: self.render_pass.clone(),
-                    ..RenderPassBeginInfo::framebuffer(
-                        self.framebuffers[image_index].clone(),
-                    )
+                    ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].clone())
                 },
                 SubpassBeginInfo {
                     contents: SubpassContents::Inline,
@@ -348,5 +374,9 @@ impl Renderer {
         let depth_image = Image::new(alloc, image_create_info, allocation_info).unwrap();
         let depth_image_view = ImageView::new(depth_image, image_view_create_info).unwrap();
         depth_image_view
+    }
+
+    pub fn gui(&mut self) -> &mut Gui {
+        &mut self.gui
     }
 }
