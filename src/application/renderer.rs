@@ -6,6 +6,9 @@ mod queue;
 mod render_pass;
 mod render_sync;
 mod swapchain;
+mod rhi_assets;
+mod buffer;
+mod shaders;
 
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};

@@ -1,24 +1,40 @@
+use crate::application::renderer::queue::QueueFamilyIndices;
 use std::{
     cmp::max,
     sync::Arc
 };
-use vulkano::{device::{
-    Device,
-    physical::PhysicalDevice
-}, image::{
-    view::{ImageViewCreateInfo, ImageViewType},
-    ImageAspects,
-    ImageSubresourceRange,
-    ImageUsage,
-    view::ImageView,
-    Image
-}, swapchain::{ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo, SwapchainCreateInfo}, format::Format, swapchain::Swapchain as VKSwapchain, VulkanError, Validated};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
-use vulkano::swapchain::{acquire_next_image, AcquireNextImageInfo, AcquiredImage, SwapchainAcquireFuture};
-use vulkano::sync::semaphore::Semaphore;
-use vulkano::sync::Sharing;
+use vulkano::{
+    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    swapchain::{
+        acquire_next_image,
+        SwapchainAcquireFuture,
+        Swapchain as VKSwapchain,
+        ColorSpace,
+        CompositeAlpha,
+        PresentMode,
+        Surface,
+        SurfaceCapabilities,
+        SurfaceInfo,
+        SwapchainCreateInfo
+    },
+    sync::Sharing,
+    device::{
+        physical::PhysicalDevice,
+        Device
+    },
+    format::Format,
+    image::{
+        view::ImageView,
+        view::{ImageViewCreateInfo, ImageViewType},
+        Image,
+        ImageAspects,
+        ImageSubresourceRange,
+        ImageUsage
+    },
+    Validated,
+    VulkanError
+};
 use winit::window::Window;
-use crate::application::renderer::queue::QueueFamilyIndices;
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
