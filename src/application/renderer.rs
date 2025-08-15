@@ -9,6 +9,8 @@ mod swapchain;
 mod rhi_assets;
 mod buffer;
 mod shaders;
+mod shader_object;
+mod pipeline;
 
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};

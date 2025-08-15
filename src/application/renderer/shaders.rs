@@ -1,7 +1,11 @@
+use extend::ext;
+use shader_slang::{
+    CompileTarget, CompilerOptions, GlobalSession, OptimizationLevel, Session, SessionDesc,
+    TargetDesc, reflection,
+};
 use std::path::Path;
-use shader_slang::{CompileTarget, CompilerOptions, GlobalSession, MatrixLayoutMode, OptimizationLevel, ProfileID, Session, SessionDesc, TargetDesc};
 
-struct SlangCompiler {
+pub struct SlangCompiler {
     session: Session,
 }
 
@@ -21,9 +25,7 @@ impl SlangCompiler {
             .search_paths(search_paths.as_slice())
             .options(&options);
         let session = global_session.create_session(&session_description).unwrap();
-        Self {
-            session
-        }
+        Self { session }
     }
 
     pub fn session(&self) -> &Session {

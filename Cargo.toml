@@ -11,6 +11,7 @@ egui_winit_vulkano = "0.28.0"
 glam = "0.30.5"
 shader-slang = "0.1.0"
 smallvec = "1.15.1"
+extend = "1.2.0"
 
 [features]
 default = ["winit/rwh_06", "glam/bytemuck"]

@@ -1,13 +1,18 @@
 use glam::{Vec2, Vec3};
 use vulkano::buffer::BufferContents;
+use vulkano::pipeline::graphics::vertex_input;
 use super::{AssetMetadata, Asset};
 
-#[derive(BufferContents, Copy, Clone)]
+#[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
 pub struct Vertex {
+    #[format(R32G32B32_SFLOAT)]
     pub position: Vec3,
+    #[format(R32G32B32_SFLOAT)]
     pub normal: Vec3,
+    #[format(R32G32B32_SFLOAT)]
     pub tangent: Vec3,
+    #[format(R32G32_SFLOAT)]
     pub texture_coordinates: Vec2,
 }
 
