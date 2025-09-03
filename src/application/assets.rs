@@ -1,4 +1,5 @@
 pub mod mesh;
+mod texture;
 
 use std::sync::Arc;
 
