@@ -1,5 +1,5 @@
 use crate::{
-    application::assets::mesh::Vertex,
+    application::assets::asset_traits::Vertex,
     application::renderer::pipeline::graphics_pipeline
 };
 use std::sync::Arc;

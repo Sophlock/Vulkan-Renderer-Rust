@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use crate::application::assets::asset_traits::TextureInterface;
 
 pub struct Texture {
     pixels: [u32; 0]
@@ -10,10 +10,6 @@ impl Texture {
             pixels: []
         }
     }
-}
-
-pub trait TextureInterface {
-    fn pixels(&self) -> &[u32];
 }
 
 impl TextureInterface for Texture {

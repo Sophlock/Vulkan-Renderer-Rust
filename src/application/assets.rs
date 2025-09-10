@@ -1,5 +1,6 @@
 pub mod mesh;
-mod texture;
+pub mod texture;
+pub mod asset_traits;
 
 use std::sync::Arc;
 

@@ -1,5 +1,5 @@
 use crate::application::{
-    assets::mesh::{Index, MeshInterface, Vertex},
+    assets::asset_traits::{Vertex, Index, MeshInterface},
     renderer::{buffer::buffer_from_slice, command_buffer::CommandBufferInterface},
 };
 use std::sync::Arc;
@@ -9,14 +9,16 @@ use vulkano::{
     device::Device,
     memory::allocator::MemoryTypeFilter,
 };
+use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface};
+use crate::application::renderer::Renderer;
 
-struct VKMesh {
+pub struct VKMesh {
     vertex_buffer: Subbuffer<[Vertex]>,
     index_buffer: Subbuffer<[Index]>,
 }
 
 impl VKMesh {
-    pub fn new<Mesh: MeshInterface>(
+    fn new<Mesh: MeshInterface>(
         mesh: &Mesh,
         device: &Arc<Device>,
         command_buffer_interface: &CommandBufferInterface,
@@ -45,5 +47,13 @@ impl VKMesh {
             vertex_buffer,
             index_buffer,
         }
+    }
+}
+
+impl RHIMeshInterface for VKMesh {
+    type RHI = Renderer;
+
+    fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI) -> Self {
+        Self::new(source, &rhi.device, &rhi.command_buffer_interface, &rhi.queues.graphics_queue)
     }
 }

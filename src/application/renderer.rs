@@ -44,6 +44,8 @@ use vulkano::{
     sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
+use crate::application::assets::asset_traits::RHIInterface;
+use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -384,4 +386,9 @@ impl Renderer {
     pub fn gui(&mut self) -> &mut Gui {
         &mut self.gui
     }
+}
+
+impl RHIInterface for Renderer {
+    type MeshType = VKMesh;
+    type TextureType = VKTexture;
 }
