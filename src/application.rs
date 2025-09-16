@@ -10,22 +10,33 @@ use winit::{
 };
 
 use renderer::Renderer;
+use crate::application::assets::asset_traits::SceneInterface;
+use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
+use crate::application::scene::Scene;
 
 pub struct Application {
-    renderer: Option<Renderer>
+    renderer: Option<Renderer>,
+    scene: Option<VKScene>
 }
 
 impl Application {
     pub fn new() -> Self {
         Self {
-            renderer: None
+            renderer: None,
+            scene: None
         }
+    }
+
+    fn scene() -> Scene {
+        let mut scene = Scene::new();
+        scene
     }
 }
 
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.renderer = Some(Renderer::new(event_loop))
+        self.renderer = Some(Renderer::new(event_loop));
+        self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap()));
     }
 
     fn window_event(
@@ -66,7 +77,7 @@ impl ApplicationHandler for Application {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.renderer.as_mut().unwrap().redraw();
+                self.renderer.as_mut().unwrap().redraw(self.scene.as_ref().unwrap());
             }
         }
     }

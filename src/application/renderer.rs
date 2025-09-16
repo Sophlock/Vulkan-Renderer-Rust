@@ -6,7 +6,7 @@ mod queue;
 mod render_pass;
 mod render_sync;
 mod swapchain;
-mod rhi_assets;
+pub mod rhi_assets;
 mod buffer;
 mod shaders;
 mod shader_object;
@@ -46,6 +46,9 @@ use vulkano::{
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
 use crate::application::assets::asset_traits::RHIInterface;
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
+use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
+use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
+use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -124,12 +127,12 @@ impl Renderer {
         }
     }
 
-    pub fn redraw(&mut self) {
-        self.in_flight_future = self.draw_frame();
+    pub fn redraw(&mut self, scene: &VKScene) {
+        self.in_flight_future = self.draw_frame(scene);
         self.window.as_ref().request_redraw();
     }
 
-    fn draw_frame(&mut self) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
+    fn draw_frame(&mut self, scene: &VKScene) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
         if self.should_recreate_swapchain {
             self.recreate_swapchain_internal();
         }
@@ -172,7 +175,7 @@ impl Renderer {
             .command_buffer_interface
             .primary_command_buffer(self.queue_family_indices.graphics_family);
 
-        self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize)
+        self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
 
         let draw_finished_future = image_available_future
@@ -218,6 +221,7 @@ impl Renderer {
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
+        scene: &VKScene
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(
@@ -391,4 +395,7 @@ impl Renderer {
 impl RHIInterface for Renderer {
     type MeshType = VKMesh;
     type TextureType = VKTexture;
+    type CameraType = VKCamera;
+    type ModelType = VKModel;
+    type SceneType = VKScene;
 }
