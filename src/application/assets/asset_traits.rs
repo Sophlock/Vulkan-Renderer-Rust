@@ -92,3 +92,25 @@ pub trait RHISceneInterface {
     type RHI: RHIInterface;
     fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
+
+pub trait MaterialInterface : Sized {
+    fn rhi<RHIType: RHIMaterialInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
+        RHIType::create(self, rhi)
+    }
+}
+
+pub trait RHIMaterialInterface {
+    type RHI: RHIInterface;
+    fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self;
+}
+
+pub trait MaterialInstanceInterface : Sized {
+    fn rhi<RHIType: RHIMaterialInstanceInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
+        RHIType::create(self, rhi)
+    }
+}
+
+pub trait RHIMaterialInstanceInterface {
+    type RHI: RHIInterface;
+    fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI) -> Self;
+}
