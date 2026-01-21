@@ -94,6 +94,8 @@ pub trait RHISceneInterface {
 }
 
 pub trait MaterialInterface : Sized {
+    fn module(&self) -> &str;
+    fn material(&self) -> &str;
     fn rhi<RHIType: RHIMaterialInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }

@@ -49,6 +49,7 @@ use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
+use crate::application::renderer::shaders::SlangCompiler;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -67,6 +68,7 @@ pub struct Renderer {
     framebuffers: Vec<Arc<Framebuffer>>,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
     gui: Gui,
+    slang_compiler: SlangCompiler
 }
 
 impl Renderer {
@@ -107,6 +109,7 @@ impl Renderer {
             swapchain.format,
             GuiConfig::default(),
         );
+        let slang_compiler = SlangCompiler::new("shaders".as_ref()); // TODO
         Self {
             should_recreate_swapchain: false,
             frames_in_flight,
@@ -124,6 +127,7 @@ impl Renderer {
             framebuffers,
             in_flight_future: None,
             gui,
+            slang_compiler,
         }
     }
 
