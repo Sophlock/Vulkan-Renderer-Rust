@@ -43,7 +43,9 @@ pub trait RHIMeshInterface {
 }
 
 pub trait TextureInterface : Sized {
-    fn pixels(&self) -> &[u32];
+    fn pixels(&self) -> &[u8];
+    
+    fn size(&self) -> [u32; 3];
 
     fn rhi<RHIType: RHITextureInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)

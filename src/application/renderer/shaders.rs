@@ -1,7 +1,6 @@
-use extend::ext;
 use shader_slang::{
     CompileTarget, CompilerOptions, GlobalSession, OptimizationLevel, Session, SessionDesc,
-    TargetDesc, reflection,
+    TargetDesc
 };
 use std::path::Path;
 
