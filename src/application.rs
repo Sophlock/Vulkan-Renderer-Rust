@@ -1,6 +1,7 @@
 mod renderer;
 mod scene;
 mod assets;
+mod resource_management;
 
 use winit::{
     application::ApplicationHandler,
