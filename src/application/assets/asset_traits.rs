@@ -1,6 +1,8 @@
+use crate::application::resource_management::Resource;
 use glam::{Mat4, Vec2, Vec3};
 use vulkano::buffer::BufferContents;
 use vulkano::pipeline::graphics::vertex_input;
+use crate::application::assets::Asset;
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
@@ -29,7 +31,21 @@ pub trait RHIInterface {
     type SceneType: RHISceneInterface;
 }
 
-pub trait MeshInterface : Sized {
+pub trait RHIResource: Resource {
+    fn uuid_mut(&mut self) -> &mut usize;
+
+    fn set_uuid(&mut self, uuid: usize) {
+        *self.uuid_mut() = uuid;
+    }
+}
+
+impl<T: RHIResource> Resource for T {
+    fn set_uuid(&mut self, uuid: usize) {
+        *self.uuid_mut() = uuid;
+    }
+}
+
+pub trait MeshInterface: Asset {
     fn vertices(&self) -> &[Vertex];
     fn indices(&self) -> &[Index];
     fn rhi<RHIType: RHIMeshInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
@@ -37,14 +53,14 @@ pub trait MeshInterface : Sized {
     }
 }
 
-pub trait RHIMeshInterface {
+pub trait RHIMeshInterface: RHIResource {
     type RHI: RHIInterface;
     fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait TextureInterface : Sized {
+pub trait TextureInterface: Asset {
     fn pixels(&self) -> &[u8];
-    
+
     fn size(&self) -> [u32; 3];
 
     fn rhi<RHIType: RHITextureInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
@@ -52,12 +68,12 @@ pub trait TextureInterface : Sized {
     }
 }
 
-pub trait RHITextureInterface {
+pub trait RHITextureInterface: RHIResource {
     type RHI: RHIInterface;
     fn create<T: TextureInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait ModelInterface : Sized {
+pub trait ModelInterface: Sized {
     fn rhi<RHIType: RHIModelInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }
@@ -68,7 +84,7 @@ pub trait RHIModelInterface {
     fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait CameraInterface : Sized {
+pub trait CameraInterface: Sized {
     fn view_projection(&self) -> Mat4;
     fn rhi<RHIType: RHICameraInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
@@ -80,7 +96,7 @@ pub trait RHICameraInterface {
     fn create<T: CameraInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait SceneInterface : Sized {
+pub trait SceneInterface: Sized {
     type ModelType: ModelInterface;
     type CameraType: CameraInterface;
     fn models(&self) -> &Vec<Self::ModelType>;
@@ -95,7 +111,7 @@ pub trait RHISceneInterface {
     fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait MaterialInterface : Sized {
+pub trait MaterialInterface: Sized {
     fn module(&self) -> &str;
     fn material(&self) -> &str;
     fn rhi<RHIType: RHIMaterialInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
@@ -108,7 +124,7 @@ pub trait RHIMaterialInterface {
     fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait MaterialInstanceInterface : Sized {
+pub trait MaterialInstanceInterface: Sized {
     fn rhi<RHIType: RHIMaterialInstanceInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }

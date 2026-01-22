@@ -24,9 +24,17 @@ use vulkano::{
     ValidationError,
     VulkanError,
 };
+use crate::application::assets::asset_traits::RHIResource;
 
 pub struct VKTexture {
     image: Arc<ImageView>,
+    uuid: usize,
+}
+
+impl RHIResource for VKTexture {
+    fn uuid_mut(&mut self) -> &mut usize {
+        &mut self.uuid
+    }
 }
 
 impl RHITextureInterface for VKTexture {
@@ -102,7 +110,7 @@ impl RHITextureInterface for VKTexture {
             .then_signal_fence_and_flush().unwrap()
             .wait(None).unwrap();
 
-        Self { image: image_view }
+        Self { image: image_view, uuid: 0 }
     }
 }
 

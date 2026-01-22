@@ -9,12 +9,14 @@ use vulkano::{
     device::Device,
     memory::allocator::MemoryTypeFilter,
 };
-use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface};
+use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface, RHIResource};
 use crate::application::renderer::Renderer;
+use crate::application::resource_management::Resource;
 
 pub struct VKMesh {
     vertex_buffer: Subbuffer<[Vertex]>,
     index_buffer: Subbuffer<[Index]>,
+    uuid: usize,
 }
 
 impl VKMesh {
@@ -46,7 +48,14 @@ impl VKMesh {
         Self {
             vertex_buffer,
             index_buffer,
+            uuid: 0,
         }
+    }
+}
+
+impl RHIResource for VKMesh {
+    fn uuid_mut(&mut self) -> &mut usize {
+        &mut self.uuid
     }
 }
 

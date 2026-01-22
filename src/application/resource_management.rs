@@ -75,18 +75,18 @@ impl<T: 'static> VecLike for Vec<T> {
     }
 }
 
-trait Resource {
+pub trait Resource {
     fn set_uuid(&mut self, uuid: usize);
 }
 
-struct ResourceManager {
+pub struct ResourceManager {
     data: TypedMultiMap,
     id_pos_map: HashMap<usize, ResourcePosition>,
     next_id: usize,
 }
 
 impl ResourceManager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: TypedMultiMap::new(),
             id_pos_map: HashMap::new(),
@@ -94,7 +94,7 @@ impl ResourceManager {
         }
     }
 
-    fn get<T: Resource + 'static>(&self, uuid: usize) -> Option<&T> {
+    pub fn get<T: Resource + 'static>(&self, uuid: usize) -> Option<&T> {
         let pos = self.id_pos_map.get(&uuid)?;
         if pos.type_id == TypedMultiMap::type_id::<T>() {
             self.data.get_vec::<T>()?.get(pos.index)
@@ -103,7 +103,7 @@ impl ResourceManager {
         }
     }
 
-    fn get_mut<T: Resource + 'static>(&mut self, uuid: usize) -> Option<&mut T> {
+    pub fn get_mut<T: Resource + 'static>(&mut self, uuid: usize) -> Option<&mut T> {
         let pos = self.id_pos_map.get(&uuid)?;
         if pos.type_id == TypedMultiMap::type_id::<T>() {
             self.data.get_vec_mut::<T>()?.get_mut(pos.index)
@@ -112,7 +112,7 @@ impl ResourceManager {
         }
     }
 
-    fn add<T: Resource + 'static>(&mut self, mut data: T) -> usize {
+    pub fn add<T: Resource + 'static>(&mut self, mut data: T) -> usize {
         let id = self.next_id;
         data.set_uuid(id);
         self.next_id += 1;
