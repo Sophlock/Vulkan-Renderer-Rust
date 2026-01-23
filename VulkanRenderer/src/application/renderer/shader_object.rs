@@ -1,13 +1,15 @@
+use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
 use crate::application::renderer::shader_cursor::{ShaderOffset, ShaderSize};
 use crate::{
     application::assets::asset_traits::Vertex, application::renderer::pipeline::graphics_pipeline,
 };
 use shader_slang::reflection::{TypeLayout, VariableLayout};
 use shader_slang::{BindingType, ParameterCategory};
+use smallvec::{SmallVec, smallvec};
 use std::collections::BTreeMap;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::{
     DescriptorSetAllocator, StandardDescriptorSetAllocator,
     StandardDescriptorSetAllocatorCreateInfo,
@@ -18,6 +20,8 @@ use vulkano::descriptor_set::layout::{
 use vulkano::descriptor_set::pool::{
     DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorSetAllocateInfo,
 };
+use vulkano::descriptor_set::{DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet};
+use vulkano::image::ImageLayout;
 use vulkano::memory::allocator::{
     AllocationCreateInfo, DeviceLayout, MemoryAllocator, MemoryTypeFilter,
 };
@@ -39,7 +43,7 @@ pub struct ShaderObjectLayout {
     descriptor_pool: DescriptorPool,
     existential_sizes: Vec<ShaderSize>,
     existential_offsets: Vec<ShaderOffset>,
-    type_layout: *const TypeLayout
+    type_layout: *const TypeLayout,
 }
 
 pub struct ShaderObject {
@@ -47,7 +51,7 @@ pub struct ShaderObject {
     pipeline: Arc<GraphicsPipeline>,
     descriptor_sets: Vec<Arc<DescriptorSet>>,
     uniform_buffer: Option<Subbuffer<[u8]>>,
-    type_layout: *const TypeLayout
+    type_layout: *const TypeLayout,
 }
 
 impl ShaderObjectLayout {
@@ -125,7 +129,7 @@ impl ShaderObjectLayout {
             descriptor_pool,
             existential_sizes,
             existential_offsets,
-            type_layout
+            type_layout,
         }
         .into()
     }
@@ -192,7 +196,7 @@ impl ShaderObjectLayout {
                 .unwrap()
                 .size(ParameterCategory::Uniform),
             binding_offset: type_layout.binding_range_count() as u32,
-            binding_array_element: 0
+            binding_array_element: 0,
         };
 
         let offsets = (&sizes)
@@ -210,7 +214,7 @@ impl ShaderObjectLayout {
 
     // TODO: I don't like the pointer here
     pub fn type_layout(&self) -> &TypeLayout {
-        unsafe{&*self.type_layout}
+        unsafe { &*self.type_layout }
     }
 
     pub fn ordinary_data_size(&self) -> usize {
@@ -267,7 +271,12 @@ impl ShaderObject {
         vert_spriv: &[u32],
         frag_spriv: &[u32],
     ) -> Self {
-        let type_layout = layout.type_layout().element_var_layout().unwrap().type_layout().unwrap();
+        let type_layout = layout
+            .type_layout()
+            .element_var_layout()
+            .unwrap()
+            .type_layout()
+            .unwrap();
 
         let buffer_info = BufferCreateInfo {
             sharing: Sharing::Exclusive,
@@ -335,11 +344,32 @@ impl ShaderObject {
         }
     }
 
+    fn device(&self) -> &Arc<Device> {
+        self.pipeline.device()
+    }
+
     pub fn type_layout(&self) -> &TypeLayout {
-        unsafe {&*self.type_layout}
+        unsafe { &*self.type_layout }
     }
 
     pub fn existential_to_offset(&self, existential: usize) -> ShaderOffset {
         self.layout.existential_offsets[existential]
+    }
+
+    pub fn write_texture(&mut self, offset: ShaderOffset, texture: &VKTexture) {
+        let write = WriteDescriptorSet::image_view_with_layout(
+            offset.binding_offset,
+            DescriptorImageViewInfo {
+                image_view: texture.image_view().clone(),
+                image_layout: ImageLayout::ShaderReadOnlyOptimal, // TODO: Is this always correct?
+            },
+        );
+        self.perform_descriptor_write(smallvec![write]);
+    }
+
+    fn perform_descriptor_write<'a>(&mut self, writes: SmallVec<[WriteDescriptorSet; 2]>) {
+        self.descriptor_sets
+            .iter_mut()
+            .for_each(|set| unsafe { set.update_by_ref((&writes).iter().cloned(), []) }.unwrap());
     }
 }

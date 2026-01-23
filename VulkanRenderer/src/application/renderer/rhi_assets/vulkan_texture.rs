@@ -240,4 +240,8 @@ impl VKTexture {
 
         cb.
     }*/
+
+    pub fn image_view(&self) -> &Arc<ImageView>{
+        &self.image
+    }
 }
