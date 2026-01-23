@@ -208,8 +208,8 @@ impl ShaderObjectLayout {
     }
 
     // TODO: I don't like the pointer here
-    pub fn type_layout(&self) -> *const TypeLayout {
-        self.type_layout
+    pub fn type_layout(&self) -> &TypeLayout {
+        unsafe{&*self.type_layout}
     }
 
     pub fn ordinary_data_size(&self) -> usize {
@@ -239,7 +239,7 @@ impl ShaderObjectLayout {
             .last()
             .map(|s| s.binding_size)
             .unwrap_or(
-                unsafe { &*self.type_layout() }
+                self.type_layout()
                     .element_var_layout()
                     .unwrap()
                     .type_layout()
@@ -266,7 +266,7 @@ impl ShaderObject {
         vert_spriv: &[u32],
         frag_spriv: &[u32],
     ) -> Self {
-        let type_layout = unsafe {&*layout.type_layout()}.element_var_layout().unwrap().type_layout().unwrap();
+        let type_layout = layout.type_layout().element_var_layout().unwrap().type_layout().unwrap();
 
         let buffer_info = BufferCreateInfo {
             sharing: Sharing::Exclusive,
@@ -325,11 +325,11 @@ impl ShaderObject {
                 .into(),
             );
         Self {
-            layout,
             pipeline,
             descriptor_sets,
             uniform_buffer,
-            type_layout
+            type_layout,
+            layout,
         }
     }
 }
