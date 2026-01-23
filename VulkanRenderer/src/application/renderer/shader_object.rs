@@ -1,3 +1,4 @@
+use crate::application::renderer::shader_cursor::{ShaderOffset, ShaderSize};
 use crate::{
     application::assets::asset_traits::Vertex, application::renderer::pipeline::graphics_pipeline,
 };
@@ -5,14 +6,25 @@ use shader_slang::reflection::{TypeLayout, VariableLayout};
 use shader_slang::{BindingType, ParameterCategory};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::descriptor_set::DescriptorSet;
+use vulkano::descriptor_set::allocator::{
+    DescriptorSetAllocator, StandardDescriptorSetAllocator,
+    StandardDescriptorSetAllocatorCreateInfo,
+};
 use vulkano::descriptor_set::layout::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
 };
 use vulkano::descriptor_set::pool::{
-    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
+    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorSetAllocateInfo,
+};
+use vulkano::memory::allocator::{
+    AllocationCreateInfo, DeviceLayout, MemoryAllocator, MemoryTypeFilter,
 };
 use vulkano::shader::ShaderStages;
+use vulkano::sync::Sharing;
 use vulkano::{
+    DeviceSize, descriptor_set,
     device::Device,
     pipeline::{
         DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
@@ -25,23 +37,17 @@ pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,
     descriptor_pool: DescriptorPool,
+    existential_sizes: Vec<ShaderSize>,
+    existential_offsets: Vec<ShaderOffset>,
+    type_layout: *const TypeLayout
 }
 
 pub struct ShaderObject {
     layout: Arc<ShaderObjectLayout>,
     pipeline: Arc<GraphicsPipeline>,
-}
-
-// TODO: Move this somewhere else
-pub struct ShaderSize {
-    byte_size: usize,
-    binding_size: u32,
-}
-
-#[derive(Copy, Clone)]
-pub struct ShaderOffset {
-    byte_offset: usize,
-    binding_offset: u32,
+    descriptor_sets: Vec<Arc<DescriptorSet>>,
+    uniform_buffer: Option<Subbuffer<[u8]>>,
+    type_layout: *const TypeLayout
 }
 
 impl ShaderObjectLayout {
@@ -72,7 +78,7 @@ impl ShaderObjectLayout {
         let bindings =
             Self::bindings_for_layout(type_layout, type_layout.binding_range_count())
                 .chain(ordinary_data)
-                .chain(existential_objects.iter().zip(existential_sizes).flat_map(
+                .chain(existential_objects.iter().zip(&existential_sizes).flat_map(
                     |(layout, size)| Self::bindings_for_layout(layout, size.binding_size as i64),
                 ))
                 .enumerate()
@@ -117,6 +123,9 @@ impl ShaderObjectLayout {
             pipeline_layout,
             descriptor_set_layout,
             descriptor_pool,
+            existential_sizes,
+            existential_offsets,
+            type_layout
         }
         .into()
     }
@@ -197,6 +206,53 @@ impl ShaderObjectLayout {
 
         (sizes, offsets)
     }
+
+    // TODO: I don't like the pointer here
+    pub fn type_layout(&self) -> *const TypeLayout {
+        self.type_layout
+    }
+
+    pub fn ordinary_data_size(&self) -> usize {
+        let last_size = self
+            .existential_sizes
+            .last()
+            .map(|s| s.byte_size)
+            .unwrap_or(
+                unsafe { &*self.type_layout() }
+                    .element_var_layout()
+                    .unwrap()
+                    .type_layout()
+                    .unwrap()
+                    .size(ParameterCategory::Uniform),
+            );
+        let last_offset = self
+            .existential_offsets
+            .last()
+            .map(|s| s.byte_offset)
+            .unwrap_or(0);
+        last_size + last_offset
+    }
+
+    pub fn binding_size(&self) -> u32 {
+        let last_size = self
+            .existential_sizes
+            .last()
+            .map(|s| s.binding_size)
+            .unwrap_or(
+                unsafe { &*self.type_layout() }
+                    .element_var_layout()
+                    .unwrap()
+                    .type_layout()
+                    .unwrap()
+                    .binding_range_count() as u32,
+            );
+        let last_offset = self
+            .existential_offsets
+            .last()
+            .map(|s| s.binding_offset)
+            .unwrap_or(0);
+        last_size + last_offset
+    }
 }
 
 impl ShaderObject {
@@ -204,9 +260,51 @@ impl ShaderObject {
         device: &Arc<Device>,
         render_pass: Arc<RenderPass>,
         layout: Arc<ShaderObjectLayout>,
+        descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
+        buffer_allocator: &Arc<dyn MemoryAllocator>,
+        in_flight_frames: u32,
         vert_spriv: &[u32],
         frag_spriv: &[u32],
     ) -> Self {
+        let type_layout = unsafe {&*layout.type_layout()}.element_var_layout().unwrap().type_layout().unwrap();
+
+        let buffer_info = BufferCreateInfo {
+            sharing: Sharing::Exclusive,
+            usage: BufferUsage::UNIFORM_BUFFER | BufferUsage::TRANSFER_DST,
+            ..BufferCreateInfo::default()
+        };
+        let alloc_info = AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+            ..AllocationCreateInfo::default()
+        };
+
+        let ordinary_size = layout.ordinary_data_size();
+        let uniform_buffer = if ordinary_size > 0 {
+            Some(
+                Buffer::new_slice::<u8>(
+                    buffer_allocator.clone(),
+                    buffer_info,
+                    alloc_info,
+                    ordinary_size as DeviceSize,
+                )
+                .unwrap(),
+            )
+        } else {
+            None
+        };
+
+        let descriptor_sets = (0..in_flight_frames)
+            .map(|_| {
+                DescriptorSet::new(
+                    descriptor_allocator.clone(),
+                    layout.descriptor_set_layout.clone(),
+                    [],
+                    [],
+                )
+                .unwrap()
+            })
+            .collect();
+
         let pipeline = graphics_pipeline()
             .input_assembly(None, None)
             .vertex_shader(device.clone(), vert_spriv)
@@ -226,6 +324,12 @@ impl ShaderObject {
                 ]
                 .into(),
             );
-        Self { layout, pipeline }
+        Self {
+            layout,
+            pipeline,
+            descriptor_sets,
+            uniform_buffer,
+            type_layout
+        }
     }
 }

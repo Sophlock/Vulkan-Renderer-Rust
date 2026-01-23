@@ -1,25 +1,37 @@
+mod buffer;
 mod command_buffer;
 mod image;
 mod layers;
 mod physical_device;
+mod pipeline;
 mod queue;
 mod render_pass;
 mod render_sync;
-mod swapchain;
 pub mod rhi_assets;
-mod buffer;
-mod shaders;
+mod shader_cursor;
 mod shader_object;
-mod pipeline;
+mod shaders;
+mod swapchain;
 
+use crate::application::assets::asset_traits::RHIInterface;
+use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
+use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
+use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
+use crate::application::renderer::shaders::SlangCompiler;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
+use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use smallvec::smallvec;
 use std::sync::Arc;
 use swapchain::Swapchain;
+use vulkano::descriptor_set::allocator::{
+    DescriptorSetAllocator, StandardDescriptorSetAllocator,
+    StandardDescriptorSetAllocatorCreateInfo,
+};
+use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::{
     Validated, ValidationError, VulkanError, VulkanLibrary,
     command_buffer::{
@@ -44,12 +56,6 @@ use vulkano::{
     sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
-use crate::application::assets::asset_traits::RHIInterface;
-use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
-use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
-use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
-use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
-use crate::application::renderer::shaders::SlangCompiler;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -68,7 +74,9 @@ pub struct Renderer {
     framebuffers: Vec<Arc<Framebuffer>>,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
     gui: Gui,
-    slang_compiler: SlangCompiler
+    slang_compiler: SlangCompiler,
+    buffer_allocator: Arc<dyn MemoryAllocator>,
+    descriptor_allocator: Arc<dyn DescriptorSetAllocator>,
 }
 
 impl Renderer {
@@ -110,6 +118,14 @@ impl Renderer {
             GuiConfig::default(),
         );
         let slang_compiler = SlangCompiler::new("shaders".as_ref()); // TODO
+        let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let descriptor_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            StandardDescriptorSetAllocatorCreateInfo {
+                update_after_bind: false,
+                ..StandardDescriptorSetAllocatorCreateInfo::default()
+            },
+        ));
         Self {
             should_recreate_swapchain: false,
             frames_in_flight,
@@ -128,6 +144,8 @@ impl Renderer {
             in_flight_future: None,
             gui,
             slang_compiler,
+            buffer_allocator,
+            descriptor_allocator,
         }
     }
 
@@ -225,7 +243,7 @@ impl Renderer {
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
-        scene: &VKScene
+        scene: &VKScene,
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(

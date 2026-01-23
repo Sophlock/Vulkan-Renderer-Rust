@@ -25,9 +25,10 @@ use vulkano::{
     Validated,
     VulkanError
 };
+use vulkano::memory::allocator::MemoryAllocator;
 
 pub fn buffer_from_slice<T: BufferContents + Copy>(
-    device: Arc<Device>,
+    allocator: Arc<dyn MemoryAllocator>,
     command_buffer_interface: &CommandBufferInterface,
     queue: Arc<Queue>,
     data: &[T],
@@ -36,17 +37,15 @@ pub fn buffer_from_slice<T: BufferContents + Copy>(
 ) -> Result<Subbuffer<[T]>, Validated<AllocateBufferError>> {
     let create_info = BufferCreateInfo {
         sharing: Sharing::Exclusive,
-        size: 0,
         usage: usage | BufferUsage::TRANSFER_DST,
         ..BufferCreateInfo::default()
     };
-    let alloc = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
     let alloc_info = AllocationCreateInfo {
         memory_type_filter,
         ..AllocationCreateInfo::default()
     };
     let staging_buffer = Buffer::from_iter(
-        alloc.clone(),
+        allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::TRANSFER_SRC,
             ..create_info.clone()
@@ -58,7 +57,7 @@ pub fn buffer_from_slice<T: BufferContents + Copy>(
         },
         data.iter().copied(),
     )?;
-    let buffer = Buffer::new_slice::<T>(alloc, create_info, alloc_info, data.len() as DeviceSize)?;
+    let buffer = Buffer::new_slice::<T>(allocator, create_info, alloc_info, data.len() as DeviceSize)?;
     copy_buffer_to_buffer(staging_buffer, buffer.clone(), command_buffer_interface, queue).unwrap();
     Ok(buffer)
 }

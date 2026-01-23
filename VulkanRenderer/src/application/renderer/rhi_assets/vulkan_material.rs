@@ -8,6 +8,8 @@ use shader_slang::structs::specialization_arg::SpecializationArg;
 use shader_slang::{Blob, ComponentType, Error, IUnknown, LayoutRules};
 use std::{ops::Deref, sync::Arc};
 use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
+use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
+use vulkano::memory::allocator::MemoryAllocator;
 
 struct VulkanMaterial {
     shader_object: ShaderObject,
@@ -20,6 +22,8 @@ impl VulkanMaterial {
         compiler: &SlangCompiler,
         device: &Arc<Device>,
         render_pass: Arc<RenderPass>,
+        descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
+        buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: usize,
         module_name: &str,
         material_name: &str,
@@ -49,6 +53,9 @@ impl VulkanMaterial {
             device,
             render_pass,
             shader_object_layout,
+            descriptor_allocator,
+            buffer_allocator,
+            in_flight_frames as u32,
             bytes_to_words(vert_spirv.as_slice()).unwrap().deref(),
             bytes_to_words(frag_spirv.as_slice()).unwrap().deref(),
         );
@@ -88,6 +95,8 @@ impl RHIMaterialInterface for VulkanMaterial {
             &rhi.slang_compiler,
             &rhi.device,
             rhi.render_pass.clone(),
+            &rhi.descriptor_allocator,
+            &rhi.buffer_allocator,
             rhi.frames_in_flight,
             source.module(),
             source.material(),

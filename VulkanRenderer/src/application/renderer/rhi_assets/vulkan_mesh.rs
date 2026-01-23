@@ -9,6 +9,7 @@ use vulkano::{
     device::Device,
     memory::allocator::MemoryTypeFilter,
 };
+use vulkano::memory::allocator::MemoryAllocator;
 use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface, RHIResource};
 use crate::application::renderer::Renderer;
 use crate::application::resource_management::Resource;
@@ -22,12 +23,12 @@ pub struct VKMesh {
 impl VKMesh {
     fn new<Mesh: MeshInterface>(
         mesh: &Mesh,
-        device: &Arc<Device>,
+        allocator: &Arc<dyn MemoryAllocator>,
         command_buffer_interface: &CommandBufferInterface,
         queue: &Arc<Queue>,
     ) -> Self {
         let vertex_buffer = buffer_from_slice(
-            device.clone(),
+            allocator.clone(),
             command_buffer_interface,
             queue.clone(),
             mesh.vertices(),
@@ -36,7 +37,7 @@ impl VKMesh {
         )
         .unwrap();
         let index_buffer = buffer_from_slice(
-            device.clone(),
+            allocator.clone(),
             command_buffer_interface,
             queue.clone(),
             mesh.indices(),
@@ -63,6 +64,6 @@ impl RHIMeshInterface for VKMesh {
     type RHI = Renderer;
 
     fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI) -> Self {
-        Self::new(source, &rhi.device, &rhi.command_buffer_interface, &rhi.queues.graphics_queue)
+        Self::new(source, &rhi.buffer_allocator, &rhi.command_buffer_interface, &rhi.queues.graphics_queue)
     }
 }
