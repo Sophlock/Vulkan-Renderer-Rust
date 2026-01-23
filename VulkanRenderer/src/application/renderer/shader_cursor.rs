@@ -1,9 +1,11 @@
-use shader_slang::reflection::TypeLayout;
 use crate::application::renderer::shader_object::ShaderObject;
+use shader_slang::reflection::TypeLayout;
+use shader_slang::{ParameterCategory, TypeKind};
 
 pub struct ShaderCursor<'a> {
     shader_object: &'a ShaderObject,
-    offset: ShaderOffset
+    offset: ShaderOffset,
+    type_layout: *const TypeLayout,
 }
 
 pub struct ShaderSize {
@@ -15,14 +17,76 @@ pub struct ShaderSize {
 pub struct ShaderOffset {
     pub byte_offset: usize,
     pub binding_offset: u32,
+    pub binding_array_element: u32,
 }
 
 impl<'a> ShaderCursor<'a> {
-    /*pub fn field(name: &str) -> ShaderCursor {
-
+    pub fn new(source: &'a ShaderObject) -> Self {
+        Self {
+            shader_object: source,
+            offset: ShaderOffset::default(),
+            type_layout: source.type_layout(),
+        }
     }
 
-    pub fn type_layout(&self) -> TypeLayout {
-        self.shader_object.type_layout
-    }*/
+    pub fn field(&self, name: &str) -> Option<ShaderCursor> {
+        self.field_index(self.type_layout().find_field_index_by_name(name) as u32)
+    }
+
+    pub fn field_index(&self, index: u32) -> Option<ShaderCursor> {
+        let field = self.type_layout().field_by_index(index)?;
+        if field.type_layout()?.kind() == TypeKind::Interface {
+            // TODO: All of this is bad architecture because the C++ version said so
+            let offset = self
+                .shader_object
+                .existential_to_offset(field.offset(ParameterCategory::ExistentialObjectParam));
+            Some(ShaderCursor {
+                shader_object: self.shader_object,
+                offset,
+                type_layout: field.type_layout()?.pending_data_type_layout()?,
+            })
+        } else {
+            Some(ShaderCursor {
+                shader_object: self.shader_object,
+                offset: ShaderOffset {
+                    byte_offset: self.offset.byte_offset + field.offset(ParameterCategory::Uniform),
+                    binding_offset: self.offset.binding_offset
+                        + self.type_layout().field_binding_range_offset(index as i64) as u32,
+                    ..self.offset
+                },
+                type_layout: field.type_layout()?,
+            })
+        }
+    }
+
+    pub fn at(&self, index: u32) -> Option<ShaderCursor> {
+        let element = self.type_layout().element_type_layout()?;
+        Some(ShaderCursor {
+            shader_object: self.shader_object,
+            offset: ShaderOffset {
+                byte_offset: self.offset.byte_offset + (index as usize) * element.stride(ParameterCategory::Uniform),
+                binding_array_element: self.offset.binding_array_element * (self.type_layout().element_count()? as u32) + index,
+                ..self.offset
+            },
+            type_layout: element,
+        })
+    }
+
+    pub fn type_layout(&self) -> &TypeLayout {
+        unsafe { &*self.type_layout }
+    }
+
+    pub fn offset(&self) -> ShaderOffset {
+        self.offset
+    }
+}
+
+impl Default for ShaderOffset {
+    fn default() -> Self {
+        Self {
+            byte_offset: 0,
+            binding_offset: 0,
+            binding_array_element: 0,
+        }
+    }
 }

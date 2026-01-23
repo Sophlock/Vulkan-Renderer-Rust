@@ -192,6 +192,7 @@ impl ShaderObjectLayout {
                 .unwrap()
                 .size(ParameterCategory::Uniform),
             binding_offset: type_layout.binding_range_count() as u32,
+            binding_array_element: 0
         };
 
         let offsets = (&sizes)
@@ -218,7 +219,7 @@ impl ShaderObjectLayout {
             .last()
             .map(|s| s.byte_size)
             .unwrap_or(
-                unsafe { &*self.type_layout() }
+                self.type_layout()
                     .element_var_layout()
                     .unwrap()
                     .type_layout()
@@ -278,6 +279,7 @@ impl ShaderObject {
             ..AllocationCreateInfo::default()
         };
 
+        // TODO: Expose option to make this buffer be host visible
         let ordinary_size = layout.ordinary_data_size();
         let uniform_buffer = if ordinary_size > 0 {
             Some(
@@ -331,5 +333,13 @@ impl ShaderObject {
             type_layout,
             layout,
         }
+    }
+
+    pub fn type_layout(&self) -> &TypeLayout {
+        unsafe {&*self.type_layout}
+    }
+
+    pub fn existential_to_offset(&self, existential: usize) -> ShaderOffset {
+        self.layout.existential_offsets[existential]
     }
 }
