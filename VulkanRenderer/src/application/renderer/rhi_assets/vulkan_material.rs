@@ -4,7 +4,8 @@ use crate::{
     application::renderer::shader_object::{ShaderObject, ShaderObjectLayout},
     application::renderer::shaders::SlangCompiler,
 };
-use shader_slang::{Blob, ComponentType, Error, IUnknown};
+use shader_slang::structs::specialization_arg::SpecializationArg;
+use shader_slang::{Blob, ComponentType, Error, IUnknown, LayoutRules};
 use std::{ops::Deref, sync::Arc};
 use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
 
@@ -19,21 +20,30 @@ impl VulkanMaterial {
         compiler: &SlangCompiler,
         device: &Arc<Device>,
         render_pass: Arc<RenderPass>,
+        in_flight_frames: usize,
         module_name: &str,
         material_name: &str,
     ) -> shader_slang::Result<Self> {
         let module = compiler.session().load_module(module_name)?;
         let module_component: ComponentType = module.into();
-        // TODO: Specialize
+        let composed = Self::append_raster_entry_points(&module_component, compiler)?;
+
         let material_reflection = module_component
             .layout(0)?
             .find_type_by_name(material_name)
             .unwrap();
-        let composed = Self::append_raster_entry_points(&module_component, compiler)?;
-        let linked = composed.link()?;
+        let specialized = composed.specialize(&[SpecializationArg::new(material_reflection)])?;
+
+        let existential_objects = [specialized.layout(0)?.type_layout(material_reflection, LayoutRules::Default).unwrap()];
+
+        let linked = specialized.link()?;
         let vert_spirv = linked.entry_point_code(0, 0)?;
         let frag_spirv = linked.entry_point_code(1, 0)?;
-        let shader_object_layout = ShaderObjectLayout::new(device);
+        let shader_object_layout =
+            ShaderObjectLayout::new(specialized.layout(0)?.global_params_var_layout().unwrap(),
+                                    existential_objects.as_slice(),
+                                    in_flight_frames as u32,
+                                    device);
 
         let shader_object = ShaderObject::new(
             device,
@@ -74,6 +84,14 @@ impl RHIMaterialInterface for VulkanMaterial {
     type RHI = Renderer;
 
     fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self {
-        VulkanMaterial::new(&rhi.slang_compiler, &rhi.device, rhi.render_pass.clone(), source.module(), source.material()).unwrap()
+        VulkanMaterial::new(
+            &rhi.slang_compiler,
+            &rhi.device,
+            rhi.render_pass.clone(),
+            rhi.frames_in_flight,
+            source.module(),
+            source.material(),
+        )
+        .unwrap()
     }
 }

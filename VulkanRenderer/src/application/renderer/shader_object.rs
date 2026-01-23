@@ -1,22 +1,30 @@
 use crate::{
-    application::assets::asset_traits::Vertex,
-    application::renderer::pipeline::graphics_pipeline
+    application::assets::asset_traits::Vertex, application::renderer::pipeline::graphics_pipeline,
 };
+use shader_slang::reflection::{TypeLayout, VariableLayout};
+use shader_slang::{BindingType, ParameterCategory};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use vulkano::descriptor_set::layout::{
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
+};
+use vulkano::descriptor_set::pool::{
+    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
+};
+use vulkano::shader::ShaderStages;
 use vulkano::{
+    device::Device,
     pipeline::{
-        DynamicState,
-        GraphicsPipeline,
-        graphics::subpass::PipelineSubpassType,
+        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
         layout::PipelineLayoutCreateInfo,
-        PipelineLayout
     },
     render_pass::RenderPass,
-    device::Device,
 };
 
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
+    descriptor_pool: DescriptorPool,
 }
 
 pub struct ShaderObject {
@@ -24,19 +32,170 @@ pub struct ShaderObject {
     pipeline: Arc<GraphicsPipeline>,
 }
 
+// TODO: Move this somewhere else
+pub struct ShaderSize {
+    byte_size: usize,
+    binding_size: u32,
+}
+
+#[derive(Copy, Clone)]
+pub struct ShaderOffset {
+    byte_offset: usize,
+    binding_offset: u32,
+}
+
 impl ShaderObjectLayout {
-    pub fn new(device: &Arc<Device>) -> Arc<Self> {
+    pub fn new(
+        variable_layout: &VariableLayout,
+        existential_objects: &[&TypeLayout],
+        in_flight_frames: u32,
+        device: &Arc<Device>,
+    ) -> Arc<Self> {
+        // TODO: This currently does not handle ParameterBlocks!
+        // TODO: We don't need to support all shader stage flags
+
+        let type_layout = variable_layout.type_layout().unwrap();
+
+        let (existential_sizes, existential_offsets) =
+            Self::build_sizes_offsets(type_layout, existential_objects);
+
+        let ordinary_data = if type_layout.size(ParameterCategory::Uniform) > 0 {
+            Some(DescriptorSetLayoutBinding {
+                descriptor_count: 1,
+                stages: ShaderStages::all_graphics(),
+                ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer)
+            })
+        } else {
+            None
+        };
+
+        let bindings =
+            Self::bindings_for_layout(type_layout, type_layout.binding_range_count())
+                .chain(ordinary_data)
+                .chain(existential_objects.iter().zip(existential_sizes).flat_map(
+                    |(layout, size)| Self::bindings_for_layout(layout, size.binding_size as i64),
+                ))
+                .enumerate()
+                .map(|(i, binding)| (i as u32, binding))
+                .collect::<BTreeMap<_, _>>();
+
+        let pool_sizes = (&bindings)
+            .iter()
+            .map(|(_, binding)| (binding.descriptor_type, in_flight_frames))
+            .collect();
+
+        let descriptor_set_layout = DescriptorSetLayout::new(
+            device.clone(),
+            DescriptorSetLayoutCreateInfo {
+                bindings,
+                ..DescriptorSetLayoutCreateInfo::default()
+            },
+        )
+        .unwrap();
+
+        let descriptor_pool = DescriptorPool::new(
+            device.clone(),
+            DescriptorPoolCreateInfo {
+                flags: DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET,
+                max_sets: in_flight_frames,
+                pool_sizes,
+                ..DescriptorPoolCreateInfo::default()
+            },
+        )
+        .unwrap();
+
         let pipeline_layout = PipelineLayout::new(
             device.clone(),
             PipelineLayoutCreateInfo {
-                flags: Default::default(),
-                set_layouts: vec![],
-                push_constant_ranges: vec![],
+                set_layouts: vec![descriptor_set_layout.clone()],
                 ..PipelineLayoutCreateInfo::default()
             },
         )
         .unwrap();
-        Self { pipeline_layout }.into()
+
+        Self {
+            pipeline_layout,
+            descriptor_set_layout,
+            descriptor_pool,
+        }
+        .into()
+    }
+
+    fn map_descriptor_type(binding_type: BindingType) -> DescriptorType {
+        match binding_type {
+            BindingType::Sampler => DescriptorType::Sampler,
+            BindingType::Texture => DescriptorType::SampledImage,
+            BindingType::ConstantBuffer | BindingType::ParameterBlock => {
+                DescriptorType::UniformBuffer
+            }
+            BindingType::CombinedTextureSampler => DescriptorType::CombinedImageSampler,
+            BindingType::InlineUniformData => DescriptorType::InlineUniformBlock,
+            BindingType::RayTracingAccelerationStructure => DescriptorType::AccelerationStructure,
+            BindingType::MutableTeture => DescriptorType::StorageImage,
+            _ => DescriptorType::UniformBuffer, /*BindingType::TypedBuffer => {}
+                                                BindingType::RawBuffer => {}
+                                                BindingType::InputRenderTarget => {}
+                                                BindingType::VaryingInput => {}
+                                                BindingType::VaryingOutput => {}
+                                                BindingType::ExistentialValue => {}
+                                                BindingType::PushConstant => {}
+                                                BindingType::MutableFlag => {}
+                                                BindingType::MutableTypedBuffer => {}
+                                                BindingType::MutableRawBuffer => {}
+                                                BindingType::BaseMask => {}
+                                                BindingType::ExtMask => {}
+                                                BindingType::Unknown => {}*/
+                                                // TODO: Missing: eUniformTexelBuffer, eStorageTexelBuffer, eUniformBuffer, eStorageBuffer, eUniformBufferDynamic, eStorageBufferDynamic, eInputAttachment, eMutableEXT
+        }
+    }
+
+    fn bindings_for_layout(
+        layout: &TypeLayout,
+        size: i64,
+    ) -> impl Iterator<Item = DescriptorSetLayoutBinding> + Clone {
+        (0..size).map(|i| {
+            let descriptor_type = Self::map_descriptor_type(layout.binding_range_type(i));
+            DescriptorSetLayoutBinding {
+                descriptor_count: layout.binding_range_binding_count(i) as u32,
+                stages: ShaderStages::all_graphics(),
+                ..DescriptorSetLayoutBinding::descriptor_type(descriptor_type)
+            }
+        })
+    }
+
+    fn build_sizes_offsets(
+        type_layout: &TypeLayout,
+        existential_layouts: &[&TypeLayout],
+    ) -> (Vec<ShaderSize>, Vec<ShaderOffset>) {
+        let sizes = existential_layouts
+            .iter()
+            .map(|layout| ShaderSize {
+                byte_size: layout.size(ParameterCategory::Uniform),
+                binding_size: layout.binding_range_count() as u32,
+            })
+            .collect::<Vec<_>>();
+
+        let initial = ShaderOffset {
+            byte_offset: type_layout
+                .element_var_layout()
+                .unwrap()
+                .type_layout()
+                .unwrap()
+                .size(ParameterCategory::Uniform),
+            binding_offset: type_layout.binding_range_count() as u32,
+        };
+
+        let offsets = (&sizes)
+            .iter()
+            .scan(initial, |offset, size| {
+                let current = offset.clone();
+                offset.byte_offset += size.byte_size;
+                offset.binding_offset += size.binding_size;
+                Some(current)
+            })
+            .collect::<Vec<_>>();
+
+        (sizes, offsets)
     }
 }
 
@@ -46,7 +205,7 @@ impl ShaderObject {
         render_pass: Arc<RenderPass>,
         layout: Arc<ShaderObjectLayout>,
         vert_spriv: &[u32],
-        frag_spriv: &[u32]
+        frag_spriv: &[u32],
     ) -> Self {
         let pipeline = graphics_pipeline()
             .input_assembly(None, None)
@@ -61,7 +220,11 @@ impl ShaderObject {
                 device.clone(),
                 layout.pipeline_layout.clone(),
                 PipelineSubpassType::BeginRenderPass(render_pass.first_subpass()),
-                [DynamicState::ViewportWithCount, DynamicState::ScissorWithCount].into(),
+                [
+                    DynamicState::ViewportWithCount,
+                    DynamicState::ScissorWithCount,
+                ]
+                .into(),
             );
         Self { layout, pipeline }
     }
