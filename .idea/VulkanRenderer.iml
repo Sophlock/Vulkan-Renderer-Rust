@@ -5,6 +5,8 @@
       <sourceFolder url="file://$MODULE_DIR$/Test/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/VulkanRenderer/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/AssetMacros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/AssetSystem/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/Test/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

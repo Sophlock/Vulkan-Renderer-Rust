@@ -1,7 +1,4 @@
-use crate::{
-    application::assets::asset_traits::{RHITextureInterface, TextureInterface},
-    application::renderer::Renderer
-};
+use crate::application::renderer::Renderer;
 use smallvec::smallvec;
 use std::cmp::max;
 use std::sync::Arc;
@@ -24,11 +21,19 @@ use vulkano::{
     ValidationError,
     VulkanError,
 };
+use AssetSystem::resource_management::Resource;
+use crate::application::assets::asset_traits::{RHITextureInterface, TextureInterface};
 use crate::application::assets::asset_traits::RHIResource;
 
 pub struct VKTexture {
     image: Arc<ImageView>,
     uuid: usize,
+}
+
+impl Resource for VKTexture {
+    fn set_uuid(&mut self, uuid: usize) {
+        self.uuid = uuid;
+    }
 }
 
 impl RHIResource for VKTexture {

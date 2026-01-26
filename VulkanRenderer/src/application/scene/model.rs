@@ -1,8 +1,8 @@
 use super::transform::Transform;
-use crate::application::assets::asset_traits::{MaterialInterface, MeshInterface, ModelInterface};
-use crate::application::assets::material::Material;
-use crate::application::assets::{AssetHandle, mesh::Mesh};
+use crate::application::assets::asset_traits::ModelInterface;
+use crate::application::assets::{material::Material, mesh::Mesh};
 use egui_winit_vulkano::egui::Ui;
+use AssetSystem::assets::AssetHandle;
 
 pub struct Model {
     pub transform: Transform,

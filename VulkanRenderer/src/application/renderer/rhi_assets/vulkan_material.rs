@@ -10,7 +10,7 @@ use std::{ops::Deref, sync::Arc};
 use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
 use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
 use vulkano::memory::allocator::MemoryAllocator;
-use crate::application::resource_management::Resource;
+use AssetSystem::resource_management::Resource;
 
 pub struct VKMaterial {
     shader_object: ShaderObject,
@@ -87,6 +87,12 @@ impl VKMaterial {
             vertex_main.into(),
             fragment_main.into(),
         ])
+    }
+}
+
+impl Resource for VKMaterial {
+    fn set_uuid(&mut self, uuid: usize) {
+        self.uuid = uuid;
     }
 }
 

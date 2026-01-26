@@ -1,7 +1,6 @@
 mod renderer;
 mod scene;
 mod assets;
-mod resource_management;
 
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
@@ -15,9 +14,9 @@ use winit::{
 };
 
 use renderer::Renderer;
-use crate::application::assets::asset_traits::SceneInterface;
+use assets::asset_traits::SceneInterface;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
-use crate::application::resource_management::ResourceManager;
+use AssetSystem::resource_management::ResourceManager;
 use crate::application::scene::Scene;
 
 pub struct Application {

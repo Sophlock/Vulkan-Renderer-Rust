@@ -1,8 +1,9 @@
-use std::path::Path;
 use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
-use crate::application::resource_management::Resource;
-use super::{Asset, AssetMetadata};
+use std::path::Path;
+use AssetSystem::assets::AssetMetadata;
+use AssetSystem::Asset;
 
+#[derive(Asset)]
 pub struct Mesh {
     asset_metadata: AssetMetadata,
 
@@ -39,18 +40,6 @@ impl Mesh {
             indices,
             asset_metadata
         }
-    }
-}
-
-impl Resource for Mesh {
-    fn set_uuid(&mut self, uuid: usize) {
-        self.asset_metadata.uuid = uuid;
-    }
-}
-
-impl Asset for Mesh {
-    fn asset_metadata(&self) -> &AssetMetadata {
-        &self.asset_metadata
     }
 }
 

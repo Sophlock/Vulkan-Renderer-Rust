@@ -1,8 +1,8 @@
-use crate::application::resource_management::{Resource, ResourceManager};
+use AssetSystem::resource_management::{Resource, ResourceManager};
 use glam::{Mat4, Vec2, Vec3};
 use vulkano::buffer::BufferContents;
 use vulkano::pipeline::graphics::vertex_input;
-use crate::application::assets::{Asset, AssetHandle};
+use AssetSystem::assets::{Asset, AssetHandle};
 use crate::application::renderer::rhi_assets::RHIResourceManager;
 use crate::application::scene::transform::Transform;
 
@@ -39,12 +39,6 @@ pub trait RHIInterface {
 pub trait RHIResource: Resource {
     fn uuid_mut(&mut self) -> &mut usize;
 
-    fn set_uuid(&mut self, uuid: usize) {
-        *self.uuid_mut() = uuid;
-    }
-}
-
-impl<T: RHIResource> Resource for T {
     fn set_uuid(&mut self, uuid: usize) {
         *self.uuid_mut() = uuid;
     }

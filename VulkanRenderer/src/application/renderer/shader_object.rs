@@ -1,41 +1,35 @@
 use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
 use crate::application::renderer::shader_cursor::{ShaderOffset, ShaderSize};
-use crate::{
-    application::assets::asset_traits::Vertex, application::renderer::pipeline::graphics_pipeline,
-};
+use crate::application::renderer::pipeline::graphics_pipeline;
 use shader_slang::reflection::{TypeLayout, VariableLayout};
 use shader_slang::{BindingType, ParameterCategory};
-use smallvec::{SmallVec, smallvec};
 use std::collections::BTreeMap;
-use std::ops::DerefMut;
 use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::descriptor_set::allocator::{
-    DescriptorSetAllocator, StandardDescriptorSetAllocator,
-    StandardDescriptorSetAllocatorCreateInfo,
-};
+use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
 use vulkano::descriptor_set::layout::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
 };
 use vulkano::descriptor_set::pool::{
-    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorSetAllocateInfo,
+    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
 };
 use vulkano::descriptor_set::{DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet};
 use vulkano::image::ImageLayout;
 use vulkano::memory::allocator::{
-    AllocationCreateInfo, DeviceLayout, MemoryAllocator, MemoryTypeFilter,
+    AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter,
 };
 use vulkano::shader::ShaderStages;
 use vulkano::sync::Sharing;
 use vulkano::{
-    DeviceSize, descriptor_set,
     device::Device,
     pipeline::{
-        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
-        layout::PipelineLayoutCreateInfo,
+        graphics::subpass::PipelineSubpassType, layout::PipelineLayoutCreateInfo, DynamicState, GraphicsPipeline,
+        PipelineLayout,
     },
     render_pass::RenderPass,
+    DeviceSize,
 };
+use crate::application::assets::asset_traits::Vertex;
 
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,

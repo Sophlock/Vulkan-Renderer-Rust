@@ -15,7 +15,7 @@ mod swapchain;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::application::assets::asset_traits::RHIInterface;
+use super::assets::asset_traits::RHIInterface;
 use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
@@ -60,7 +60,7 @@ use vulkano::{
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
 use crate::application::renderer::rhi_assets::RHIResourceManager;
-use crate::application::resource_management::ResourceManager;
+use AssetSystem::resource_management::ResourceManager;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,

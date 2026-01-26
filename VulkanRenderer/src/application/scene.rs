@@ -1,6 +1,6 @@
 use egui_winit_vulkano::egui::Ui;
 use model::Model;
-use crate::application::assets::asset_traits::SceneInterface;
+use super::assets::asset_traits::SceneInterface;
 use crate::application::scene::camera::Camera;
 
 mod model;

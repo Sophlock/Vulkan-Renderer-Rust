@@ -1,16 +1,23 @@
-use std::cell::{Ref, RefCell};
-use crate::application::assets::AssetHandle;
-use crate::application::assets::asset_traits::{MaterialInterface, MeshInterface, RHIMaterialInterface, RHIMeshInterface, RHIResource, RHITextureInterface, TextureInterface};
-use crate::application::renderer::Renderer;
-use crate::application::renderer::rhi_assets::vulkan_material::VKMaterial;
-use crate::application::renderer::rhi_assets::vulkan_mesh::VKMesh;
-use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
-use crate::application::resource_management::ResourceManager;
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::rc::{Rc, Weak};
-use std::sync::Arc;
+use crate::application::{
+    assets::asset_traits::{
+        MaterialInterface, MeshInterface, RHIMaterialInterface, RHIMeshInterface, RHIResource,
+        RHITextureInterface, TextureInterface,
+    },
+    renderer::{
+        rhi_assets::{vulkan_material::VKMaterial, vulkan_mesh::VKMesh, vulkan_texture::VKTexture},
+        Renderer,
+    },
+};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    marker::PhantomData,
+    ops::Deref,
+    rc::{Rc, Weak},
+    sync::Arc
+};
+use AssetSystem::assets::AssetHandle;
+use AssetSystem::resource_management::ResourceManager;
 
 pub mod vulkan_camera;
 pub mod vulkan_material;
@@ -23,7 +30,7 @@ pub struct RHIResourceManager {
     resources: ResourceManager,
     asset_to_rhi: HashMap<usize, usize>,
     asset_manager: Arc<ResourceManager>,
-    rhi: Option<Weak<RefCell<Renderer>>>
+    rhi: Option<Weak<RefCell<Renderer>>>,
 }
 
 pub struct RHIHandle<T: RHIResource + 'static> {
@@ -37,11 +44,11 @@ impl RHIResourceManager {
             resources: ResourceManager::new(),
             asset_to_rhi: HashMap::new(),
             asset_manager,
-            rhi: None
+            rhi: None,
         }
     }
 
-    pub fn register_rhi(&mut self,  rhi: &Rc<RefCell<Renderer>>) {
+    pub fn register_rhi(&mut self, rhi: &Rc<RefCell<Renderer>>) {
         self.rhi = Some(Rc::downgrade(rhi));
     }
 

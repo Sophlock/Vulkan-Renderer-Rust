@@ -1,19 +1,16 @@
-use crate::application::{
-    assets::asset_traits::{Vertex, Index, MeshInterface},
-    renderer::{buffer::buffer_from_slice, command_buffer::CommandBufferInterface},
-};
+use crate::application::renderer::{buffer::buffer_from_slice, command_buffer::CommandBufferInterface};
 use std::sync::Arc;
 use vulkano::device::Queue;
 use vulkano::{
-    buffer::{BufferUsage, Subbuffer},
-    device::Device,
+    buffer::{BufferUsage, Subbuffer}
+    ,
     memory::allocator::MemoryTypeFilter,
 };
 use vulkano::memory::allocator::MemoryAllocator;
+use AssetSystem::resource_management::Resource;
+use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface, RHIResource};
 use crate::application::renderer::Renderer;
-use crate::application::resource_management::Resource;
-
 pub struct VKMesh {
     vertex_buffer: Subbuffer<[Vertex]>,
     index_buffer: Subbuffer<[Index]>,
@@ -51,6 +48,12 @@ impl VKMesh {
             index_buffer,
             uuid: 0,
         }
+    }
+}
+
+impl Resource for VKMesh {
+    fn set_uuid(&mut self, uuid: usize) {
+        self.uuid = uuid;
     }
 }
 

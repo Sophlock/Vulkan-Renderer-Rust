@@ -16,6 +16,8 @@ extend = "1.2.0"
 image = "0.25.9"
 gltf = "1.4.1"
 
+AssetSystem = {path = "../AssetSystem"}
+
 [features]
 default = ["winit/rwh_06", "glam/bytemuck"]
 validation_layers = []
