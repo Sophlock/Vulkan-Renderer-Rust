@@ -83,9 +83,12 @@ pub trait ModelInterface: Sized {
         RHIType::create(self, rhi)
     }
 
+    type MeshType: MeshInterface + 'static;
+    type MaterialType: MaterialInterface + 'static;
+
     fn transform(&self) -> Transform;
-    fn mesh(&self) -> AssetHandle<impl MeshInterface>;
-    fn material(&self) -> AssetHandle<impl MaterialInterface>;
+    fn mesh(&self) -> AssetHandle<Self::MeshType>;
+    fn material(&self) -> AssetHandle<Self::MaterialType>;
 }
 
 pub trait RHIModelInterface {

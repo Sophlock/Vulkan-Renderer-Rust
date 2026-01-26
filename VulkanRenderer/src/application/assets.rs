@@ -34,8 +34,8 @@ impl AssetMetadata {
 }
 
 pub struct AssetHandle<T: Asset> {
-    uuid: usize,
-    _phantom: PhantomData<T>,
+    pub uuid: usize,
+    pub _phantom: PhantomData<T>,
 }
 
 impl<T: Asset + 'static> AssetHandle<T> {
@@ -48,7 +48,7 @@ impl<T: Asset> Clone for AssetHandle<T> {
     fn clone(&self) -> Self {
         Self {
             uuid: self.uuid,
-            _phantom: Default::default(),
+            _phantom: PhantomData,
         }
     }
 }
