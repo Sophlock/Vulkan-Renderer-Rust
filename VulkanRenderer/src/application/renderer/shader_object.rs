@@ -9,7 +9,7 @@ use smallvec::{SmallVec, smallvec};
 use std::collections::BTreeMap;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::descriptor_set::allocator::{
     DescriptorSetAllocator, StandardDescriptorSetAllocator,
     StandardDescriptorSetAllocatorCreateInfo,
@@ -356,7 +356,13 @@ impl ShaderObject {
         self.layout.existential_offsets[existential]
     }
 
-    pub fn write_texture(&mut self, offset: ShaderOffset, texture: &VKTexture) {
+    pub fn write_data<T: BufferContents + Clone>(&self, offset: ShaderOffset, data: &T) {
+        let mut content = self.uniform_buffer.as_ref().unwrap().write().unwrap();
+        let pos = (&mut content[offset.byte_offset] as *mut u8).cast::<T>();
+        unsafe {*pos = data.clone()};
+    }
+
+    pub fn write_texture(&self, offset: ShaderOffset, texture: &VKTexture) {
         let write = WriteDescriptorSet::image_view_with_layout(
             offset.binding_offset,
             DescriptorImageViewInfo {
@@ -367,13 +373,13 @@ impl ShaderObject {
         self.perform_descriptor_write([write].iter().cloned());
     }
 
-    fn perform_descriptor_write<T>(&mut self, writes: T)
+    fn perform_descriptor_write<T>(&self, writes: T)
     where
         T: Iterator<Item = WriteDescriptorSet>,
         T: Clone,
     {
         self.descriptor_sets
-            .iter_mut()
+            .iter()
             .for_each(|set| unsafe { set.update_by_ref(writes.clone(), []) }.unwrap());
     }
 }

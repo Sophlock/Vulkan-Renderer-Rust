@@ -1,6 +1,8 @@
 use crate::application::renderer::shader_object::ShaderObject;
 use shader_slang::reflection::TypeLayout;
 use shader_slang::{ParameterCategory, TypeKind};
+use vulkano::buffer::BufferContents;
+use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
 
 pub struct ShaderCursor<'a> {
     shader_object: &'a ShaderObject,
@@ -21,7 +23,7 @@ pub struct ShaderOffset {
 }
 
 impl<'a> ShaderCursor<'a> {
-    pub fn new(source: &'a ShaderObject) -> Self {
+    pub fn new(source: &'a mut ShaderObject) -> Self {
         Self {
             shader_object: source,
             offset: ShaderOffset::default(),
@@ -78,6 +80,14 @@ impl<'a> ShaderCursor<'a> {
 
     pub fn offset(&self) -> ShaderOffset {
         self.offset
+    }
+
+    pub fn write<T: BufferContents + Clone>(&mut self, data: &T) {
+        self.shader_object.write_data(self.offset, data);
+    }
+
+    pub fn write_texture(&mut self, texture: &VKTexture) {
+        self.shader_object.write_texture(self.offset, texture);
     }
 }
 
