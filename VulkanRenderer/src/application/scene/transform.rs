@@ -2,6 +2,7 @@ use egui_winit_vulkano::egui;
 use egui_winit_vulkano::egui::Ui;
 use glam::{Mat4, Quat, Vec3};
 
+#[derive(Clone, Copy)]
 pub struct Transform {
     pub location: Vec3,
     pub rotation: Quat,

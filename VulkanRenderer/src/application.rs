@@ -3,6 +3,10 @@ mod scene;
 mod assets;
 mod resource_management;
 
+use std::cell::RefCell;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -13,10 +17,12 @@ use winit::{
 use renderer::Renderer;
 use crate::application::assets::asset_traits::SceneInterface;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
+use crate::application::resource_management::ResourceManager;
 use crate::application::scene::Scene;
 
 pub struct Application {
-    renderer: Option<Renderer>,
+    renderer: Option<Rc<RefCell<Renderer>>>,
+    asset_manager: Option<Arc<ResourceManager>>,
     scene: Option<VKScene>
 }
 
@@ -24,7 +30,8 @@ impl Application {
     pub fn new() -> Self {
         Self {
             renderer: None,
-            scene: None
+            scene: None,
+            asset_manager: None
         }
     }
 
@@ -36,8 +43,9 @@ impl Application {
 
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.renderer = Some(Renderer::new(event_loop));
-        self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap()));
+        self.asset_manager = Some(Arc::new(ResourceManager::new()));
+        self.renderer = Some(Renderer::new(event_loop, self.asset_manager.as_ref().unwrap().clone()));
+        self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap().borrow_mut().deref_mut()));
     }
 
     fn window_event(
@@ -46,11 +54,11 @@ impl ApplicationHandler for Application {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        self.renderer.as_mut().unwrap().gui().update(&event);
+        self.renderer.as_mut().unwrap().borrow_mut().gui().update(&event);
         match event {
             WindowEvent::ActivationTokenDone { .. } => {}
             WindowEvent::Resized(_) => {
-                self.renderer.as_mut().unwrap().recreate_swapchain()
+                self.renderer.as_mut().unwrap().borrow_mut().recreate_swapchain()
             }
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -78,7 +86,7 @@ impl ApplicationHandler for Application {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.renderer.as_mut().unwrap().redraw(self.scene.as_ref().unwrap());
+                self.renderer.as_mut().unwrap().borrow_mut().redraw(self.scene.as_ref().unwrap());
             }
         }
     }

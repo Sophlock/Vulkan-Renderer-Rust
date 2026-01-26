@@ -11,7 +11,7 @@ pub struct VKScene {
 impl RHISceneInterface for VKScene {
     type RHI = Renderer;
 
-    fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI) -> Self {
+    fn create<T: SceneInterface>(source: &T, rhi: &mut Self::RHI) -> Self {
         let models = source
             .models()
             .iter()

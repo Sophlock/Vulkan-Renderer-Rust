@@ -13,6 +13,8 @@ mod shader_object;
 mod shaders;
 mod swapchain;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use crate::application::assets::asset_traits::RHIInterface;
 use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
@@ -26,6 +28,7 @@ use render_pass::RenderPassBuilder;
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use smallvec::smallvec;
 use std::sync::Arc;
+use shader_slang::TypeKind::Resource;
 use swapchain::Swapchain;
 use vulkano::descriptor_set::allocator::{
     DescriptorSetAllocator, StandardDescriptorSetAllocator,
@@ -56,6 +59,8 @@ use vulkano::{
     sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
+use crate::application::renderer::rhi_assets::RHIResourceManager;
+use crate::application::resource_management::ResourceManager;
 
 pub struct Renderer {
     should_recreate_swapchain: bool,
@@ -77,10 +82,11 @@ pub struct Renderer {
     slang_compiler: SlangCompiler,
     buffer_allocator: Arc<dyn MemoryAllocator>,
     descriptor_allocator: Arc<dyn DescriptorSetAllocator>,
+    resource_manager: RHIResourceManager
 }
 
 impl Renderer {
-    pub fn new(event_loop: &ActiveEventLoop) -> Self {
+    pub fn new(event_loop: &ActiveEventLoop, asset_manager: Arc<ResourceManager>) -> Rc<RefCell<Self>> {
         let window = Self::create_window(event_loop);
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
         let surface = Self::create_surface(&instance, &window);
@@ -126,7 +132,8 @@ impl Renderer {
                 ..StandardDescriptorSetAllocatorCreateInfo::default()
             },
         ));
-        Self {
+        let resource_manager = RHIResourceManager::new(asset_manager);
+        let mut result = Rc::new(RefCell::new(Self {
             should_recreate_swapchain: false,
             frames_in_flight,
             window,
@@ -146,7 +153,10 @@ impl Renderer {
             slang_compiler,
             buffer_allocator,
             descriptor_allocator,
-        }
+            resource_manager
+        }));
+        result.borrow_mut().resource_manager.register_rhi(&result);
+        result
     }
 
     pub fn redraw(&mut self, scene: &VKScene) {
@@ -420,4 +430,12 @@ impl RHIInterface for Renderer {
     type CameraType = VKCamera;
     type ModelType = VKModel;
     type SceneType = VKScene;
+
+    fn resource_manager(&self) -> &RHIResourceManager {
+        &self.resource_manager
+    }
+
+    fn resource_manager_mut(&mut self) -> &mut RHIResourceManager {
+        &mut self.resource_manager
+    }
 }

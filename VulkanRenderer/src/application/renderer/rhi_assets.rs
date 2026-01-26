@@ -1,13 +1,15 @@
-use crate::application::assets::asset_traits::{
-    MeshInterface, RHIMeshInterface, RHIResource, RHITextureInterface, TextureInterface,
-};
+use std::cell::{Ref, RefCell};
+use crate::application::assets::AssetHandle;
+use crate::application::assets::asset_traits::{MaterialInterface, MeshInterface, RHIMaterialInterface, RHIMeshInterface, RHIResource, RHITextureInterface, TextureInterface};
 use crate::application::renderer::Renderer;
+use crate::application::renderer::rhi_assets::vulkan_material::VKMaterial;
 use crate::application::renderer::rhi_assets::vulkan_mesh::VKMesh;
 use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
 use crate::application::resource_management::ResourceManager;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::ops::Deref;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 pub mod vulkan_camera;
@@ -17,42 +19,74 @@ pub mod vulkan_model;
 pub mod vulkan_scene;
 pub mod vulkan_texture;
 
-struct RHIResourceManager {
+pub struct RHIResourceManager {
     resources: ResourceManager,
     asset_to_rhi: HashMap<usize, usize>,
+    asset_manager: Arc<ResourceManager>,
+    rhi: Option<Weak<RefCell<Renderer>>>
 }
 
-struct RHIHandle<T: RHIResource + 'static> {
+pub struct RHIHandle<T: RHIResource + 'static> {
     uuid: usize,
     phantom: PhantomData<T>,
 }
 
 impl RHIResourceManager {
-    fn new() -> Self {
+    pub fn new(asset_manager: Arc<ResourceManager>) -> Self {
         Self {
             resources: ResourceManager::new(),
             asset_to_rhi: HashMap::new(),
+            asset_manager,
+            rhi: None
         }
     }
 
-    fn create_texture<T: TextureInterface>(
+    pub fn register_rhi(&mut self,  rhi: &Rc<RefCell<Renderer>>) {
+        self.rhi = Some(Rc::downgrade(rhi));
+    }
+
+    pub fn create_texture<T: TextureInterface + 'static>(
         &mut self,
-        source: &T,
-        rhi: &Renderer,
+        source: AssetHandle<T>,
     ) -> RHIHandle<VKTexture> {
-        let asset_id = source.asset_metadata().uuid();
-        let tex = VKTexture::create(source, rhi);
+        let source_data = source.get(self.asset_manager()).unwrap();
+        let asset_id = source_data.asset_metadata().uuid();
+        let tex = VKTexture::create(source_data, self.rhi().as_ref().borrow().deref());
         let id = self.resources.add(tex);
         self.asset_to_rhi.insert(asset_id, id);
         RHIHandle::<VKTexture>::new(id)
     }
 
-    fn create_mesh<T: MeshInterface>(&mut self, source: &T, rhi: &Renderer) -> RHIHandle<VKMesh> {
-        let asset_id = source.asset_metadata().uuid();
-        let mesh = VKMesh::create(source, rhi);
+    pub fn create_mesh<T: MeshInterface + 'static>(
+        &mut self,
+        source: AssetHandle<T>,
+    ) -> RHIHandle<VKMesh> {
+        let source_data = source.get(self.asset_manager()).unwrap();
+        let asset_id = source_data.asset_metadata().uuid();
+        let mesh = VKMesh::create(source_data, self.rhi().as_ref().borrow().deref());
         let id = self.resources.add(mesh);
         self.asset_to_rhi.insert(asset_id, id);
         RHIHandle::<VKMesh>::new(id)
+    }
+
+    pub fn create_material<T: MaterialInterface + 'static>(
+        &mut self,
+        source: AssetHandle<T>,
+    ) -> RHIHandle<VKMaterial> {
+        let source_data = source.get(self.asset_manager()).unwrap();
+        let asset_id = source_data.asset_metadata().uuid();
+        let mesh = VKMaterial::create(source_data, self.rhi().as_ref().borrow().deref());
+        let id = self.resources.add(mesh);
+        self.asset_to_rhi.insert(asset_id, id);
+        RHIHandle::<VKMaterial>::new(id)
+    }
+
+    fn rhi(&self) -> Rc<RefCell<Renderer>> {
+        self.rhi.as_ref().unwrap().upgrade().unwrap()
+    }
+
+    fn asset_manager(&self) -> &ResourceManager {
+        self.asset_manager.as_ref()
     }
 }
 

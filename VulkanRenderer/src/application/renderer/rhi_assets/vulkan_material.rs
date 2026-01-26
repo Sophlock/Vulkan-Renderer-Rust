@@ -1,4 +1,4 @@
-use crate::application::assets::asset_traits::{MaterialInterface, RHIMaterialInterface};
+use crate::application::assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource};
 use crate::application::renderer::Renderer;
 use crate::{
     application::renderer::shader_object::{ShaderObject, ShaderObjectLayout},
@@ -10,14 +10,16 @@ use std::{ops::Deref, sync::Arc};
 use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
 use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
 use vulkano::memory::allocator::MemoryAllocator;
+use crate::application::resource_management::Resource;
 
-struct VulkanMaterial {
+pub struct VKMaterial {
     shader_object: ShaderObject,
     vert_spirv: Blob,
     frag_spirv: Blob,
+    uuid: usize
 }
 
-impl VulkanMaterial {
+impl VKMaterial {
     pub fn new(
         compiler: &SlangCompiler,
         device: &Arc<Device>,
@@ -64,6 +66,7 @@ impl VulkanMaterial {
             shader_object,
             vert_spirv,
             frag_spirv,
+            uuid: 0
         })
     }
 
@@ -87,11 +90,17 @@ impl VulkanMaterial {
     }
 }
 
-impl RHIMaterialInterface for VulkanMaterial {
+impl RHIResource for VKMaterial {
+    fn uuid_mut(&mut self) -> &mut usize {
+        &mut self.uuid
+    }
+}
+
+impl RHIMaterialInterface for VKMaterial {
     type RHI = Renderer;
 
     fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self {
-        VulkanMaterial::new(
+        VKMaterial::new(
             &rhi.slang_compiler,
             &rhi.device,
             rhi.render_pass.clone(),

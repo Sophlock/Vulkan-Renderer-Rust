@@ -4,7 +4,7 @@ use crate::application::assets::asset_traits::SceneInterface;
 use crate::application::scene::camera::Camera;
 
 mod model;
-mod transform;
+pub(crate) mod transform;
 mod camera;
 
 pub struct Scene {

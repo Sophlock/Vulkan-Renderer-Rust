@@ -1,11 +1,14 @@
+use std::marker::PhantomData;
+use crate::application::resource_management::{Resource, ResourceManager};
+
 pub mod mesh;
 pub mod texture;
 pub mod asset_traits;
+pub mod material;
 
-use std::sync::Arc;
-
-pub trait Asset : Sized {
+pub trait Asset : Resource + Sized {
     fn asset_metadata(&self) -> &AssetMetadata;
+
     fn uuid(&self) -> usize {
         self.asset_metadata().uuid
     }
@@ -30,4 +33,22 @@ impl AssetMetadata {
     }
 }
 
-pub type AssetHandle<T: Asset> = Arc<T>;
+pub struct AssetHandle<T: Asset> {
+    uuid: usize,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: Asset + 'static> AssetHandle<T> {
+    pub fn get<'a>(&self, manager: &'a ResourceManager) -> Option<&'a T> {
+        manager.get(self.uuid)
+    }
+}
+
+impl<T: Asset> Clone for AssetHandle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            uuid: self.uuid,
+            _phantom: Default::default(),
+        }
+    }
+}
