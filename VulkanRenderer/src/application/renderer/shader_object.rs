@@ -364,12 +364,16 @@ impl ShaderObject {
                 image_layout: ImageLayout::ShaderReadOnlyOptimal, // TODO: Is this always correct?
             },
         );
-        self.perform_descriptor_write(smallvec![write]);
+        self.perform_descriptor_write([write].iter().cloned());
     }
 
-    fn perform_descriptor_write<'a>(&mut self, writes: SmallVec<[WriteDescriptorSet; 2]>) {
+    fn perform_descriptor_write<T>(&mut self, writes: T)
+    where
+        T: Iterator<Item = WriteDescriptorSet>,
+        T: Clone,
+    {
         self.descriptor_sets
             .iter_mut()
-            .for_each(|set| unsafe { set.update_by_ref((&writes).iter().cloned(), []) }.unwrap());
+            .for_each(|set| unsafe { set.update_by_ref(writes.clone(), []) }.unwrap());
     }
 }
