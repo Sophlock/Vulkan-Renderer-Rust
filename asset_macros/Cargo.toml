@@ -1,5 +1,5 @@
 [package]
-name = "AssetMacros"
+name = "asset-macros"
 version = "0.1.0"
 edition = "2024"
 

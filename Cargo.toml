@@ -1,3 +1,3 @@
 [workspace]
 resolver = "3"
-members = [ "AssetMacros", "AssetSystem","VulkanRenderer"]
+members = ["asset_macros", "AssetSystem","VulkanRenderer"]

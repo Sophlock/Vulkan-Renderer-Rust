@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-AssetMacros = {path = "../AssetMacros"}
+asset-macros = {path = "../asset_macros" }
