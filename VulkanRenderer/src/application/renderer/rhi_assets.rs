@@ -18,8 +18,8 @@ use std::{
     rc::{Rc, Weak},
     sync::Arc
 };
-use AssetSystem::assets::AssetHandle;
-use AssetSystem::resource_management::ResourceManager;
+use asset_system::assets::AssetHandle;
+use asset_system::resource_management::ResourceManager;
 use crate::application::assets::asset_traits::ModelInterface;
 use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;

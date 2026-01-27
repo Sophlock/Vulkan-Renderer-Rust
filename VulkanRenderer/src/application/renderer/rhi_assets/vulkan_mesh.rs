@@ -7,7 +7,7 @@ use vulkano::{
     memory::allocator::MemoryTypeFilter,
 };
 use vulkano::memory::allocator::MemoryAllocator;
-use AssetSystem::resource_management::Resource;
+use asset_system::resource_management::Resource;
 use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface, RHIResource};
 use crate::application::renderer::Renderer;

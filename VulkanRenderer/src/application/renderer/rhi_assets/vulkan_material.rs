@@ -7,7 +7,7 @@ use crate::{
     application::renderer::shader_object::{ShaderObject, ShaderObjectLayout},
     application::renderer::shaders::SlangCompiler,
 };
-use AssetSystem::resource_management::Resource;
+use asset_system::resource_management::Resource;
 use shader_slang::structs::specialization_arg::SpecializationArg;
 use shader_slang::{Blob, ComponentType, Error, IUnknown, LayoutRules};
 use std::{ops::Deref, sync::Arc};

@@ -21,7 +21,7 @@ use vulkano::{
     ValidationError,
     VulkanError,
 };
-use AssetSystem::resource_management::Resource;
+use asset_system::resource_management::Resource;
 use crate::application::assets::asset_traits::{RHITextureInterface, TextureInterface};
 use crate::application::assets::asset_traits::RHIResource;
 

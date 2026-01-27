@@ -3,7 +3,7 @@ use crate::application::renderer::rhi_assets::vulkan_mesh::VKMesh;
 use crate::application::renderer::rhi_assets::RHIHandle;
 use crate::application::renderer::Renderer;
 use glam::Mat4;
-use AssetSystem::resource_management::Resource;
+use asset_system::resource_management::Resource;
 use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
 
 pub struct VKModel {

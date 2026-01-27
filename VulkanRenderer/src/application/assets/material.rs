@@ -1,5 +1,5 @@
-use AssetSystem::Asset;
-use AssetSystem::assets::{Asset, AssetMetadata};
+use asset_system::Asset;
+use asset_system::assets::{Asset, AssetMetadata};
 use crate::application::assets::asset_traits::MaterialInterface;
 
 #[derive(Asset)]

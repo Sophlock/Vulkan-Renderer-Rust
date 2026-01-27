@@ -1,9 +1,9 @@
 use std::cell::{Ref, RefMut};
-use AssetSystem::resource_management::{Resource, ResourceManager};
+use asset_system::resource_management::{Resource, ResourceManager};
 use glam::{Mat4, Vec2, Vec3};
 use vulkano::buffer::BufferContents;
 use vulkano::pipeline::graphics::vertex_input;
-use AssetSystem::assets::{Asset, AssetHandle};
+use asset_system::assets::{Asset, AssetHandle};
 use crate::application::renderer::rhi_assets::{RHIHandle, RHIResourceManager};
 use crate::application::scene::transform::Transform;
 

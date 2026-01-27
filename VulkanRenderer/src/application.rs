@@ -16,7 +16,7 @@ use winit::{
 use renderer::Renderer;
 use assets::asset_traits::SceneInterface;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
-use AssetSystem::resource_management::ResourceManager;
+use asset_system::resource_management::ResourceManager;
 use crate::application::scene::Scene;
 
 pub struct Application {

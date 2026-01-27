@@ -1,5 +1,5 @@
-use AssetSystem::Asset;
-use AssetSystem::assets::{AssetHandle, AssetMetadata};
+use asset_system::Asset;
+use asset_system::assets::{AssetHandle, AssetMetadata};
 use crate::application::assets::asset_traits::MaterialInstanceInterface;
 use crate::application::assets::material::Material;
 

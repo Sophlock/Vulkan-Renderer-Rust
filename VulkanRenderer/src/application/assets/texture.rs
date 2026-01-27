@@ -1,8 +1,8 @@
 use crate::application::assets::asset_traits::TextureInterface;
 use image::{DynamicImage, GenericImageView, ImageError, ImageReader};
 use std::path::Path;
-use AssetSystem::assets::{Asset, AssetMetadata};
-use AssetSystem::resource_management::Resource;
+use asset_system::assets::{Asset, AssetMetadata};
+use asset_system::resource_management::Resource;
 
 pub struct Texture {
     image: DynamicImage,

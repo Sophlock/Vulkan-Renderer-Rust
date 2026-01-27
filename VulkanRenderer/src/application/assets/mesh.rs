@@ -1,7 +1,7 @@
 use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 use std::path::Path;
-use AssetSystem::assets::AssetMetadata;
-use AssetSystem::Asset;
+use asset_system::assets::AssetMetadata;
+use asset_system::Asset;
 
 #[derive(Asset)]
 pub struct Mesh {

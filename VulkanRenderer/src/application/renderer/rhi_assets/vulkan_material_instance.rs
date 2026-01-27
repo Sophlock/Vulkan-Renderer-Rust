@@ -6,7 +6,7 @@ use std::sync::Arc;
 use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::memory::allocator::MemoryAllocator;
-use AssetSystem::resource_management::Resource;
+use asset_system::resource_management::Resource;
 use crate::application::assets::asset_traits::{MaterialInstanceInterface, RHIInterface, RHIMaterialInstanceInterface, RHIResource};
 use crate::application::renderer::Renderer;
 use crate::application::renderer::shader_cursor::ShaderCursor;

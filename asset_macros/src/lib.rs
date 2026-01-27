@@ -15,13 +15,13 @@ pub fn derive_asset(input: TokenStream) -> TokenStream {
     }*/
 
     quote! {
-        impl AssetSystem::assets::Asset for #name {
+        impl asset_system::assets::Asset for #name {
             fn asset_metadata(&self) -> &AssetMetadata {
                 &self.asset_metadata
             }
         }
 
-        impl AssetSystem::resource_management::Resource for #name {
+        impl asset_system::resource_management::Resource for #name {
             fn set_uuid(&mut self, uuid: usize) {
                 self.asset_metadata.uuid = uuid;
             }

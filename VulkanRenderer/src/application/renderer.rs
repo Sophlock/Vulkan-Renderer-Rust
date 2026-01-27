@@ -21,7 +21,7 @@ use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMateri
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
 use crate::application::renderer::shaders::SlangCompiler;
-use AssetSystem::resource_management::ResourceManager;
+use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};
 use physical_device::find_depth_format;
