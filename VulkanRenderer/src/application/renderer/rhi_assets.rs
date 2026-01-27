@@ -1,10 +1,11 @@
+use std::ops::Deref;
 use std::{
     collections::HashMap,
     marker::PhantomData,
     rc::{Rc, Weak},
     sync::Arc,
 };
-
+use std::cell::{Ref, RefCell};
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 
 use crate::application::{
@@ -33,7 +34,7 @@ pub mod vulkan_texture;
 pub struct RHIResourceManager {
     resources: ResourceManager,
     asset_to_rhi: HashMap<usize, usize>,
-    asset_manager: Arc<ResourceManager>,
+    asset_manager: Arc<RefCell<ResourceManager>>,
     rhi: Option<Weak<Renderer>>,
 }
 
@@ -48,10 +49,12 @@ macro_rules! implement_rhi_resource {
             &mut self,
             source: AssetHandle<T>,
         ) -> RHIHandle<$rhi_type> {
-            let source_data = source.get(self.asset_manager()).unwrap();
+            let asset_manager = self.asset_manager();
+            let source_data = source.get(asset_manager.deref()).unwrap();
             let asset_id = source_data.asset_metadata().uuid();
-            let tex = $rhi_type::create(source_data, self.rhi().as_ref());
-            let id = self.resources.add(tex);
+            let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref());
+            drop(asset_manager);
+            let id = self.resources.add(new_rhi);
             self.asset_to_rhi.insert(asset_id, id);
             RHIHandle::<$rhi_type>::new(id)
         }
@@ -59,7 +62,7 @@ macro_rules! implement_rhi_resource {
 }
 
 impl RHIResourceManager {
-    pub fn new(asset_manager: Arc<ResourceManager>) -> Self {
+    pub fn new(asset_manager: Arc<RefCell<ResourceManager>>) -> Self {
         Self {
             resources: ResourceManager::new(),
             asset_to_rhi: HashMap::new(),
@@ -86,8 +89,8 @@ impl RHIResourceManager {
         self.rhi.as_ref().unwrap().upgrade().unwrap()
     }
 
-    fn asset_manager(&self) -> &ResourceManager {
-        self.asset_manager.as_ref()
+    fn asset_manager(&self) -> Ref<ResourceManager> {
+        self.asset_manager.borrow()
     }
 }
 

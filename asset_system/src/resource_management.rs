@@ -51,8 +51,7 @@ impl TypedMultiMap {
     fn get_add_vec<T: 'static>(&mut self) -> &mut Vec<T> {
         if self.get_vec::<T>().is_none() {
             self.map
-                .insert(Self::type_id::<T>(), Box::new(Vec::<T>::new()))
-                .unwrap();
+                .insert(Self::type_id::<T>(), Box::new(Vec::<T>::new()));
         }
 
         self.get_vec_mut::<T>().unwrap()

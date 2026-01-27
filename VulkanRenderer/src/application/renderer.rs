@@ -98,7 +98,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(event_loop: &ActiveEventLoop, asset_manager: Arc<ResourceManager>) -> Rc<Self> {
+    pub fn new(event_loop: &ActiveEventLoop, asset_manager: Arc<RefCell<ResourceManager>>) -> Rc<Self> {
         let window = Self::create_window(event_loop);
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
         let surface = Self::create_surface(&instance, &window);
@@ -135,7 +135,7 @@ impl Renderer {
             swapchain.format,
             GuiConfig::default(),
         ));
-        let slang_compiler = SlangCompiler::new("resources/assets/materials/shaders".as_ref()); // TODO
+        let slang_compiler = SlangCompiler::new("resources/assets/materials/shaders".as_ref());
         let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         let descriptor_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             device.clone(),

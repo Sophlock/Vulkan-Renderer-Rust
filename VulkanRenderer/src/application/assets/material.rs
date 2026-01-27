@@ -9,6 +9,16 @@ pub struct Material {
     asset_metadata: AssetMetadata,
 }
 
+impl Material {
+    pub fn new(name: String, module_name: String, material_name: String) -> Self {
+        Self {
+            module_name,
+            material_name,
+            asset_metadata: AssetMetadata::new(name),
+        }
+    }
+}
+
 impl MaterialInterface for Material {
     fn module(&self) -> &str {
         self.module_name.as_str()

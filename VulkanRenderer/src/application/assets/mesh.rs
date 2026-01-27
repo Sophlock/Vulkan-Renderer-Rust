@@ -13,7 +13,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(path: impl AsRef<Path>, asset_metadata: AssetMetadata) -> Self {
+    pub fn new(name: String, path: impl AsRef<Path>) -> Self {
         let (doc, buffers, _) = gltf::import(path).unwrap();
         let mesh = doc.meshes().next().unwrap();
         let prim = mesh.primitives().next().unwrap();
@@ -46,7 +46,7 @@ impl Mesh {
         Self {
             vertices,
             indices,
-            asset_metadata,
+            asset_metadata: AssetMetadata::new(name),
         }
     }
 }

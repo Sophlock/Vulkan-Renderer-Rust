@@ -21,6 +21,17 @@ impl Model {
     pub fn draw_gui(&mut self, ui: &mut Ui) {}
 }
 
+impl Model {
+    pub fn new(name: String, transform: Transform, mesh: AssetHandle<Mesh>, material: AssetHandle<MaterialInstance>) -> Self {
+        Self {
+            transform,
+            mesh,
+            material,
+            asset_metadata: AssetMetadata::new(name),
+        }
+    }
+}
+
 impl ModelInterface for Model {
     type MeshType = Mesh;
     type MaterialType = MaterialInstance;

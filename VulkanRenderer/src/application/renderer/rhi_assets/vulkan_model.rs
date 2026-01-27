@@ -36,12 +36,11 @@ impl RHIModelInterface for VKModel {
     fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI) -> Self {
         let mesh = source.mesh();
         let material = source.material();
+        let mut resource_manager = rhi.resource_manager_mut();
         Self {
             transform: source.transform().matrix(),
-            mesh: rhi.resource_manager_mut().create_mesh(mesh),
-            material: rhi
-                .resource_manager_mut()
-                .create_material_instance(material),
+            mesh: resource_manager.create_mesh(mesh),
+            material: resource_manager.create_material_instance(material),
             uuid: 0,
         }
     }

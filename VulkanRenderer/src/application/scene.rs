@@ -4,9 +4,9 @@ use model::Model;
 use super::assets::asset_traits::SceneInterface;
 use crate::application::scene::camera::Camera;
 
-mod camera;
-mod model;
-pub(crate) mod transform;
+pub mod camera;
+pub mod model;
+pub mod transform;
 
 pub struct Scene {
     pub models: Vec<Model>,
