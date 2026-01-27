@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     marker::PhantomData,
-    ops::Deref,
     rc::{Rc, Weak},
     sync::Arc,
 };

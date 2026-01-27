@@ -12,7 +12,7 @@ pub struct VKCamera {
 impl RHICameraInterface for VKCamera {
     type RHI = Renderer;
 
-    fn create<T: CameraInterface>(source: &T, rhi: &Self::RHI) -> Self {
+    fn create<T: CameraInterface>(source: &T, _: &Self::RHI) -> Self {
         Self {
             view_projection: source.view_projection(),
         }

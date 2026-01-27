@@ -3,7 +3,6 @@ mod renderer;
 mod scene;
 
 use std::{
-    ops::{Deref, DerefMut},
     rc::Rc,
     sync::Arc,
 };

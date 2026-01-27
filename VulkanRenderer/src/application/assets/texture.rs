@@ -4,7 +4,7 @@ use asset_system::{
     assets::{Asset, AssetMetadata},
     resource_management::Resource,
 };
-use image::{DynamicImage, GenericImageView, ImageError, ImageReader};
+use image::{DynamicImage, ImageError, ImageReader};
 
 use crate::application::assets::asset_traits::TextureInterface;
 
