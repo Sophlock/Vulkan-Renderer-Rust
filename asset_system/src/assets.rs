@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
+
 use crate::resource_management::{Resource, ResourceManager};
 
-pub trait Asset : Resource + Sized {
+pub trait Asset: Resource + Sized {
     fn asset_metadata(&self) -> &AssetMetadata;
 
     fn uuid(&self) -> usize {

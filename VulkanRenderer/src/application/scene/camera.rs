@@ -1,6 +1,7 @@
 use glam::Mat4;
-use crate::application::assets::asset_traits::CameraInterface;
+
 use super::transform::Transform;
+use crate::application::assets::asset_traits::CameraInterface;
 
 pub struct Camera {
     pub transform: Transform,
@@ -12,7 +13,13 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(fov: f32, aspect: f32, near: f32, far: f32) -> Self {
-        Self { transform: Transform::default(), fov, aspect, near, far }
+        Self {
+            transform: Transform::default(),
+            fov,
+            aspect,
+            near,
+            far,
+        }
     }
 }
 

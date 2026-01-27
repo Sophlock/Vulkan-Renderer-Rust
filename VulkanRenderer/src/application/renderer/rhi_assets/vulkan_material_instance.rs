@@ -1,15 +1,22 @@
-use std::ops::{Deref, DerefMut};
-use crate::application::renderer::rhi_assets::vulkan_material::VKMaterial;
-use crate::application::renderer::rhi_assets::{RHIHandle, RHIResourceManager};
-use crate::application::renderer::shader_object::ShaderObject;
-use std::sync::Arc;
-use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
-use vulkano::descriptor_set::DescriptorSet;
-use vulkano::memory::allocator::MemoryAllocator;
+use std::{ops::Deref, sync::Arc};
+
 use asset_system::resource_management::Resource;
-use crate::application::assets::asset_traits::{MaterialInstanceInterface, RHIInterface, RHIMaterialInstanceInterface, RHIResource};
-use crate::application::renderer::Renderer;
-use crate::application::renderer::shader_cursor::ShaderCursor;
+use vulkano::{
+    descriptor_set::{DescriptorSet, allocator::DescriptorSetAllocator},
+    memory::allocator::MemoryAllocator,
+};
+
+use crate::application::{
+    assets::asset_traits::{
+        MaterialInstanceInterface, RHIInterface, RHIMaterialInstanceInterface, RHIResource,
+    },
+    renderer::{
+        Renderer,
+        rhi_assets::{RHIHandle, RHIResourceManager, vulkan_material::VKMaterial},
+        shader_cursor::ShaderCursor,
+        shader_object::ShaderObject,
+    },
+};
 
 pub struct VKMaterialInstance {
     shader_object: ShaderObject,
@@ -49,10 +56,10 @@ impl VKMaterialInstance {
     pub fn shader_cursor(&mut self) -> ShaderCursor {
         ShaderCursor::new(&mut self.shader_object)
     }
-    
+
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
         self.shader_object.descriptor_sets()
-    } 
+    }
 }
 
 impl RHIResource for VKMaterialInstance {

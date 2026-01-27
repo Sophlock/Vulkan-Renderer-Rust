@@ -1,16 +1,16 @@
-use crate::application::renderer::{buffer::buffer_from_slice, command_buffer::CommandBufferInterface};
 use std::sync::Arc;
-use vulkano::device::Queue;
-use vulkano::{
-    buffer::{BufferUsage, Subbuffer}
-    ,
-    memory::allocator::MemoryTypeFilter,
-};
-use vulkano::memory::allocator::MemoryAllocator;
+
 use asset_system::resource_management::Resource;
-use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
-use crate::application::assets::asset_traits::{RHIInterface, RHIMeshInterface, RHIResource};
-use crate::application::renderer::Renderer;
+use vulkano::{
+    buffer::{BufferUsage, Subbuffer},
+    device::Queue,
+    memory::allocator::{MemoryAllocator, MemoryTypeFilter},
+};
+
+use crate::application::{
+    assets::asset_traits::{Index, MeshInterface, RHIMeshInterface, RHIResource, Vertex},
+    renderer::{Renderer, buffer::buffer_from_slice, command_buffer::CommandBufferInterface},
+};
 pub struct VKMesh {
     vertex_buffer: Subbuffer<[Vertex]>,
     index_buffer: Subbuffer<[Index]>,
@@ -49,11 +49,11 @@ impl VKMesh {
             uuid: 0,
         }
     }
-    
+
     pub fn vertex(&self) -> &Subbuffer<[Vertex]> {
         &self.vertex_buffer
     }
-    
+
     pub fn index(&self) -> &Subbuffer<[Index]> {
         &self.index_buffer
     }
@@ -75,6 +75,11 @@ impl RHIMeshInterface for VKMesh {
     type RHI = Renderer;
 
     fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI) -> Self {
-        Self::new(source, &rhi.buffer_allocator, &rhi.command_buffer_interface, &rhi.queues.graphics_queue)
+        Self::new(
+            source,
+            &rhi.buffer_allocator,
+            &rhi.command_buffer_interface,
+            &rhi.queues.graphics_queue,
+        )
     }
 }

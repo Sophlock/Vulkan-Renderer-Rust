@@ -1,31 +1,17 @@
-use super::command_buffer::CommandBufferInterface;
 use std::sync::Arc;
+
 use vulkano::{
+    DeviceSize, Validated, VulkanError,
+    buffer::{
+        AllocateBufferError, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer,
+    },
     command_buffer::{CopyBufferInfoTyped, PrimaryCommandBufferAbstract},
     device::Queue,
-    sync::GpuFuture,
-    buffer::{
-        Buffer,
-        BufferCreateInfo,
-        Subbuffer,
-        AllocateBufferError,
-        BufferContents,
-        BufferUsage
-    },
-    device::Device,
-    memory::{
-        allocator::{
-            MemoryTypeFilter,
-            AllocationCreateInfo,
-            StandardMemoryAllocator
-        }
-    },
-    sync::Sharing,
-    DeviceSize,
-    Validated,
-    VulkanError
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
+    sync::{GpuFuture, Sharing},
 };
-use vulkano::memory::allocator::MemoryAllocator;
+
+use super::command_buffer::CommandBufferInterface;
 
 pub fn buffer_from_slice<T: BufferContents + Copy>(
     allocator: Arc<dyn MemoryAllocator>,
@@ -57,8 +43,15 @@ pub fn buffer_from_slice<T: BufferContents + Copy>(
         },
         data.iter().copied(),
     )?;
-    let buffer = Buffer::new_slice::<T>(allocator, create_info, alloc_info, data.len() as DeviceSize)?;
-    copy_buffer_to_buffer(staging_buffer, buffer.clone(), command_buffer_interface, queue).unwrap();
+    let buffer =
+        Buffer::new_slice::<T>(allocator, create_info, alloc_info, data.len() as DeviceSize)?;
+    copy_buffer_to_buffer(
+        staging_buffer,
+        buffer.clone(),
+        command_buffer_interface,
+        queue,
+    )
+    .unwrap();
     Ok(buffer)
 }
 

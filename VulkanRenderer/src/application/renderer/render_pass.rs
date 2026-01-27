@@ -1,17 +1,17 @@
-use super::physical_device::find_depth_format;
 use std::sync::Arc;
-use vulkano::render_pass::AttachmentReference;
-use vulkano::sync::{AccessFlags, PipelineStages};
+
 use vulkano::{
     device::{Device, physical::PhysicalDevice},
     format::Format,
     image::{ImageLayout, SampleCount},
     render_pass::{
-        AttachmentDescription, RenderPass, RenderPassCreateInfo, SubpassDependency,
-        SubpassDescription,
+        AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp,
+        RenderPass, RenderPassCreateInfo, SubpassDependency, SubpassDescription,
     },
-    render_pass::{AttachmentLoadOp, AttachmentStoreOp},
+    sync::{AccessFlags, PipelineStages},
 };
+
+use super::physical_device::find_depth_format;
 
 pub struct RenderPassBuilder {
     create_info: RenderPassCreateInfo,

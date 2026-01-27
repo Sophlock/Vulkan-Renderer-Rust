@@ -1,36 +1,35 @@
-use crate::application::assets::asset_traits::{MaterialInstanceInterface, RHIMaterialInstanceInterface};
-use crate::application::assets::asset_traits::RHIModelInterface;
-use crate::application::{
-    assets::asset_traits::{
-        MaterialInterface, MeshInterface, RHIMaterialInterface, RHIMeshInterface, RHIResource,
-        RHITextureInterface, TextureInterface,
-    },
-    renderer::{
-        rhi_assets::{vulkan_material::VKMaterial, vulkan_mesh::VKMesh, vulkan_texture::VKTexture},
-        Renderer,
-    },
-};
 use std::{
-    cell::RefCell,
     collections::HashMap,
     marker::PhantomData,
     ops::Deref,
     rc::{Rc, Weak},
-    sync::Arc
+    sync::Arc,
 };
-use asset_system::assets::AssetHandle;
-use asset_system::resource_management::ResourceManager;
-use crate::application::assets::asset_traits::ModelInterface;
-use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
-use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
+
+use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+
+use crate::application::{
+    assets::asset_traits::{
+        MaterialInstanceInterface, MaterialInterface, MeshInterface, ModelInterface,
+        RHIMaterialInstanceInterface, RHIMaterialInterface, RHIMeshInterface, RHIModelInterface,
+        RHIResource, RHITextureInterface, TextureInterface,
+    },
+    renderer::{
+        Renderer,
+        rhi_assets::{
+            vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+            vulkan_mesh::VKMesh, vulkan_model::VKModel, vulkan_texture::VKTexture,
+        },
+    },
+};
 
 pub mod vulkan_camera;
 pub mod vulkan_material;
+pub mod vulkan_material_instance;
 pub mod vulkan_mesh;
 pub mod vulkan_model;
 pub mod vulkan_scene;
 pub mod vulkan_texture;
-pub mod vulkan_material_instance;
 
 pub struct RHIResourceManager {
     resources: ResourceManager,
@@ -56,7 +55,7 @@ macro_rules! implement_rhi_resource {
             let id = self.resources.add(tex);
             self.asset_to_rhi.insert(asset_id, id);
             RHIHandle::<$rhi_type>::new(id)
-    }
+        }
     };
 }
 
@@ -77,7 +76,11 @@ impl RHIResourceManager {
     implement_rhi_resource!(create_texture, VKTexture, TextureInterface);
     implement_rhi_resource!(create_mesh, VKMesh, MeshInterface);
     implement_rhi_resource!(create_material, VKMaterial, MaterialInterface);
-    implement_rhi_resource!(create_material_instance, VKMaterialInstance, MaterialInstanceInterface);
+    implement_rhi_resource!(
+        create_material_instance,
+        VKMaterialInstance,
+        MaterialInstanceInterface
+    );
     implement_rhi_resource!(create_model, VKModel, ModelInterface);
 
     fn rhi(&self) -> Rc<Renderer> {
@@ -106,7 +109,7 @@ impl<T: RHIResource> Clone for RHIHandle<T> {
     fn clone(&self) -> Self {
         Self {
             uuid: self.uuid,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 }

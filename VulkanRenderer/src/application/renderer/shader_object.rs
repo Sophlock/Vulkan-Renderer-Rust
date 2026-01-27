@@ -1,33 +1,32 @@
-use crate::application::assets::asset_traits::Vertex;
-use crate::application::renderer::pipeline::graphics_pipeline;
-use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
-use crate::application::renderer::shader_cursor::{ShaderOffset, ShaderSize};
-use shader_slang::reflection::{TypeLayout, VariableLayout};
-use shader_slang::{BindingType, ParameterCategory};
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
-use vulkano::descriptor_set::layout::{
-    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
+use std::{collections::BTreeMap, sync::Arc};
+
+use shader_slang::{
+    BindingType, ParameterCategory,
+    reflection::{TypeLayout, VariableLayout},
 };
-use vulkano::descriptor_set::pool::{
-    DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
-};
-use vulkano::descriptor_set::{DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet};
-use vulkano::device::DeviceOwned;
-use vulkano::image::ImageLayout;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter};
-use vulkano::shader::ShaderStages;
-use vulkano::sync::Sharing;
 use vulkano::{
     DeviceSize,
-    device::Device,
-    pipeline::{
-        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
-        layout::PipelineLayoutCreateInfo,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    descriptor_set::{
+        DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
+        allocator::DescriptorSetAllocator,
+        layout::{
+            DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
+            DescriptorType,
+        },
+        pool::{DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo},
     },
-    render_pass::RenderPass,
+    device::{Device, DeviceOwned},
+    image::ImageLayout,
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
+    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
+    shader::ShaderStages,
+    sync::Sharing,
+};
+
+use crate::application::renderer::{
+    rhi_assets::vulkan_texture::VKTexture,
+    shader_cursor::{ShaderOffset, ShaderSize},
 };
 
 pub struct ShaderObjectLayout {
@@ -122,7 +121,8 @@ impl ShaderObjectLayout {
             existential_sizes,
             existential_offsets,
             type_layout,
-        }.into()
+        }
+        .into()
     }
 
     fn map_descriptor_type(binding_type: BindingType) -> DescriptorType {
@@ -357,8 +357,8 @@ impl ShaderObject {
             .iter()
             .for_each(|set| unsafe { set.update_by_ref(writes.clone(), []) }.unwrap());
     }
-    
+
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
         self.descriptor_sets.as_slice()
-    } 
+    }
 }

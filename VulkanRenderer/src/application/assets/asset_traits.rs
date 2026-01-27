@@ -1,11 +1,16 @@
 use std::cell::{Ref, RefMut};
-use asset_system::resource_management::{Resource, ResourceManager};
+
+use asset_system::{
+    assets::{Asset, AssetHandle},
+    resource_management::Resource,
+};
 use glam::{Mat4, Vec2, Vec3};
-use vulkano::buffer::BufferContents;
-use vulkano::pipeline::graphics::vertex_input;
-use asset_system::assets::{Asset, AssetHandle};
-use crate::application::renderer::rhi_assets::{RHIHandle, RHIResourceManager};
-use crate::application::scene::transform::Transform;
+use vulkano::{buffer::BufferContents, pipeline::graphics::vertex_input};
+
+use crate::application::{
+    renderer::rhi_assets::{RHIHandle, RHIResourceManager},
+    scene::transform::Transform,
+};
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
@@ -88,12 +93,14 @@ pub trait ModelInterface: Asset {
     fn material(&self) -> AssetHandle<Self::MaterialType>;
 }
 
-pub trait RHIModelInterface : RHIResource {
+pub trait RHIModelInterface: RHIResource {
     type RHI: RHIInterface;
     fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI) -> Self;
-    
+
     fn mesh(&self) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MeshType>;
-    fn material(&self) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MaterialInstanceType>;
+    fn material(
+        &self,
+    ) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MaterialInstanceType>;
 }
 
 pub trait CameraInterface: Sized {
@@ -132,23 +139,22 @@ pub trait MaterialInterface: Asset {
     }
 }
 
-pub trait RHIMaterialInterface : RHIResource {
+pub trait RHIMaterialInterface: RHIResource {
     type RHI: RHIInterface;
     fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
 pub trait MaterialInstanceInterface: Asset {
-    
     type MaterialType: MaterialInterface + 'static;
-    
+
     fn rhi<RHIType: RHIMaterialInstanceInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }
-    
+
     fn material(&self) -> AssetHandle<Self::MaterialType>;
 }
 
-pub trait RHIMaterialInstanceInterface : RHIResource {
+pub trait RHIMaterialInstanceInterface: RHIResource {
     type RHI: RHIInterface;
     fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }

@@ -1,16 +1,21 @@
-use crate::application::assets::asset_traits::{ModelInterface, RHIInterface, RHIModelInterface, RHIResource};
-use crate::application::renderer::rhi_assets::vulkan_mesh::VKMesh;
-use crate::application::renderer::rhi_assets::RHIHandle;
-use crate::application::renderer::Renderer;
-use glam::Mat4;
 use asset_system::resource_management::Resource;
-use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
+use glam::Mat4;
+
+use crate::application::{
+    assets::asset_traits::{ModelInterface, RHIInterface, RHIModelInterface, RHIResource},
+    renderer::{
+        Renderer,
+        rhi_assets::{
+            RHIHandle, vulkan_material_instance::VKMaterialInstance, vulkan_mesh::VKMesh,
+        },
+    },
+};
 
 pub struct VKModel {
     transform: Mat4,
     mesh: RHIHandle<VKMesh>,
     material: RHIHandle<VKMaterialInstance>,
-    uuid: usize
+    uuid: usize,
 }
 
 impl RHIResource for VKModel {
@@ -34,8 +39,10 @@ impl RHIModelInterface for VKModel {
         Self {
             transform: source.transform().matrix(),
             mesh: rhi.resource_manager_mut().create_mesh(mesh),
-            material: rhi.resource_manager_mut().create_material_instance(material),
-            uuid: 0
+            material: rhi
+                .resource_manager_mut()
+                .create_material_instance(material),
+            uuid: 0,
         }
     }
 

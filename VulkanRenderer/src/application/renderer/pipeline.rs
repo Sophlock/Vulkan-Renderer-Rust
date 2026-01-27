@@ -1,29 +1,27 @@
+use std::{collections::HashSet, ops::RangeInclusive, sync::Arc};
+
 use smallvec::smallvec;
-use std::collections::HashSet;
-use std::{ops::RangeInclusive, sync::Arc};
-use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition, VertexInputState};
-use vulkano::pipeline::graphics::viewport::ViewportState;
-use vulkano::pipeline::{DynamicState, GraphicsPipeline};
 use vulkano::{
     device::Device,
     image::SampleCount,
     pipeline::{
-        PipelineLayout, PipelineShaderStageCreateInfo,
+        DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
         graphics::{
             GraphicsPipelineCreateInfo,
             color_blend::{
                 AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents,
             },
             depth_stencil::{CompareOp, DepthState, DepthStencilState, StencilState},
+            input_assembly::{InputAssemblyState, PrimitiveTopology},
             multisample::MultisampleState,
             rasterization::{CullMode, FrontFace, PolygonMode, RasterizationState},
+            subpass::PipelineSubpassType,
+            vertex_input::{Vertex, VertexDefinition, VertexInputState},
+            viewport::ViewportState,
         },
     },
-    shader::spirv::ExecutionModel,
-    shader::{ShaderModule, ShaderModuleCreateInfo},
+    shader::{ShaderModule, ShaderModuleCreateInfo, spirv::ExecutionModel},
 };
-use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
 
 pub struct EmptyGraphicsPipeline {}
 
@@ -326,6 +324,11 @@ impl DepthStencilGraphicsPipeline {
         subpass: PipelineSubpassType,
         dynamic_state: HashSet<DynamicState>,
     ) -> Arc<GraphicsPipeline> {
-        GraphicsPipeline::new(device, None, self.build_create_info(layout, subpass, dynamic_state)).unwrap()
+        GraphicsPipeline::new(
+            device,
+            None,
+            self.build_create_info(layout, subpass, dynamic_state),
+        )
+        .unwrap()
     }
 }

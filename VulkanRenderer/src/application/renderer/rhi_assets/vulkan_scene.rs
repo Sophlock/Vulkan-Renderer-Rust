@@ -1,11 +1,14 @@
-use crate::application::assets::asset_traits::{CameraInterface, ModelInterface, RHIInterface, RHISceneInterface, SceneInterface};
-use crate::application::renderer::Renderer;
-use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
-use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
+use crate::application::{
+    assets::asset_traits::{CameraInterface, ModelInterface, RHISceneInterface, SceneInterface},
+    renderer::{
+        Renderer,
+        rhi_assets::{vulkan_camera::VKCamera, vulkan_model::VKModel},
+    },
+};
 
 pub struct VKScene {
     models: Vec<VKModel>,
-    camera: VKCamera
+    camera: VKCamera,
 }
 
 impl RHISceneInterface for VKScene {
@@ -17,7 +20,10 @@ impl RHISceneInterface for VKScene {
             .iter()
             .map(|model| model.rhi::<VKModel>(rhi))
             .collect();
-        Self { models, camera: source.camera().rhi(rhi) }
+        Self {
+            models,
+            camera: source.camera().rhi(rhi),
+        }
     }
 
     fn models(&self) -> &[VKModel] {

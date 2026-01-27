@@ -1,21 +1,25 @@
-use crate::application::assets::asset_traits::{
-    MaterialInterface, RHIMaterialInterface, RHIResource, Vertex,
-};
-use crate::application::renderer::Renderer;
-use crate::application::renderer::pipeline::graphics_pipeline;
-use crate::{
-    application::renderer::shader_object::{ShaderObject, ShaderObjectLayout},
-    application::renderer::shaders::SlangCompiler,
-};
-use asset_system::resource_management::Resource;
-use shader_slang::structs::specialization_arg::SpecializationArg;
-use shader_slang::{Blob, ComponentType, Error, IUnknown, LayoutRules};
 use std::{ops::Deref, sync::Arc};
-use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
-use vulkano::memory::allocator::MemoryAllocator;
-use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
-use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineLayout};
-use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
+
+use asset_system::resource_management::Resource;
+use shader_slang::{
+    Blob, ComponentType, LayoutRules, structs::specialization_arg::SpecializationArg,
+};
+use vulkano::{
+    device::Device,
+    pipeline::{
+        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
+    },
+    render_pass::RenderPass,
+    shader::spirv::bytes_to_words,
+};
+
+use crate::application::{
+    assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource, Vertex},
+    renderer::{
+        Renderer, pipeline::graphics_pipeline, shader_object::ShaderObjectLayout,
+        shaders::SlangCompiler,
+    },
+};
 
 pub struct VKMaterial {
     vert_spirv: Blob,
@@ -112,15 +116,15 @@ impl VKMaterial {
             fragment_main.into(),
         ])
     }
-    
+
     pub fn shader_object_layout(&self) -> &Arc<ShaderObjectLayout> {
         &self.shader_object_layout
     }
-    
+
     pub fn pipeline(&self) -> &Arc<GraphicsPipeline> {
         &self.pipeline
     }
-    
+
     pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
         self.shader_object_layout.pipeline_layout()
     }

@@ -1,8 +1,12 @@
-use crate::application::assets::asset_traits::TextureInterface;
-use image::{DynamicImage, GenericImageView, ImageError, ImageReader};
 use std::path::Path;
-use asset_system::assets::{Asset, AssetMetadata};
-use asset_system::resource_management::Resource;
+
+use asset_system::{
+    assets::{Asset, AssetMetadata},
+    resource_management::Resource,
+};
+use image::{DynamicImage, GenericImageView, ImageError, ImageReader};
+
+use crate::application::assets::asset_traits::TextureInterface;
 
 pub struct Texture {
     image: DynamicImage,
@@ -12,7 +16,10 @@ pub struct Texture {
 impl Texture {
     pub fn new(filepath: impl AsRef<Path>, name: String) -> Result<Self, ImageError> {
         let image = ImageReader::open(filepath)?.decode()?;
-        Ok(Self { image, metadata: AssetMetadata::new(name) })
+        Ok(Self {
+            image,
+            metadata: AssetMetadata::new(name),
+        })
     }
 }
 

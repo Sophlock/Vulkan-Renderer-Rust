@@ -1,29 +1,29 @@
-use crate::application::renderer::Renderer;
+use std::{cmp::max, sync::Arc};
+
+use asset_system::resource_management::Resource;
 use smallvec::smallvec;
-use std::cmp::max;
-use std::sync::Arc;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, BlitImageInfo, ImageBlit, PrimaryAutoCommandBuffer,
-};
-use vulkano::image::sampler::Filter;
-use vulkano::image::ImageSubresourceLayers;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{CopyBufferToImageInfo, PrimaryCommandBufferAbstract}, format::Format,
-    image::view::{ImageView, ImageViewCreateInfo, ImageViewType},
+    Validated, ValidationError, VulkanError,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{
+        AutoCommandBufferBuilder, BlitImageInfo, CopyBufferToImageInfo, ImageBlit,
+        PrimaryAutoCommandBuffer, PrimaryCommandBufferAbstract,
+    },
+    format::Format,
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsage, SampleCount,
-    }
-    ,
+        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsage, SampleCount,
+        sampler::Filter,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+    },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     sync::{GpuFuture, Sharing},
-    Validated,
-    ValidationError,
-    VulkanError,
 };
-use asset_system::resource_management::Resource;
-use crate::application::assets::asset_traits::{RHITextureInterface, TextureInterface};
-use crate::application::assets::asset_traits::RHIResource;
+
+use crate::application::{
+    assets::asset_traits::{RHIResource, RHITextureInterface, TextureInterface},
+    renderer::Renderer,
+};
 
 pub struct VKTexture {
     image: Arc<ImageView>,
@@ -97,25 +97,36 @@ impl RHITextureInterface for VKTexture {
             .command_buffer_interface
             .primary_command_buffer(rhi.queues.graphics_queue.queue_family_index());
 
-        Self::copy_buffer_to_image(
-            staging_buffer,
+        Self::copy_buffer_to_image(staging_buffer, &image, &mut cb).unwrap();
+
+        let mip_levels = ((max(source.size()[0], source.size()[1]) as f32)
+            .log2()
+            .floor() as u32)
+            + 1;
+        Self::generate_mips(
             &image,
+            [source.size()[0], source.size()[1]],
+            mip_levels,
+            1,
             &mut cb,
         )
         .unwrap();
 
-        let mip_levels = ((max(source.size()[0], source.size()[1]) as f32).log2().floor() as u32) + 1;
-        Self::generate_mips(&image, [source.size()[0], source.size()[1]], mip_levels, 1, &mut cb).unwrap();
-
         let image_view = ImageView::new(image, image_view_create_info).unwrap();
 
-        cb.build().unwrap()
+        cb.build()
+            .unwrap()
             .execute(rhi.queues.graphics_queue.clone())
             .unwrap()
-            .then_signal_fence_and_flush().unwrap()
-            .wait(None).unwrap();
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
 
-        Self { image: image_view, uuid: 0 }
+        Self {
+            image: image_view,
+            uuid: 0,
+        }
     }
 }
 
@@ -246,7 +257,7 @@ impl VKTexture {
         cb.
     }*/
 
-    pub fn image_view(&self) -> &Arc<ImageView>{
+    pub fn image_view(&self) -> &Arc<ImageView> {
         &self.image
     }
 }

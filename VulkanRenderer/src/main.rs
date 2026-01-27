@@ -2,11 +2,7 @@ extern crate winit;
 mod application;
 
 use application::Application;
-
-use winit::event_loop::{
-    ControlFlow,
-    EventLoop
-};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
@@ -14,5 +10,3 @@ fn main() {
     let mut app = Application::new();
     event_loop.run_app(&mut app).unwrap()
 }
-
-

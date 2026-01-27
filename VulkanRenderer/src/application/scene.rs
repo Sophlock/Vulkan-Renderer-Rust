@@ -1,20 +1,24 @@
 use egui_winit_vulkano::egui::Ui;
 use model::Model;
+
 use super::assets::asset_traits::SceneInterface;
 use crate::application::scene::camera::Camera;
 
+mod camera;
 mod model;
 pub(crate) mod transform;
-mod camera;
 
 pub struct Scene {
     pub models: Vec<Model>,
-    pub camera: Camera
+    pub camera: Camera,
 }
 
 impl Scene {
     pub fn new() -> Self {
-        Self { models: vec![], camera: Camera::default() }
+        Self {
+            models: vec![],
+            camera: Camera::default(),
+        }
     }
 
     pub fn draw_gui(&mut self, gui: &mut Ui) {

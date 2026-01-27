@@ -1,6 +1,5 @@
 mod buffer;
 mod command_buffer;
-mod image;
 mod layers;
 mod physical_device;
 mod pipeline;
@@ -13,14 +12,13 @@ mod shader_object;
 mod shaders;
 mod swapchain;
 
-use super::assets::asset_traits::{RHIInterface, RHIModelInterface, RHISceneInterface};
-use crate::application::renderer::rhi_assets::RHIResourceManager;
-use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
-use crate::application::renderer::rhi_assets::vulkan_material::VKMaterial;
-use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
-use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
-use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
-use crate::application::renderer::shaders::SlangCompiler;
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    ops::Deref,
+    rc::Rc,
+    sync::Arc,
+};
+
 use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};
@@ -28,43 +26,49 @@ use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
-use shader_slang::TypeKind::Resource;
 use smallvec::smallvec;
-use std::cell::{Ref, RefCell, RefMut};
-use std::ops::Deref;
-use std::rc::Rc;
-use std::sync::Arc;
 use swapchain::Swapchain;
-use vulkano::descriptor_set::allocator::{
-    DescriptorSetAllocator, StandardDescriptorSetAllocator,
-    StandardDescriptorSetAllocatorCreateInfo,
-};
-use vulkano::memory::allocator::MemoryAllocator;
-use vulkano::pipeline::PipelineBindPoint;
 use vulkano::{
-    DeviceSize, Validated, ValidationError, VulkanError, VulkanLibrary,
+    Validated, ValidationError, VulkanError, VulkanLibrary,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
     },
+    descriptor_set::allocator::{
+        DescriptorSetAllocator, StandardDescriptorSetAllocator,
+        StandardDescriptorSetAllocatorCreateInfo,
+    },
     device::{
         Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
     },
-    format::ClearValue,
-    format::Format,
+    format::{ClearValue, Format},
     image::{
         Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
         ImageType, ImageUsage, SampleCount,
         view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
-    pipeline::graphics::viewport::{Scissor, Viewport},
+    memory::allocator::{
+        AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
+    },
+    pipeline::{
+        PipelineBindPoint,
+        graphics::viewport::{Scissor, Viewport},
+    },
     render_pass::{Framebuffer, RenderPass},
     swapchain::{Surface, SwapchainPresentInfo, present},
     sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
+
+use super::assets::asset_traits::{RHIInterface, RHIModelInterface, RHISceneInterface};
+use crate::application::renderer::{
+    rhi_assets::{
+        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
+        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
+    },
+    shaders::SlangCompiler,
+};
 
 pub struct MutableRenderState {
     swapchain: Swapchain,

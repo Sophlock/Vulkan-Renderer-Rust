@@ -1,17 +1,20 @@
-use super::transform::Transform;
-use crate::application::assets::asset_traits::ModelInterface;
-use crate::application::assets::{material::Material, mesh::Mesh};
+use asset_system::{
+    Asset,
+    assets::{AssetHandle, AssetMetadata},
+};
 use egui_winit_vulkano::egui::Ui;
-use asset_system::Asset;
-use asset_system::assets::{AssetHandle, AssetMetadata};
-use crate::application::assets::material_instance::MaterialInstance;
+
+use super::transform::Transform;
+use crate::application::assets::{
+    asset_traits::ModelInterface, material_instance::MaterialInstance, mesh::Mesh,
+};
 
 #[derive(Asset)]
 pub struct Model {
     pub transform: Transform,
     pub mesh: AssetHandle<Mesh>,
     pub material: AssetHandle<MaterialInstance>,
-    asset_metadata: AssetMetadata
+    asset_metadata: AssetMetadata,
 }
 
 impl Model {

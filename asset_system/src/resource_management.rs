@@ -1,5 +1,7 @@
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+};
 
 struct ResourcePosition {
     type_id: TypeId,

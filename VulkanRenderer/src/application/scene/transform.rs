@@ -1,5 +1,4 @@
-use egui_winit_vulkano::egui;
-use egui_winit_vulkano::egui::Ui;
+use egui_winit_vulkano::{egui, egui::Ui};
 use glam::{Mat4, Quat, Vec3};
 
 #[derive(Clone, Copy)]
@@ -42,7 +41,7 @@ pub fn draw_vec3_to_gui(ui: &mut Ui, vec: &mut Vec3) {
 pub fn draw_rotation_to_gui(ui: &mut Ui, rot: &mut Quat) {
     ui.horizontal(|ui| {
         let (mut yaw, mut pitch, mut roll) = rot.to_euler(glam::EulerRot::XYZ);
-       ui.drag_angle_tau(&mut yaw);
+        ui.drag_angle_tau(&mut yaw);
         ui.drag_angle(&mut pitch);
         ui.drag_angle_tau(&mut roll);
         rot.clone_from(&Quat::from_euler(glam::EulerRot::XYZ, yaw, pitch, roll));

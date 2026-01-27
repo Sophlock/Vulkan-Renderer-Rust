@@ -1,28 +1,27 @@
+mod assets;
 mod renderer;
 mod scene;
-mod assets;
 
-use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{
+    ops::{Deref, DerefMut},
+    rc::Rc,
+    sync::Arc,
+};
+
+use asset_system::resource_management::ResourceManager;
+use assets::asset_traits::SceneInterface;
+use renderer::Renderer;
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::WindowId,
 };
 
-use renderer::Renderer;
-use assets::asset_traits::SceneInterface;
-use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
-use asset_system::resource_management::ResourceManager;
-use crate::application::scene::Scene;
+use crate::application::{renderer::rhi_assets::vulkan_scene::VKScene, scene::Scene};
 
 pub struct Application {
     renderer: Option<Rc<Renderer>>,
     asset_manager: Option<Arc<ResourceManager>>,
-    scene: Option<VKScene>
+    scene: Option<VKScene>,
 }
 
 impl Application {
@@ -30,7 +29,7 @@ impl Application {
         Self {
             renderer: None,
             scene: None,
-            asset_manager: None
+            asset_manager: None,
         }
     }
 
@@ -43,7 +42,10 @@ impl Application {
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.asset_manager = Some(Arc::new(ResourceManager::new()));
-        self.renderer = Some(Renderer::new(event_loop, self.asset_manager.as_ref().unwrap().clone()));
+        self.renderer = Some(Renderer::new(
+            event_loop,
+            self.asset_manager.as_ref().unwrap().clone(),
+        ));
         self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap()));
     }
 
@@ -56,9 +58,12 @@ impl ApplicationHandler for Application {
         self.renderer.as_ref().unwrap().gui_mut().update(&event);
         match event {
             WindowEvent::ActivationTokenDone { .. } => {}
-            WindowEvent::Resized(_) => {
-                self.renderer.as_ref().unwrap().mutable_state().request_recreate_swapchain()
-            }
+            WindowEvent::Resized(_) => self
+                .renderer
+                .as_ref()
+                .unwrap()
+                .mutable_state()
+                .request_recreate_swapchain(),
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Destroyed => {}
@@ -85,7 +90,10 @@ impl ApplicationHandler for Application {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.renderer.as_ref().unwrap().redraw(self.scene.as_ref().unwrap());
+                self.renderer
+                    .as_ref()
+                    .unwrap()
+                    .redraw(self.scene.as_ref().unwrap());
             }
         }
     }

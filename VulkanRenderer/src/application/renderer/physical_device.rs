@@ -1,7 +1,9 @@
-use vulkano::device::physical::PhysicalDevice;
-use vulkano::format::{Format, FormatFeatures};
-use vulkano::image::ImageTiling;
-use vulkano::swapchain::Surface;
+use vulkano::{
+    device::physical::PhysicalDevice,
+    format::{Format, FormatFeatures},
+    image::ImageTiling,
+    swapchain::Surface,
+};
 
 pub fn is_physical_device_suitable_for_surface(
     physical_device: &PhysicalDevice,
@@ -15,7 +17,10 @@ pub fn find_supported_format<I: IntoIterator<Item = Format>>(
     tiling: ImageTiling,
     features: FormatFeatures,
     candidates: I,
-) -> Option<Format> where <I as IntoIterator>::IntoIter: DoubleEndedIterator {
+) -> Option<Format>
+where
+    <I as IntoIterator>::IntoIter: DoubleEndedIterator,
+{
     candidates
         .into_iter()
         .rev()

@@ -1,7 +1,8 @@
-use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 use std::path::Path;
-use asset_system::assets::AssetMetadata;
-use asset_system::Asset;
+
+use asset_system::{Asset, assets::AssetMetadata};
+
+use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 
 #[derive(Asset)]
 pub struct Mesh {
@@ -23,22 +24,29 @@ impl Mesh {
         let tangent = read.read_tangents().unwrap();
         let uv = read.read_tex_coords(0).unwrap();
 
-        let vertices = pos.zip(normal).zip(tangent).zip(uv.into_f32())
-            .map(|(((p, n), t), tex)| {
-                Vertex{
-                    position: p.into(),
-                    normal: n.into(),
-                    tangent: [t[0], t[1], t[2]].into(),
-                    texture_coordinates: tex.into(),
-                }
-            }).collect();
+        let vertices = pos
+            .zip(normal)
+            .zip(tangent)
+            .zip(uv.into_f32())
+            .map(|(((p, n), t), tex)| Vertex {
+                position: p.into(),
+                normal: n.into(),
+                tangent: [t[0], t[1], t[2]].into(),
+                texture_coordinates: tex.into(),
+            })
+            .collect();
 
-        let indices = read.read_indices().unwrap().into_u32().map(|index| {Index{index}}).collect();
+        let indices = read
+            .read_indices()
+            .unwrap()
+            .into_u32()
+            .map(|index| Index { index })
+            .collect();
 
         Self {
             vertices,
             indices,
-            asset_metadata
+            asset_metadata,
         }
     }
 }

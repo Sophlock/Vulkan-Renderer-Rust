@@ -1,9 +1,12 @@
 use glam::Mat4;
-use crate::application::assets::asset_traits::{CameraInterface, RHICameraInterface};
-use crate::application::renderer::Renderer;
+
+use crate::application::{
+    assets::asset_traits::{CameraInterface, RHICameraInterface},
+    renderer::Renderer,
+};
 
 pub struct VKCamera {
-    view_projection: Mat4
+    view_projection: Mat4,
 }
 
 impl RHICameraInterface for VKCamera {

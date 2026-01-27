@@ -1,8 +1,9 @@
+use std::path::Path;
+
 use shader_slang::{
     CompileTarget, CompilerOptions, GlobalSession, OptimizationLevel, Session, SessionDesc,
-    TargetDesc
+    TargetDesc,
 };
-use std::path::Path;
 
 pub struct SlangCompiler {
     session: Session,

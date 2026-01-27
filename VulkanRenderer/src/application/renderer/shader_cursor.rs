@@ -1,8 +1,9 @@
-use crate::application::renderer::shader_object::ShaderObject;
-use shader_slang::reflection::TypeLayout;
-use shader_slang::{ParameterCategory, TypeKind};
+use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
 use vulkano::buffer::BufferContents;
-use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
+
+use crate::application::renderer::{
+    rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
+};
 
 pub struct ShaderCursor<'a> {
     shader_object: &'a ShaderObject,
@@ -66,8 +67,11 @@ impl<'a> ShaderCursor<'a> {
         Some(ShaderCursor {
             shader_object: self.shader_object,
             offset: ShaderOffset {
-                byte_offset: self.offset.byte_offset + (index as usize) * element.stride(ParameterCategory::Uniform),
-                binding_array_element: self.offset.binding_array_element * (self.type_layout().element_count()? as u32) + index,
+                byte_offset: self.offset.byte_offset
+                    + (index as usize) * element.stride(ParameterCategory::Uniform),
+                binding_array_element: self.offset.binding_array_element
+                    * (self.type_layout().element_count()? as u32)
+                    + index,
                 ..self.offset
             },
             type_layout: element,

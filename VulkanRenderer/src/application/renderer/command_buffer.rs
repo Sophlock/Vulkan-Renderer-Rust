@@ -1,11 +1,9 @@
 use std::sync::Arc;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer,
-};
+
 use vulkano::{
-    command_buffer::allocator::{
-        StandardCommandBufferAllocator,
-        StandardCommandBufferAllocatorCreateInfo,
+    command_buffer::{
+        AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer,
+        allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo},
     },
     device::Device,
 };

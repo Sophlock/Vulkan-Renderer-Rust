@@ -1,12 +1,14 @@
-use asset_system::Asset;
-use asset_system::assets::{AssetHandle, AssetMetadata};
-use crate::application::assets::asset_traits::MaterialInstanceInterface;
-use crate::application::assets::material::Material;
+use asset_system::{
+    Asset,
+    assets::{AssetHandle, AssetMetadata},
+};
+
+use crate::application::assets::{asset_traits::MaterialInstanceInterface, material::Material};
 
 #[derive(Asset)]
 pub struct MaterialInstance {
     material: AssetHandle<Material>,
-    asset_metadata: AssetMetadata
+    asset_metadata: AssetMetadata,
 }
 
 impl MaterialInstanceInterface for MaterialInstance {

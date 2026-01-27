@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{DeriveInput, parse_macro_input};
 
 #[proc_macro_derive(Asset)]
 pub fn derive_asset(input: TokenStream) -> TokenStream {
@@ -26,5 +26,6 @@ pub fn derive_asset(input: TokenStream) -> TokenStream {
                 self.asset_metadata.uuid = uuid;
             }
         }
-    }.into()
+    }
+    .into()
 }
