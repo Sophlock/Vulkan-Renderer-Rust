@@ -135,7 +135,7 @@ impl Renderer {
             swapchain.format,
             GuiConfig::default(),
         ));
-        let slang_compiler = SlangCompiler::new("shaders".as_ref()); // TODO
+        let slang_compiler = SlangCompiler::new("resources/assets/materials/shaders".as_ref()); // TODO
         let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         let descriptor_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             device.clone(),
