@@ -35,7 +35,23 @@ pub struct RHIResourceManager {
 
 pub struct RHIHandle<T: RHIResource + 'static> {
     uuid: usize,
-    phantom: PhantomData<T>,
+    _phantom: PhantomData<T>,
+}
+
+macro_rules! implement_rhi_resource {
+    ($create_func:ident, $rhi_type:ident, $asset_interface:ident) => {
+        pub fn $create_func<T: $asset_interface + 'static>(
+            &mut self,
+            source: AssetHandle<T>,
+        ) -> RHIHandle<$rhi_type> {
+            let source_data = source.get(self.asset_manager()).unwrap();
+            let asset_id = source_data.asset_metadata().uuid();
+            let tex = $rhi_type::create(source_data, self.rhi().as_ref().borrow().deref());
+            let id = self.resources.add(tex);
+            self.asset_to_rhi.insert(asset_id, id);
+            RHIHandle::<$rhi_type>::new(id)
+    }
+    };
 }
 
 impl RHIResourceManager {
@@ -52,41 +68,9 @@ impl RHIResourceManager {
         self.rhi = Some(Rc::downgrade(rhi));
     }
 
-    pub fn create_texture<T: TextureInterface + 'static>(
-        &mut self,
-        source: AssetHandle<T>,
-    ) -> RHIHandle<VKTexture> {
-        let source_data = source.get(self.asset_manager()).unwrap();
-        let asset_id = source_data.asset_metadata().uuid();
-        let tex = VKTexture::create(source_data, self.rhi().as_ref().borrow().deref());
-        let id = self.resources.add(tex);
-        self.asset_to_rhi.insert(asset_id, id);
-        RHIHandle::<VKTexture>::new(id)
-    }
-
-    pub fn create_mesh<T: MeshInterface + 'static>(
-        &mut self,
-        source: AssetHandle<T>,
-    ) -> RHIHandle<VKMesh> {
-        let source_data = source.get(self.asset_manager()).unwrap();
-        let asset_id = source_data.asset_metadata().uuid();
-        let mesh = VKMesh::create(source_data, self.rhi().as_ref().borrow().deref());
-        let id = self.resources.add(mesh);
-        self.asset_to_rhi.insert(asset_id, id);
-        RHIHandle::<VKMesh>::new(id)
-    }
-
-    pub fn create_material<T: MaterialInterface + 'static>(
-        &mut self,
-        source: AssetHandle<T>,
-    ) -> RHIHandle<VKMaterial> {
-        let source_data = source.get(self.asset_manager()).unwrap();
-        let asset_id = source_data.asset_metadata().uuid();
-        let mesh = VKMaterial::create(source_data, self.rhi().as_ref().borrow().deref());
-        let id = self.resources.add(mesh);
-        self.asset_to_rhi.insert(asset_id, id);
-        RHIHandle::<VKMaterial>::new(id)
-    }
+    implement_rhi_resource!(create_texture, VKTexture, TextureInterface);
+    implement_rhi_resource!(create_mesh, VKMesh, MeshInterface);
+    implement_rhi_resource!(create_material, VKMaterial, MaterialInterface);
 
     fn rhi(&self) -> Rc<RefCell<Renderer>> {
         self.rhi.as_ref().unwrap().upgrade().unwrap()
@@ -101,7 +85,7 @@ impl<T: RHIResource + 'static> RHIHandle<T> {
     fn new(uuid: usize) -> Self {
         Self {
             uuid,
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
