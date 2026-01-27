@@ -20,7 +20,7 @@ use AssetSystem::resource_management::ResourceManager;
 use crate::application::scene::Scene;
 
 pub struct Application {
-    renderer: Option<Rc<RefCell<Renderer>>>,
+    renderer: Option<Rc<Renderer>>,
     asset_manager: Option<Arc<ResourceManager>>,
     scene: Option<VKScene>
 }
@@ -44,7 +44,7 @@ impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.asset_manager = Some(Arc::new(ResourceManager::new()));
         self.renderer = Some(Renderer::new(event_loop, self.asset_manager.as_ref().unwrap().clone()));
-        self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap().borrow_mut().deref_mut()));
+        self.scene = Some(Self::scene().rhi::<VKScene>(self.renderer.as_ref().unwrap()));
     }
 
     fn window_event(
@@ -53,11 +53,11 @@ impl ApplicationHandler for Application {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        self.renderer.as_mut().unwrap().borrow_mut().gui().update(&event);
+        self.renderer.as_ref().unwrap().gui_mut().update(&event);
         match event {
             WindowEvent::ActivationTokenDone { .. } => {}
             WindowEvent::Resized(_) => {
-                self.renderer.as_mut().unwrap().borrow_mut().recreate_swapchain()
+                self.renderer.as_ref().unwrap().mutable_state().request_recreate_swapchain()
             }
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -85,7 +85,7 @@ impl ApplicationHandler for Application {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.renderer.as_mut().unwrap().borrow_mut().redraw(self.scene.as_ref().unwrap());
+                self.renderer.as_ref().unwrap().redraw(self.scene.as_ref().unwrap());
             }
         }
     }

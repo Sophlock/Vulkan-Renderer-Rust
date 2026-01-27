@@ -1,3 +1,4 @@
+use std::cell::{Ref, RefMut};
 use AssetSystem::resource_management::{Resource, ResourceManager};
 use glam::{Mat4, Vec2, Vec3};
 use vulkano::buffer::BufferContents;
@@ -32,8 +33,8 @@ pub trait RHIInterface {
     type ModelType: RHIModelInterface;
     type SceneType: RHISceneInterface;
 
-    fn resource_manager(&self) -> &RHIResourceManager;
-    fn resource_manager_mut(&mut self) -> &mut RHIResourceManager;
+    fn resource_manager(&self) -> Ref<RHIResourceManager>;
+    fn resource_manager_mut(&self) -> RefMut<RHIResourceManager>;
 }
 
 pub trait RHIResource: Resource {
@@ -72,8 +73,8 @@ pub trait RHITextureInterface: RHIResource {
     fn create<T: TextureInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
-pub trait ModelInterface: Sized {
-    fn rhi<RHIType: RHIModelInterface>(&self, rhi: &mut RHIType::RHI) -> RHIType {
+pub trait ModelInterface: Asset {
+    fn rhi<RHIType: RHIModelInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }
 
@@ -85,9 +86,9 @@ pub trait ModelInterface: Sized {
     fn material(&self) -> AssetHandle<Self::MaterialType>;
 }
 
-pub trait RHIModelInterface {
+pub trait RHIModelInterface : RHIResource {
     type RHI: RHIInterface;
-    fn create<T: ModelInterface>(source: &T, rhi: &mut Self::RHI) -> Self;
+    fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
 pub trait CameraInterface: Sized {
@@ -107,14 +108,14 @@ pub trait SceneInterface: Sized {
     type CameraType: CameraInterface;
     fn models(&self) -> &Vec<Self::ModelType>;
     fn camera(&self) -> &Self::CameraType;
-    fn rhi<RHIType: RHISceneInterface>(&self, rhi: &mut RHIType::RHI) -> RHIType {
+    fn rhi<RHIType: RHISceneInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }
 }
 
 pub trait RHISceneInterface {
     type RHI: RHIInterface;
-    fn create<T: SceneInterface>(source: &T, rhi: &mut Self::RHI) -> Self;
+    fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI) -> Self;
 }
 
 pub trait MaterialInterface: Asset {
