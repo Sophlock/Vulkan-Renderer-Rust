@@ -1,6 +1,7 @@
+use crate::application::assets::asset_traits::Vertex;
+use crate::application::renderer::pipeline::graphics_pipeline;
 use crate::application::renderer::rhi_assets::vulkan_texture::VKTexture;
 use crate::application::renderer::shader_cursor::{ShaderOffset, ShaderSize};
-use crate::application::renderer::pipeline::graphics_pipeline;
 use shader_slang::reflection::{TypeLayout, VariableLayout};
 use shader_slang::{BindingType, ParameterCategory};
 use std::collections::BTreeMap;
@@ -14,22 +15,20 @@ use vulkano::descriptor_set::pool::{
     DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
 };
 use vulkano::descriptor_set::{DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet};
+use vulkano::device::DeviceOwned;
 use vulkano::image::ImageLayout;
-use vulkano::memory::allocator::{
-    AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter,
-};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter};
 use vulkano::shader::ShaderStages;
 use vulkano::sync::Sharing;
 use vulkano::{
+    DeviceSize,
     device::Device,
     pipeline::{
-        graphics::subpass::PipelineSubpassType, layout::PipelineLayoutCreateInfo, DynamicState, GraphicsPipeline,
-        PipelineLayout,
+        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
+        layout::PipelineLayoutCreateInfo,
     },
     render_pass::RenderPass,
-    DeviceSize,
 };
-use crate::application::assets::asset_traits::Vertex;
 
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
@@ -42,7 +41,6 @@ pub struct ShaderObjectLayout {
 
 pub struct ShaderObject {
     layout: Arc<ShaderObjectLayout>,
-    pipeline: Arc<GraphicsPipeline>,
     descriptor_sets: Vec<Arc<DescriptorSet>>,
     uniform_buffer: Option<Subbuffer<[u8]>>,
     type_layout: *const TypeLayout,
@@ -124,8 +122,7 @@ impl ShaderObjectLayout {
             existential_sizes,
             existential_offsets,
             type_layout,
-        }
-        .into()
+        }.into()
     }
 
     fn map_descriptor_type(binding_type: BindingType) -> DescriptorType {
@@ -252,18 +249,22 @@ impl ShaderObjectLayout {
             .unwrap_or(0);
         last_size + last_offset
     }
+
+    pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
+        &self.pipeline_layout
+    }
+
+    pub fn device(&self) -> &Arc<Device> {
+        &self.pipeline_layout.device()
+    }
 }
 
 impl ShaderObject {
     pub fn new(
-        device: &Arc<Device>,
-        render_pass: Arc<RenderPass>,
         layout: Arc<ShaderObjectLayout>,
         descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
         buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: u32,
-        vert_spriv: &[u32],
-        frag_spriv: &[u32],
     ) -> Self {
         let type_layout = layout
             .type_layout()
@@ -310,27 +311,7 @@ impl ShaderObject {
             })
             .collect();
 
-        let pipeline = graphics_pipeline()
-            .input_assembly(None, None)
-            .vertex_shader(device.clone(), vert_spriv)
-            .vertex_input::<Vertex>()
-            .rasterizer(None, None, None, None, None, None)
-            .skip_multisample()
-            .fragment_shader(device.clone(), frag_spriv)
-            .opaque_color_blend()
-            .default_depth_test()
-            .build_pipeline(
-                device.clone(),
-                layout.pipeline_layout.clone(),
-                PipelineSubpassType::BeginRenderPass(render_pass.first_subpass()),
-                [
-                    DynamicState::ViewportWithCount,
-                    DynamicState::ScissorWithCount,
-                ]
-                .into(),
-            );
         Self {
-            pipeline,
             descriptor_sets,
             uniform_buffer,
             type_layout,
@@ -339,7 +320,7 @@ impl ShaderObject {
     }
 
     fn device(&self) -> &Arc<Device> {
-        self.pipeline.device()
+        self.layout.device()
     }
 
     pub fn type_layout(&self) -> &TypeLayout {
@@ -353,7 +334,7 @@ impl ShaderObject {
     pub fn write_data<T: BufferContents + Clone>(&self, offset: ShaderOffset, data: &T) {
         let mut content = self.uniform_buffer.as_ref().unwrap().write().unwrap();
         let pos = (&mut content[offset.byte_offset] as *mut u8).cast::<T>();
-        unsafe {*pos = data.clone()};
+        unsafe { *pos = data.clone() };
     }
 
     pub fn write_texture(&self, offset: ShaderOffset, texture: &VKTexture) {
@@ -376,4 +357,8 @@ impl ShaderObject {
             .iter()
             .for_each(|set| unsafe { set.update_by_ref(writes.clone(), []) }.unwrap());
     }
+    
+    pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
+        self.descriptor_sets.as_slice()
+    } 
 }

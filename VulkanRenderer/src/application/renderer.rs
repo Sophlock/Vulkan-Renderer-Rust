@@ -13,30 +13,36 @@ mod shader_object;
 mod shaders;
 mod swapchain;
 
-use std::cell::{Ref, RefCell, RefMut};
-use std::rc::Rc;
-use super::assets::asset_traits::RHIInterface;
+use super::assets::asset_traits::{RHIInterface, RHIModelInterface, RHISceneInterface};
+use crate::application::renderer::rhi_assets::RHIResourceManager;
 use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
+use crate::application::renderer::rhi_assets::vulkan_material::VKMaterial;
+use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
 use crate::application::renderer::rhi_assets::vulkan_scene::VKScene;
 use crate::application::renderer::shaders::SlangCompiler;
+use AssetSystem::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig, egui};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
-use smallvec::smallvec;
-use std::sync::Arc;
 use shader_slang::TypeKind::Resource;
+use smallvec::smallvec;
+use std::cell::{Ref, RefCell, RefMut};
+use std::ops::Deref;
+use std::rc::Rc;
+use std::sync::Arc;
 use swapchain::Swapchain;
 use vulkano::descriptor_set::allocator::{
     DescriptorSetAllocator, StandardDescriptorSetAllocator,
     StandardDescriptorSetAllocatorCreateInfo,
 };
 use vulkano::memory::allocator::MemoryAllocator;
+use vulkano::pipeline::PipelineBindPoint;
 use vulkano::{
-    Validated, ValidationError, VulkanError, VulkanLibrary,
+    DeviceSize, Validated, ValidationError, VulkanError, VulkanLibrary,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
@@ -59,8 +65,6 @@ use vulkano::{
     sync::{GpuFuture, Sharing, future::FenceSignalFuture},
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
-use crate::application::renderer::rhi_assets::RHIResourceManager;
-use AssetSystem::resource_management::ResourceManager;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -86,7 +90,7 @@ pub struct Renderer {
     slang_compiler: SlangCompiler,
     buffer_allocator: Arc<dyn MemoryAllocator>,
     descriptor_allocator: Arc<dyn DescriptorSetAllocator>,
-    resource_manager: RefCell<RHIResourceManager>
+    resource_manager: RefCell<RHIResourceManager>,
 }
 
 impl Renderer {
@@ -159,7 +163,7 @@ impl Renderer {
             slang_compiler,
             buffer_allocator,
             descriptor_allocator,
-            resource_manager
+            resource_manager,
         });
         result.resource_manager.borrow_mut().register_rhi(&result);
         result
@@ -174,7 +178,8 @@ impl Renderer {
         if self.mutable_state_const().should_recreate_swapchain {
             self.mutable_state().recreate_swapchain_internal(self);
         }
-        self.mutable_state_const().in_flight_future
+        self.mutable_state_const()
+            .in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
 
@@ -225,7 +230,8 @@ impl Renderer {
 
         let gui_draw_future = self.gui_mut().draw_on_image(
             draw_finished_future,
-            self.mutable_state_const().swapchain
+            self.mutable_state_const()
+                .swapchain
                 .image_view(swapchain_image_index as usize)
                 .clone(),
         );
@@ -271,7 +277,9 @@ impl Renderer {
                         Some(ClearValue::DepthStencil((1.0, 0))),
                     ],
                     render_pass: self.render_pass.clone(),
-                    ..RenderPassBeginInfo::framebuffer(self.mutable_state_const().framebuffers[image_index].clone())
+                    ..RenderPassBeginInfo::framebuffer(
+                        self.mutable_state_const().framebuffers[image_index].clone(),
+                    )
                 },
                 SubpassBeginInfo {
                     contents: SubpassContents::Inline,
@@ -280,13 +288,46 @@ impl Renderer {
             )?
             .set_viewport_with_count(smallvec![Viewport {
                 offset: [0., 0.],
-                extent: self.mutable_state_const().swapchain.extent.map(|u| u as f32),
+                extent: self
+                    .mutable_state_const()
+                    .swapchain
+                    .extent
+                    .map(|u| u as f32),
                 depth_range: 0.0f32..=1.0f32,
             }])?
             .set_scissor_with_count(smallvec![Scissor {
                 offset: [0, 0],
                 extent: self.mutable_state_const().swapchain.extent,
-            }])?
+            }])?;
+
+        let resources = self.resource_manager();
+        let rcs = resources.deref();
+
+        scene
+            .models()
+            .iter()
+            .map(|model| {
+                let material_instance = model.material().get(rcs).unwrap();
+                let material = material_instance.material().get(rcs).unwrap();
+                let mesh = model.mesh().get(rcs).unwrap();
+
+                command_buffer
+                    .bind_pipeline_graphics(material.pipeline().clone())?
+                    .bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        material.pipeline_layout().clone(),
+                        0,
+                        material_instance.descriptor_sets()[image_index].clone(),
+                    )?
+                    .bind_vertex_buffers(0, mesh.vertex().clone())?
+                    .bind_index_buffer(mesh.index().reinterpret_ref::<[u32]>().clone())?;
+                unsafe { command_buffer.draw_indexed(mesh.index().len() as u32, 1, 0, 0, 0) }
+                    .map(|_| ())
+            })
+            .reduce(Result::or)
+            .unwrap_or(Ok(()))?;
+
+        command_buffer
             .end_render_pass(SubpassEndInfo::default())
             .map(|_| ())
     }
@@ -414,6 +455,8 @@ impl Renderer {
 impl RHIInterface for Renderer {
     type MeshType = VKMesh;
     type TextureType = VKTexture;
+    type MaterialType = VKMaterial;
+    type MaterialInstanceType = VKMaterialInstance;
     type CameraType = VKCamera;
     type ModelType = VKModel;
     type SceneType = VKScene;

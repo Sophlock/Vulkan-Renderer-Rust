@@ -4,12 +4,13 @@ use crate::application::assets::{material::Material, mesh::Mesh};
 use egui_winit_vulkano::egui::Ui;
 use AssetSystem::Asset;
 use AssetSystem::assets::{AssetHandle, AssetMetadata};
+use crate::application::assets::material_instance::MaterialInstance;
 
 #[derive(Asset)]
 pub struct Model {
     pub transform: Transform,
     pub mesh: AssetHandle<Mesh>,
-    pub material: AssetHandle<Material>,
+    pub material: AssetHandle<MaterialInstance>,
     asset_metadata: AssetMetadata
 }
 
@@ -19,7 +20,7 @@ impl Model {
 
 impl ModelInterface for Model {
     type MeshType = Mesh;
-    type MaterialType = Material;
+    type MaterialType = MaterialInstance;
 
     fn transform(&self) -> Transform {
         self.transform.clone()
@@ -29,7 +30,7 @@ impl ModelInterface for Model {
         self.mesh.clone()
     }
 
-    fn material(&self) -> AssetHandle<Material> {
+    fn material(&self) -> AssetHandle<MaterialInstance> {
         self.material.clone()
     }
 }

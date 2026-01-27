@@ -1,4 +1,4 @@
-use crate::application::assets::asset_traits::{CameraInterface, ModelInterface, RHISceneInterface, SceneInterface};
+use crate::application::assets::asset_traits::{CameraInterface, ModelInterface, RHIInterface, RHISceneInterface, SceneInterface};
 use crate::application::renderer::Renderer;
 use crate::application::renderer::rhi_assets::vulkan_camera::VKCamera;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
@@ -18,5 +18,9 @@ impl RHISceneInterface for VKScene {
             .map(|model| model.rhi::<VKModel>(rhi))
             .collect();
         Self { models, camera: source.camera().rhi(rhi) }
+    }
+
+    fn models(&self) -> &[VKModel] {
+        self.models.as_slice()
     }
 }

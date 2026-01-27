@@ -1,31 +1,35 @@
-use crate::application::assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource};
+use crate::application::assets::asset_traits::{
+    MaterialInterface, RHIMaterialInterface, RHIResource, Vertex,
+};
 use crate::application::renderer::Renderer;
+use crate::application::renderer::pipeline::graphics_pipeline;
 use crate::{
     application::renderer::shader_object::{ShaderObject, ShaderObjectLayout},
     application::renderer::shaders::SlangCompiler,
 };
+use AssetSystem::resource_management::Resource;
 use shader_slang::structs::specialization_arg::SpecializationArg;
 use shader_slang::{Blob, ComponentType, Error, IUnknown, LayoutRules};
 use std::{ops::Deref, sync::Arc};
-use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
 use vulkano::descriptor_set::allocator::DescriptorSetAllocator;
 use vulkano::memory::allocator::MemoryAllocator;
-use AssetSystem::resource_management::Resource;
+use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
+use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineLayout};
+use vulkano::{device::Device, render_pass::RenderPass, shader::spirv::bytes_to_words};
 
 pub struct VKMaterial {
-    shader_object: ShaderObject,
     vert_spirv: Blob,
     frag_spirv: Blob,
-    uuid: usize
+    shader_object_layout: Arc<ShaderObjectLayout>,
+    pipeline: Arc<GraphicsPipeline>,
+    uuid: usize,
 }
 
 impl VKMaterial {
-    pub fn new(
+    fn new(
         compiler: &SlangCompiler,
         device: &Arc<Device>,
         render_pass: Arc<RenderPass>,
-        descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
-        buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: usize,
         module_name: &str,
         material_name: &str,
@@ -40,33 +44,53 @@ impl VKMaterial {
             .unwrap();
         let specialized = composed.specialize(&[SpecializationArg::new(material_reflection)])?;
 
-        let existential_objects = [specialized.layout(0)?.type_layout(material_reflection, LayoutRules::Default).unwrap()];
+        let existential_objects = [specialized
+            .layout(0)?
+            .type_layout(material_reflection, LayoutRules::Default)
+            .unwrap()];
 
         let linked = specialized.link()?;
         let vert_spirv = linked.entry_point_code(0, 0)?;
         let frag_spirv = linked.entry_point_code(1, 0)?;
-        let shader_object_layout =
-            ShaderObjectLayout::new(specialized.layout(0)?.global_params_var_layout().unwrap(),
-                                    existential_objects.as_slice(),
-                                    in_flight_frames as u32,
-                                    device);
-
-        let shader_object = ShaderObject::new(
-            device,
-            render_pass,
-            shader_object_layout,
-            descriptor_allocator,
-            buffer_allocator,
+        let shader_object_layout = ShaderObjectLayout::new(
+            specialized.layout(0)?.global_params_var_layout().unwrap(),
+            existential_objects.as_slice(),
             in_flight_frames as u32,
-            bytes_to_words(vert_spirv.as_slice()).unwrap().deref(),
-            bytes_to_words(frag_spirv.as_slice()).unwrap().deref(),
+            device,
         );
 
+        let pipeline = graphics_pipeline()
+            .input_assembly(None, None)
+            .vertex_shader(
+                device.clone(),
+                bytes_to_words(vert_spirv.as_slice()).unwrap().deref(),
+            )
+            .vertex_input::<Vertex>()
+            .rasterizer(None, None, None, None, None, None)
+            .skip_multisample()
+            .fragment_shader(
+                device.clone(),
+                bytes_to_words(frag_spirv.as_slice()).unwrap().deref(),
+            )
+            .opaque_color_blend()
+            .default_depth_test()
+            .build_pipeline(
+                device.clone(),
+                shader_object_layout.pipeline_layout().clone(),
+                PipelineSubpassType::BeginRenderPass(render_pass.first_subpass()),
+                [
+                    DynamicState::ViewportWithCount,
+                    DynamicState::ScissorWithCount,
+                ]
+                .into(),
+            );
+
         Ok(Self {
-            shader_object,
+            shader_object_layout,
+            pipeline,
             vert_spirv,
             frag_spirv,
-            uuid: 0
+            uuid: 0,
         })
     }
 
@@ -87,6 +111,18 @@ impl VKMaterial {
             vertex_main.into(),
             fragment_main.into(),
         ])
+    }
+    
+    pub fn shader_object_layout(&self) -> &Arc<ShaderObjectLayout> {
+        &self.shader_object_layout
+    }
+    
+    pub fn pipeline(&self) -> &Arc<GraphicsPipeline> {
+        &self.pipeline
+    }
+    
+    pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
+        self.shader_object_layout.pipeline_layout()
     }
 }
 
@@ -110,8 +146,6 @@ impl RHIMaterialInterface for VKMaterial {
             &rhi.slang_compiler,
             &rhi.device,
             rhi.render_pass.clone(),
-            &rhi.descriptor_allocator,
-            &rhi.buffer_allocator,
             rhi.frames_in_flight,
             source.module(),
             source.material(),

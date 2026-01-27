@@ -1,3 +1,4 @@
+use crate::application::assets::asset_traits::{MaterialInstanceInterface, RHIMaterialInstanceInterface};
 use crate::application::assets::asset_traits::RHIModelInterface;
 use crate::application::{
     assets::asset_traits::{
@@ -20,6 +21,7 @@ use std::{
 use AssetSystem::assets::AssetHandle;
 use AssetSystem::resource_management::ResourceManager;
 use crate::application::assets::asset_traits::ModelInterface;
+use crate::application::renderer::rhi_assets::vulkan_material_instance::VKMaterialInstance;
 use crate::application::renderer::rhi_assets::vulkan_model::VKModel;
 
 pub mod vulkan_camera;
@@ -28,6 +30,7 @@ pub mod vulkan_mesh;
 pub mod vulkan_model;
 pub mod vulkan_scene;
 pub mod vulkan_texture;
+pub mod vulkan_material_instance;
 
 pub struct RHIResourceManager {
     resources: ResourceManager,
@@ -74,6 +77,7 @@ impl RHIResourceManager {
     implement_rhi_resource!(create_texture, VKTexture, TextureInterface);
     implement_rhi_resource!(create_mesh, VKMesh, MeshInterface);
     implement_rhi_resource!(create_material, VKMaterial, MaterialInterface);
+    implement_rhi_resource!(create_material_instance, VKMaterialInstance, MaterialInstanceInterface);
     implement_rhi_resource!(create_model, VKModel, ModelInterface);
 
     fn rhi(&self) -> Rc<Renderer> {
@@ -93,7 +97,16 @@ impl<T: RHIResource + 'static> RHIHandle<T> {
         }
     }
 
-    fn get<'a>(&self, manager: &'a RHIResourceManager) -> Option<&'a T> {
+    pub fn get<'a>(&self, manager: &'a RHIResourceManager) -> Option<&'a T> {
         manager.resources.get::<T>(self.uuid)
+    }
+}
+
+impl<T: RHIResource> Clone for RHIHandle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            uuid: self.uuid,
+            _phantom: PhantomData
+        }
     }
 }

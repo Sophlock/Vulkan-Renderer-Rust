@@ -49,6 +49,14 @@ impl VKMesh {
             uuid: 0,
         }
     }
+    
+    pub fn vertex(&self) -> &Subbuffer<[Vertex]> {
+        &self.vertex_buffer
+    }
+    
+    pub fn index(&self) -> &Subbuffer<[Index]> {
+        &self.index_buffer
+    }
 }
 
 impl Resource for VKMesh {
