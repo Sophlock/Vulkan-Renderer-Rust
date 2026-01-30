@@ -9,6 +9,8 @@ pub struct Camera {
     pub aspect: f32,
     pub near: f32,
     pub far: f32,
+    pub speed: f32,
+    pub rot_speed: f32,
 }
 
 impl Camera {
@@ -19,6 +21,7 @@ impl Camera {
             aspect,
             near,
             far,
+            ..Self::default()
         }
     }
 }
@@ -43,6 +46,8 @@ impl Default for Camera {
             aspect: 16.0 / 9.0,
             near: 0.001,
             far: 100000.0,
+            speed: 0.5,
+            rot_speed: 0.1,
         }
     }
 }

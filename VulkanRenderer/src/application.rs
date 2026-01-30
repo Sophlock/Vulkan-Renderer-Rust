@@ -124,33 +124,46 @@ impl Application {
 
         let mouse_move = self.input.dir(MouseLeft, MouseRight, MouseUp, MouseDown);
         let cam_move = self.input.dir(Forward, Back, Right, Left);
+        let scroll = self.input.axis(ScrollUp, ScrollDown);
 
         let mut cam_euler = self.scene.camera.transform.rotation.to_euler(EulerRot::YXZ);
         cam_euler.2 = 0.;
 
-        if self.input.pressing(BothClick) {
-            let right = self.scene.camera.transform.right();
-            let up = self.scene.camera.transform.up();
-            self.scene.camera.transform.location +=
-                (right * mouse_move.0 + up * mouse_move.1) * 0.5;
-        } else if self.input.pressing(LeftClick) {
-            let forward = self.scene.camera.transform.forward();
+        let left = self.input.pressing(LeftClick);
+        let right = self.input.pressing(RightClick);
+        let both = self.input.pressing(BothClick);
+
+        let cam = &mut self.scene.camera;
+
+        if both {
+            let right = cam.transform.right();
+            let up = cam.transform.up();
+            cam.transform.location +=
+                (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
+        } else if left {
+            let forward = cam.transform.forward();
             let forward_proj = forward.with_y(0.).normalize();
 
-            self.scene.camera.transform.location += forward_proj * mouse_move.1;
+            cam.transform.location += forward_proj * mouse_move.1;
             cam_euler.0 += mouse_move.0 * 0.1;
-        } else if self.input.pressing(RightClick) {
-            cam_euler.0 += mouse_move.0 * 0.1;
-            cam_euler.1 -= mouse_move.1 * 0.1;
+        } else if right {
+            cam_euler.0 += mouse_move.0 * cam.rot_speed;
+            cam_euler.1 -= mouse_move.1 * cam.rot_speed;
         }
 
-        if self.input.pressing(LeftClick) || self.input.pressing(RightClick) {
-            let forward = self.scene.camera.transform.forward();
-            let right = self.scene.camera.transform.right();
+        if left || right {
+            let forward = cam.transform.forward();
+            let right = cam.transform.right();
             let vertical = self.input.axis(Up, Down);
 
-            self.scene.camera.transform.location +=
-                (forward * cam_move.0 + right * cam_move.1 - Vec3::Y * vertical) * 0.1;
+            cam.transform.location +=
+                (forward * cam_move.0 + right * cam_move.1 - Vec3::Y * vertical) * cam.speed * 0.2;
+
+            cam.speed += scroll * 0.01;
+            cam.speed = cam.speed.max(0.);
+        }
+        else {
+            cam.fov += scroll * cam.speed * 0.1;
         }
 
         cam_euler.1 = cam_euler.1.clamp(-1.5, 1.5);
