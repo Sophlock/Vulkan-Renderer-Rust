@@ -105,10 +105,13 @@ pub trait RHIModelInterface: RHIResource {
     fn material(
         &self,
     ) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MaterialInstanceType>;
+    
+    fn transform(&self) -> Mat4;
 }
 
 pub trait CameraInterface: Sized {
     fn view_projection(&self) -> Mat4;
+    fn transform(&self) -> Transform;
     fn rhi<RHIType: RHICameraInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
     }
@@ -117,6 +120,9 @@ pub trait CameraInterface: Sized {
 pub trait RHICameraInterface {
     type RHI: RHIInterface;
     fn create<T: CameraInterface>(source: &T, rhi: &Self::RHI) -> Self;
+    
+    fn view_projection(&self) -> Mat4;
+    fn location(&self) -> Vec3;
 }
 
 pub trait SceneInterface: Sized {
@@ -133,6 +139,7 @@ pub trait RHISceneInterface {
     type RHI: RHIInterface;
     fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
     fn models(&self) -> &[<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType];
+    fn camera(&self) -> &<<Self as RHISceneInterface>::RHI as RHIInterface>::CameraType;
 }
 
 pub trait MaterialInterface: Asset {

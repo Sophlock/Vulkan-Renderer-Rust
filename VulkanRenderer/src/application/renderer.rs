@@ -62,7 +62,7 @@ use vulkano::{
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
 
-use super::assets::asset_traits::{RHIInterface, RHIModelInterface, RHISceneInterface};
+use super::assets::asset_traits::{RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface};
 use crate::application::renderer::{
     rhi_assets::{
         RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
@@ -323,6 +323,17 @@ impl Renderer {
                 let material_instance = model.material().get(rcs).unwrap();
                 let material = material_instance.material().get(rcs).unwrap();
                 let mesh = model.mesh().get(rcs).unwrap();
+
+                let cursor = material_instance.shader_cursor();
+                let model_cursor = cursor.field("gModelData").unwrap();
+                model_cursor.field("modelTransform").unwrap().write(&model.transform());
+                model_cursor.field("inverseTransposeModelTransform").unwrap().write(&model.transform().transpose().inverse());
+
+                let view_cursor = cursor.field("gViewData").unwrap();
+                view_cursor.field("viewPosition").unwrap().write(&scene.camera().location());
+                view_cursor.field("viewProjection").unwrap().write(&scene.camera().view_projection());
+                let ev = 1f32;
+                view_cursor.field("exposureValue").unwrap().write(&ev);
 
                 command_buffer
                     .bind_pipeline_graphics(material.pipeline().clone())?

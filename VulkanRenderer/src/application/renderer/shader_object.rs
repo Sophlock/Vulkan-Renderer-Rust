@@ -280,7 +280,7 @@ impl ShaderObject {
             ..BufferCreateInfo::default()
         };
         let alloc_info = AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..AllocationCreateInfo::default()
         };
 

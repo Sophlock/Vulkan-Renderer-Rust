@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use std::{rc::Rc, sync::Arc};
 use std::cell::RefCell;
 use std::ops::DerefMut;
+use glam::Vec3;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::WindowId,
@@ -67,6 +68,7 @@ impl Application {
                 _phantom: PhantomData,
             },
         ));
+        scene.camera.transform.location = Vec3::new(-1., 0., 0.);
         scene
     }
 }

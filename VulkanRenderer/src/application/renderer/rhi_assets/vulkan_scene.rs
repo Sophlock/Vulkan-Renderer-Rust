@@ -5,7 +5,7 @@ use crate::application::{
         rhi_assets::{vulkan_camera::VKCamera, vulkan_model::VKModel},
     },
 };
-use crate::application::assets::asset_traits::RHIModelInterface;
+use crate::application::assets::asset_traits::{RHIInterface, RHIModelInterface};
 use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKScene {
@@ -30,5 +30,9 @@ impl RHISceneInterface for VKScene {
 
     fn models(&self) -> &[VKModel] {
         self.models.as_slice()
+    }
+
+    fn camera(&self) -> &VKCamera {
+        &self.camera
     }
 }

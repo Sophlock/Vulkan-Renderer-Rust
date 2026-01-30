@@ -52,4 +52,8 @@ impl RHIModelInterface for VKModel {
     fn material(&self) -> RHIHandle<VKMaterialInstance> {
         self.material.clone()
     }
+
+    fn transform(&self) -> Mat4 {
+        self.transform
+    }
 }

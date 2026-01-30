@@ -53,8 +53,8 @@ impl VKMaterialInstance {
         self.material.clone()
     }
 
-    pub fn shader_cursor(&mut self) -> ShaderCursor {
-        ShaderCursor::new(&mut self.shader_object)
+    pub fn shader_cursor(&self) -> ShaderCursor {
+        ShaderCursor::new(&self.shader_object)
     }
 
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {

@@ -24,7 +24,7 @@ pub struct ShaderOffset {
 }
 
 impl<'a> ShaderCursor<'a> {
-    pub fn new(source: &'a mut ShaderObject) -> Self {
+    pub fn new(source: &'a ShaderObject) -> Self {
         Self {
             shader_object: source,
             offset: ShaderOffset::default(),

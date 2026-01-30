@@ -27,6 +27,10 @@ impl CameraInterface for Camera {
     fn view_projection(&self) -> Mat4 {
         Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far) * self.transform.matrix()
     }
+
+    fn transform(&self) -> Transform {
+        self.transform
+    }
 }
 
 impl Default for Camera {
