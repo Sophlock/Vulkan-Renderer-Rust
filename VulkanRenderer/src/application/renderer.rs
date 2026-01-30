@@ -375,7 +375,7 @@ impl Renderer {
     fn create_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
         let window_attributes = Window::default_attributes()
             .with_title("Vulkan renderer")
-            .with_inner_size(winit::dpi::LogicalSize::new(800.0, 600.0));
+            .with_inner_size(winit::dpi::LogicalSize::new(1920.0, 1080.0));
 
         let window = event_loop.create_window(window_attributes).unwrap().into();
         window
@@ -489,6 +489,10 @@ impl Renderer {
     }
     pub fn mutable_state(&self) -> RefMut<MutableRenderState> {
         self.mutable_state.borrow_mut()
+    }
+
+    pub fn window(&self) -> &Window {
+        self.window.as_ref()
     }
 }
 

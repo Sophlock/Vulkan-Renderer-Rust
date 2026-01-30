@@ -25,7 +25,9 @@ impl Camera {
 
 impl CameraInterface for Camera {
     fn view_projection(&self) -> Mat4 {
-        Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far) * self.transform.matrix()
+        let mut persp = Mat4::perspective_rh(self.fov.to_radians(), self.aspect, self.near, self.far);
+        persp.w_axis.w *= -1.0;
+        persp * self.transform.matrix().inverse()
     }
 
     fn transform(&self) -> Transform {

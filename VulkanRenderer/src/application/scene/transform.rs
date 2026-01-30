@@ -20,7 +20,20 @@ impl Default for Transform {
 
 impl Transform {
     pub fn matrix(&self) -> Mat4 {
+        //Mat4::from_translation(self.location) * Mat4::from_quat(self.rotation) * Mat4::from_scale(self.scale)
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.location)
+    }
+
+    pub fn forward(&self) -> Vec3 {
+        self.rotation * Vec3::NEG_Z
+    }
+
+    pub fn right(&self) -> Vec3 {
+        self.rotation * Vec3::X
+    }
+
+    pub fn up(&self) -> Vec3 {
+        self.rotation * Vec3::Y
     }
 }
 

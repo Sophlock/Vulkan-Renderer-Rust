@@ -274,7 +274,7 @@ impl ShaderObject {
             ..AllocationCreateInfo::default()
         };
 
-        // TODO: Expose option to make this buffer be host visible
+        // TODO: Expose option to make this buffer be host visible and use staging setup
         let ordinary_size = layout.ordinary_data_size();
         let uniform_buffer = if ordinary_size > 0 {
             Some(

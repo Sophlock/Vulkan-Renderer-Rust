@@ -54,10 +54,15 @@ macro_rules! implement_rhi_resource {
             let asset_manager = asset_manager_arc.borrow();
             let source_data = source.get(asset_manager.deref()).unwrap();
             let asset_id = source_data.asset_metadata().uuid();
-            let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref(), self);
-            let id = self.resources.add(new_rhi);
-            self.asset_to_rhi.insert(asset_id, id);
-            RHIHandle::<$rhi_type>::new(id)
+            if let Some(id) = self.asset_to_rhi.get(&asset_id) {
+                RHIHandle::<$rhi_type>::new(id.clone())
+            }
+            else {
+                let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref(), self);
+                let id = self.resources.add(new_rhi);
+                self.asset_to_rhi.insert(asset_id, id);
+                RHIHandle::<$rhi_type>::new(id)
+            }
         }
     };
 }
