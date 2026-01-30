@@ -22,7 +22,12 @@ impl Model {
 }
 
 impl Model {
-    pub fn new(name: String, transform: Transform, mesh: AssetHandle<Mesh>, material: AssetHandle<MaterialInstance>) -> Self {
+    pub fn new(
+        name: String,
+        transform: Transform,
+        mesh: AssetHandle<Mesh>,
+        material: AssetHandle<MaterialInstance>,
+    ) -> Self {
         Self {
             transform,
             mesh,

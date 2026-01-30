@@ -1,11 +1,12 @@
-use std::ops::Deref;
 use std::{
+    cell::{Ref, RefCell},
     collections::HashMap,
     marker::PhantomData,
+    ops::Deref,
     rc::{Rc, Weak},
     sync::Arc,
 };
-use std::cell::{Ref, RefCell};
+
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 
 use crate::application::{

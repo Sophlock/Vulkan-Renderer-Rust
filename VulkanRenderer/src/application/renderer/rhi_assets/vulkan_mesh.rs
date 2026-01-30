@@ -9,9 +9,11 @@ use vulkano::{
 
 use crate::application::{
     assets::asset_traits::{Index, MeshInterface, RHIMeshInterface, RHIResource, Vertex},
-    renderer::{Renderer, buffer::buffer_from_slice, command_buffer::CommandBufferInterface},
+    renderer::{
+        Renderer, buffer::buffer_from_slice, command_buffer::CommandBufferInterface,
+        rhi_assets::RHIResourceManager,
+    },
 };
-use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKMesh {
     vertex_buffer: Subbuffer<[Vertex]>,
@@ -76,7 +78,11 @@ impl RHIResource for VKMesh {
 impl RHIMeshInterface for VKMesh {
     type RHI = Renderer;
 
-    fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
+    fn create<T: MeshInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        _: &mut RHIResourceManager,
+    ) -> Self {
         Self::new(
             source,
             &rhi.buffer_allocator,

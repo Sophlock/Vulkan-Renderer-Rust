@@ -2,26 +2,26 @@ mod assets;
 mod renderer;
 mod scene;
 
-use crate::application::assets::material::Material;
-use crate::application::assets::material_instance::MaterialInstance;
-use crate::application::assets::mesh::Mesh;
-use crate::application::scene::model::Model;
-use crate::application::scene::transform::Transform;
-use crate::application::{renderer::rhi_assets::vulkan_scene::VKScene, scene::Scene};
-use asset_system::assets::AssetHandle;
-use asset_system::resource_management::ResourceManager;
-use assets::asset_traits::SceneInterface;
-use renderer::Renderer;
-use std::marker::PhantomData;
-use std::{rc::Rc, sync::Arc};
-use std::cell::RefCell;
-use std::ops::DerefMut;
+use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
+
+use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 use glam::Vec3;
+use renderer::Renderer;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::WindowId,
 };
-use crate::application::assets::asset_traits::{RHIInterface, RHISceneInterface};
+
+use crate::application::{
+    assets::{
+        asset_traits::{RHIInterface, RHISceneInterface},
+        material::Material,
+        material_instance::MaterialInstance,
+        mesh::Mesh,
+    },
+    renderer::rhi_assets::vulkan_scene::VKScene,
+    scene::{Scene, model::Model, transform::Transform},
+};
 
 pub struct Application {
     renderer: Option<Rc<Renderer>>,
@@ -61,10 +61,7 @@ impl Application {
                 _phantom: PhantomData,
             },
             AssetHandle::<MaterialInstance> {
-                uuid: asset_manager.add(MaterialInstance::new(
-                    "TestMatInst".into(),
-                    material
-                )),
+                uuid: asset_manager.add(MaterialInstance::new("TestMatInst".into(), material)),
                 _phantom: PhantomData,
             },
         ));
@@ -81,7 +78,11 @@ impl ApplicationHandler for Application {
             self.asset_manager.as_ref().unwrap().clone(),
         ));
         let rhi = self.renderer.as_ref().unwrap();
-        self.scene = Some(VKScene::create(&self.scene(), rhi, rhi.resource_manager_mut().deref_mut()));
+        self.scene = Some(VKScene::create(
+            &self.scene(),
+            rhi,
+            rhi.resource_manager_mut().deref_mut(),
+        ));
     }
 
     fn window_event(

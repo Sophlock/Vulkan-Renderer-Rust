@@ -2,15 +2,15 @@ use asset_system::resource_management::Resource;
 use glam::Mat4;
 
 use crate::application::{
-    assets::asset_traits::{ModelInterface, RHIInterface, RHIModelInterface, RHIResource},
+    assets::asset_traits::{ModelInterface, RHIModelInterface, RHIResource},
     renderer::{
-        Renderer,
         rhi_assets::{
-            RHIHandle, vulkan_material_instance::VKMaterialInstance, vulkan_mesh::VKMesh,
+            vulkan_material_instance::VKMaterialInstance, vulkan_mesh::VKMesh, RHIHandle,
+            RHIResourceManager,
         },
+        Renderer,
     },
 };
-use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKModel {
     transform: Mat4,
@@ -34,7 +34,11 @@ impl Resource for VKModel {
 impl RHIModelInterface for VKModel {
     type RHI = Renderer;
 
-    fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
+    fn create<T: ModelInterface>(
+        source: &T,
+        _: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self {
         let mesh = source.mesh();
         let material = source.material();
         Self {

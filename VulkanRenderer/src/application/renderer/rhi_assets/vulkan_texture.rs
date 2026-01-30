@@ -1,30 +1,29 @@
 use std::{cmp::max, sync::Arc};
 
-use asset_system::resource_management::{Resource, ResourceManager};
+use asset_system::resource_management::Resource;
 use smallvec::smallvec;
 use vulkano::{
-    Validated, ValidationError, VulkanError,
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{
         AutoCommandBufferBuilder, BlitImageInfo, CopyBufferToImageInfo, ImageBlit,
         PrimaryAutoCommandBuffer, PrimaryCommandBufferAbstract,
-    },
-    format::Format,
+    }, format::Format,
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
-        ImageSubresourceRange, ImageTiling, ImageType, ImageUsage, SampleCount,
-        sampler::Filter,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        sampler::Filter, view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo,
+        ImageLayout, ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType,
+        ImageUsage,
+        SampleCount,
     },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     sync::{GpuFuture, Sharing},
+    Validated,
+    ValidationError,
+    VulkanError,
 };
 
 use crate::application::{
     assets::asset_traits::{RHIResource, RHITextureInterface, TextureInterface},
-    renderer::Renderer,
+    renderer::{rhi_assets::RHIResourceManager, Renderer},
 };
-use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKTexture {
     image: Arc<ImageView>,
@@ -46,7 +45,11 @@ impl RHIResource for VKTexture {
 impl RHITextureInterface for VKTexture {
     type RHI = Renderer;
 
-    fn create<T: TextureInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
+    fn create<T: TextureInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        _: &mut RHIResourceManager,
+    ) -> Self {
         let image_create_info = ImageCreateInfo {
             image_type: ImageType::Dim2d,
             format: Format::B8G8R8A8_SRGB,

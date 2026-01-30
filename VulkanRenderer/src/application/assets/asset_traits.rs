@@ -2,11 +2,11 @@ use std::cell::{Ref, RefMut};
 
 use asset_system::{
     assets::{Asset, AssetHandle},
-    resource_management::Resource,
+    resource_management::{Resource, ResourceManager},
 };
 use glam::{Mat4, Vec2, Vec3};
 use vulkano::{buffer::BufferContents, pipeline::graphics::vertex_input};
-use asset_system::resource_management::ResourceManager;
+
 use crate::application::{
     renderer::rhi_assets::{RHIHandle, RHIResourceManager},
     scene::transform::Transform,
@@ -66,7 +66,11 @@ pub trait MeshInterface: Asset {
 
 pub trait RHIMeshInterface: RHIResource {
     type RHI: RHIInterface;
-    fn create<T: MeshInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: MeshInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
 }
 
 pub trait TextureInterface: Asset {
@@ -81,7 +85,11 @@ pub trait TextureInterface: Asset {
 
 pub trait RHITextureInterface: RHIResource {
     type RHI: RHIInterface;
-    fn create<T: TextureInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: TextureInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
 }
 
 pub trait ModelInterface: Asset {
@@ -99,13 +107,17 @@ pub trait ModelInterface: Asset {
 
 pub trait RHIModelInterface: RHIResource {
     type RHI: RHIInterface;
-    fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: ModelInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
 
     fn mesh(&self) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MeshType>;
     fn material(
         &self,
     ) -> RHIHandle<<<Self as RHIModelInterface>::RHI as RHIInterface>::MaterialInstanceType>;
-    
+
     fn transform(&self) -> Mat4;
 }
 
@@ -120,7 +132,7 @@ pub trait CameraInterface: Sized {
 pub trait RHICameraInterface {
     type RHI: RHIInterface;
     fn create<T: CameraInterface>(source: &T, rhi: &Self::RHI) -> Self;
-    
+
     fn view_projection(&self) -> Mat4;
     fn location(&self) -> Vec3;
 }
@@ -137,7 +149,11 @@ pub trait SceneInterface: Sized {
 
 pub trait RHISceneInterface {
     type RHI: RHIInterface;
-    fn create<T: SceneInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: SceneInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
     fn models(&self) -> &[<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType];
     fn camera(&self) -> &<<Self as RHISceneInterface>::RHI as RHIInterface>::CameraType;
 }
@@ -152,7 +168,11 @@ pub trait MaterialInterface: Asset {
 
 pub trait RHIMaterialInterface: RHIResource {
     type RHI: RHIInterface;
-    fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: MaterialInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
 }
 
 pub trait MaterialInstanceInterface: Asset {
@@ -167,5 +187,9 @@ pub trait MaterialInstanceInterface: Asset {
 
 pub trait RHIMaterialInstanceInterface: RHIResource {
     type RHI: RHIInterface;
-    fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self;
+    fn create<T: MaterialInstanceInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self;
 }

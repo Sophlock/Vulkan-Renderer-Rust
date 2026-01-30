@@ -2,19 +2,19 @@ use std::{ops::Deref, sync::Arc};
 
 use asset_system::resource_management::Resource;
 use vulkano::{
-    descriptor_set::{DescriptorSet, allocator::DescriptorSetAllocator},
+    descriptor_set::{allocator::DescriptorSetAllocator, DescriptorSet},
     memory::allocator::MemoryAllocator,
 };
 
 use crate::application::{
     assets::asset_traits::{
-        MaterialInstanceInterface, RHIInterface, RHIMaterialInstanceInterface, RHIResource,
+        MaterialInstanceInterface, RHIMaterialInstanceInterface, RHIResource,
     },
     renderer::{
-        Renderer,
-        rhi_assets::{RHIHandle, RHIResourceManager, vulkan_material::VKMaterial},
+        rhi_assets::{vulkan_material::VKMaterial, RHIHandle, RHIResourceManager},
         shader_cursor::ShaderCursor,
         shader_object::ShaderObject,
+        Renderer,
     },
 };
 
@@ -77,7 +77,11 @@ impl Resource for VKMaterialInstance {
 impl RHIMaterialInstanceInterface for VKMaterialInstance {
     type RHI = Renderer;
 
-    fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
+    fn create<T: MaterialInstanceInterface>(
+        source: &T,
+        rhi: &Self::RHI,
+        resource_manager: &mut RHIResourceManager,
+    ) -> Self {
         VKMaterialInstance::new(
             resource_manager.create_material(source.material()),
             &rhi.descriptor_allocator,

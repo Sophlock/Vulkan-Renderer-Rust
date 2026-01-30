@@ -16,7 +16,7 @@ impl RHICameraInterface for VKCamera {
     fn create<T: CameraInterface>(source: &T, _: &Self::RHI) -> Self {
         Self {
             view_projection: source.view_projection(),
-            location: source.transform().location
+            location: source.transform().location,
         }
     }
 

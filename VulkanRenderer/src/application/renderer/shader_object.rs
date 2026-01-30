@@ -1,24 +1,27 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use shader_slang::{BindingType, ParameterCategory, reflection::{TypeLayout, VariableLayout}, ComponentType};
+use shader_slang::{
+    reflection::TypeLayout, BindingType, ComponentType,
+    ParameterCategory,
+};
 use vulkano::{
-    DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::{
-        DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
-        allocator::DescriptorSetAllocator,
-        layout::{
+        allocator::DescriptorSetAllocator, layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
-        },
-        pool::{DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo},
+        }, pool::{DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo},
+        DescriptorImageViewInfo,
+        DescriptorSet,
+        WriteDescriptorSet,
     },
     device::{Device, DeviceOwned},
     image::ImageLayout,
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
-    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
+    pipeline::{layout::PipelineLayoutCreateInfo, PipelineLayout},
     shader::ShaderStages,
     sync::Sharing,
+    DeviceSize,
 };
 
 use crate::application::renderer::{
@@ -29,11 +32,10 @@ use crate::application::renderer::{
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,
-    descriptor_pool: DescriptorPool,
     existential_sizes: Vec<ShaderSize>,
     existential_offsets: Vec<ShaderOffset>,
     type_layout: *const TypeLayout,
-    linked_program: ComponentType
+    linked_program: ComponentType,
 }
 
 pub struct ShaderObject {
@@ -53,7 +55,11 @@ impl ShaderObjectLayout {
         // TODO: This currently does not handle ParameterBlocks!
         // TODO: We don't need to support all shader stage flags
 
-        let variable_layout = linked_program.layout(0).unwrap().global_params_var_layout().unwrap();
+        let variable_layout = linked_program
+            .layout(0)
+            .unwrap()
+            .global_params_var_layout()
+            .unwrap();
 
         let type_layout = variable_layout.type_layout().unwrap();
 
@@ -80,27 +86,11 @@ impl ShaderObjectLayout {
                 .map(|(i, binding)| (i as u32, binding))
                 .collect::<BTreeMap<_, _>>();
 
-        let pool_sizes = (&bindings)
-            .iter()
-            .map(|(_, binding)| (binding.descriptor_type, in_flight_frames))
-            .collect();
-
         let descriptor_set_layout = DescriptorSetLayout::new(
             device.clone(),
             DescriptorSetLayoutCreateInfo {
                 bindings,
                 ..DescriptorSetLayoutCreateInfo::default()
-            },
-        )
-        .unwrap();
-
-        let descriptor_pool = DescriptorPool::new(
-            device.clone(),
-            DescriptorPoolCreateInfo {
-                flags: DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET,
-                max_sets: in_flight_frames,
-                pool_sizes,
-                ..DescriptorPoolCreateInfo::default()
             },
         )
         .unwrap();
@@ -117,11 +107,10 @@ impl ShaderObjectLayout {
         Self {
             pipeline_layout,
             descriptor_set_layout,
-            descriptor_pool,
             existential_sizes,
             existential_offsets,
             type_layout,
-            linked_program
+            linked_program,
         }
         .into()
     }
@@ -280,7 +269,8 @@ impl ShaderObject {
             ..BufferCreateInfo::default()
         };
         let alloc_info = AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..AllocationCreateInfo::default()
         };
 
@@ -300,7 +290,9 @@ impl ShaderObject {
             None
         };
 
-        let initial_writes = uniform_buffer.clone().map(|buffer| WriteDescriptorSet::buffer(0, buffer));
+        let initial_writes = uniform_buffer
+            .clone()
+            .map(|buffer| WriteDescriptorSet::buffer(0, buffer));
 
         let descriptor_sets = (0..in_flight_frames)
             .map(|_| {

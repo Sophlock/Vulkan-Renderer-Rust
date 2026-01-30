@@ -21,8 +21,10 @@ use std::{
 
 use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
-use egui_winit_vulkano::egui::{Color32, Frame, ViewportBuilder};
-use egui_winit_vulkano::{Gui, GuiConfig, egui};
+use egui_winit_vulkano::{
+    egui, egui::{Color32, Frame}, Gui,
+    GuiConfig,
+};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use render_pass::RenderPassBuilder;
@@ -30,43 +32,45 @@ use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use smallvec::smallvec;
 use swapchain::Swapchain;
 use vulkano::{
-    Validated, ValidationError, VulkanError, VulkanLibrary,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
-    },
-    descriptor_set::allocator::{
+    }, descriptor_set::allocator::{
         DescriptorSetAllocator, StandardDescriptorSetAllocator,
         StandardDescriptorSetAllocatorCreateInfo,
-    },
-    device::{
-        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
-    },
-    format::{ClearValue, Format},
+    }, device::{
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
+    }, format::{ClearValue, Format},
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsage, SampleCount,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsage,
+        SampleCount,
     },
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
     },
     pipeline::{
-        PipelineBindPoint,
         graphics::viewport::{Scissor, Viewport},
+        PipelineBindPoint,
     },
     render_pass::{Framebuffer, RenderPass},
-    swapchain::{Surface, SwapchainPresentInfo, present},
-    sync::{GpuFuture, Sharing, future::FenceSignalFuture},
+    swapchain::{present, Surface, SwapchainPresentInfo},
+    sync::{future::FenceSignalFuture, GpuFuture, Sharing},
+    Validated,
+    ValidationError,
+    VulkanError,
+    VulkanLibrary,
 };
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
 
-use super::assets::asset_traits::{RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface};
+use super::assets::asset_traits::{
+    RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
+};
 use crate::application::renderer::{
     rhi_assets::{
-        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
-        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
+        vulkan_camera::VKCamera, vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+        vulkan_model::VKModel, vulkan_scene::VKScene, RHIResourceManager,
     },
     shaders::SlangCompiler,
 };
@@ -326,12 +330,24 @@ impl Renderer {
 
                 let cursor = material_instance.shader_cursor();
                 let model_cursor = cursor.field("gModelData").unwrap();
-                model_cursor.field("modelTransform").unwrap().write(&model.transform());
-                model_cursor.field("inverseTransposeModelTransform").unwrap().write(&model.transform().transpose().inverse());
+                model_cursor
+                    .field("modelTransform")
+                    .unwrap()
+                    .write(&model.transform());
+                model_cursor
+                    .field("inverseTransposeModelTransform")
+                    .unwrap()
+                    .write(&model.transform().transpose().inverse());
 
                 let view_cursor = cursor.field("gViewData").unwrap();
-                view_cursor.field("viewPosition").unwrap().write(&scene.camera().location());
-                view_cursor.field("viewProjection").unwrap().write(&scene.camera().view_projection());
+                view_cursor
+                    .field("viewPosition")
+                    .unwrap()
+                    .write(&scene.camera().location());
+                view_cursor
+                    .field("viewProjection")
+                    .unwrap()
+                    .write(&scene.camera().view_projection());
                 let ev = 1f32;
                 view_cursor.field("exposureValue").unwrap().write(&ev);
 
