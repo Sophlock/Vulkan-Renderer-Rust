@@ -115,6 +115,10 @@ impl Application {
         ));
     }
 
+    fn update_aspect_ratio(&mut self, x: u32, y: u32) {
+        self.scene.camera.aspect = x as f32 / y as f32;
+    }
+
     fn tick(&mut self) {
         use InputAction::*;
 
@@ -180,12 +184,15 @@ impl ApplicationHandler<AppEvent> for Application {
         self.input.update_with_window_event(&event);
         self.renderer.as_ref().unwrap().gui_mut().update(&event);
         match event {
-            WindowEvent::Resized(_) => self
-                .renderer
-                .as_ref()
-                .unwrap()
-                .mutable_state()
-                .request_recreate_swapchain(),
+            WindowEvent::Resized(size) =>  {
+                self.update_aspect_ratio(size.width, size.height);
+                self
+                    .renderer
+                    .as_ref()
+                    .unwrap()
+                    .mutable_state()
+                    .request_recreate_swapchain()
+            },
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
                 self.update_scene_proxy();
