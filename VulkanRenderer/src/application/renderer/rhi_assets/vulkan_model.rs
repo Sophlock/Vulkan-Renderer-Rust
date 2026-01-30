@@ -10,6 +10,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKModel {
     transform: Mat4,
@@ -33,10 +34,9 @@ impl Resource for VKModel {
 impl RHIModelInterface for VKModel {
     type RHI = Renderer;
 
-    fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI) -> Self {
+    fn create<T: ModelInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
         let mesh = source.mesh();
         let material = source.material();
-        let mut resource_manager = rhi.resource_manager_mut();
         Self {
             transform: source.transform().matrix(),
             mesh: resource_manager.create_mesh(mesh),

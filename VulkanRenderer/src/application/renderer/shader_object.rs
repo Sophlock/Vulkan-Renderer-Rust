@@ -1,9 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use shader_slang::{
-    BindingType, ParameterCategory,
-    reflection::{TypeLayout, VariableLayout},
-};
+use shader_slang::{BindingType, ParameterCategory, reflection::{TypeLayout, VariableLayout}, ComponentType};
 use vulkano::{
     DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
@@ -36,6 +33,7 @@ pub struct ShaderObjectLayout {
     existential_sizes: Vec<ShaderSize>,
     existential_offsets: Vec<ShaderOffset>,
     type_layout: *const TypeLayout,
+    linked_program: ComponentType
 }
 
 pub struct ShaderObject {
@@ -47,13 +45,15 @@ pub struct ShaderObject {
 
 impl ShaderObjectLayout {
     pub fn new(
-        variable_layout: &VariableLayout,
+        linked_program: ComponentType,
         existential_objects: &[&TypeLayout],
         in_flight_frames: u32,
         device: &Arc<Device>,
     ) -> Arc<Self> {
         // TODO: This currently does not handle ParameterBlocks!
         // TODO: We don't need to support all shader stage flags
+
+        let variable_layout = linked_program.layout(0).unwrap().global_params_var_layout().unwrap();
 
         let type_layout = variable_layout.type_layout().unwrap();
 
@@ -121,6 +121,7 @@ impl ShaderObjectLayout {
             existential_sizes,
             existential_offsets,
             type_layout,
+            linked_program
         }
         .into()
     }
@@ -299,12 +300,14 @@ impl ShaderObject {
             None
         };
 
+        let initial_writes = uniform_buffer.clone().map(|buffer| WriteDescriptorSet::buffer(0, buffer));
+
         let descriptor_sets = (0..in_flight_frames)
             .map(|_| {
                 DescriptorSet::new(
                     descriptor_allocator.clone(),
                     layout.descriptor_set_layout.clone(),
-                    [],
+                    initial_writes.clone(),
                     [],
                 )
                 .unwrap()

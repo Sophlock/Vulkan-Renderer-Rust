@@ -49,11 +49,11 @@ macro_rules! implement_rhi_resource {
             &mut self,
             source: AssetHandle<T>,
         ) -> RHIHandle<$rhi_type> {
-            let asset_manager = self.asset_manager();
+            let asset_manager_arc = self.asset_manager.clone();
+            let asset_manager = asset_manager_arc.borrow();
             let source_data = source.get(asset_manager.deref()).unwrap();
             let asset_id = source_data.asset_metadata().uuid();
-            let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref());
-            drop(asset_manager);
+            let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref(), self);
             let id = self.resources.add(new_rhi);
             self.asset_to_rhi.insert(asset_id, id);
             RHIHandle::<$rhi_type>::new(id)

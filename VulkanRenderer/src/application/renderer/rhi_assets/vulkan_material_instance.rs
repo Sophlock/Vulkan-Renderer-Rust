@@ -77,8 +77,7 @@ impl Resource for VKMaterialInstance {
 impl RHIMaterialInstanceInterface for VKMaterialInstance {
     type RHI = Renderer;
 
-    fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI) -> Self {
-        let mut resource_manager = rhi.resource_manager_mut();
+    fn create<T: MaterialInstanceInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
         VKMaterialInstance::new(
             resource_manager.create_material(source.material()),
             &rhi.descriptor_allocator,

@@ -303,7 +303,7 @@ impl DepthStencilGraphicsPipeline {
                     .input_assembly,
             ),
             tessellation_state: None,
-            viewport_state: Some(ViewportState::default()),
+            viewport_state: Some(Self::find_viewport_state(&dynamic_state)),
             rasterization_state: Some(self.previous.previous.previous.previous.rasterizer_state),
             multisample_state: Some(self.previous.previous.previous.multisample_state),
             depth_stencil_state: Some(self.depth_stencil_state),
@@ -330,5 +330,21 @@ impl DepthStencilGraphicsPipeline {
             self.build_create_info(layout, subpass, dynamic_state),
         )
         .unwrap()
+    }
+
+    fn find_viewport_state(dynamic_state: &HashSet<DynamicState>) -> ViewportState {
+        ViewportState {
+            viewports: if dynamic_state.contains(&DynamicState::ViewportWithCount) {
+                smallvec![]
+            } else {
+                Default::default()
+            },
+            scissors: if dynamic_state.contains(&DynamicState::ScissorWithCount) {
+                smallvec![]
+            } else {
+                Default::default()
+            },
+            ..ViewportState::default()
+        }
     }
 }

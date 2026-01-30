@@ -20,6 +20,7 @@ use crate::application::{
         shaders::SlangCompiler,
     },
 };
+use crate::application::renderer::rhi_assets::RHIResourceManager;
 
 pub struct VKMaterial {
     vert_spirv: Blob,
@@ -57,7 +58,7 @@ impl VKMaterial {
         let vert_spirv = linked.entry_point_code(0, 0)?;
         let frag_spirv = linked.entry_point_code(1, 0)?;
         let shader_object_layout = ShaderObjectLayout::new(
-            specialized.layout(0)?.global_params_var_layout().unwrap(),
+            linked,
             existential_objects.as_slice(),
             in_flight_frames as u32,
             device,
@@ -145,7 +146,7 @@ impl RHIResource for VKMaterial {
 impl RHIMaterialInterface for VKMaterial {
     type RHI = Renderer;
 
-    fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI) -> Self {
+    fn create<T: MaterialInterface>(source: &T, rhi: &Self::RHI, resource_manager: &mut RHIResourceManager) -> Self {
         VKMaterial::new(
             &rhi.slang_compiler,
             &rhi.device,

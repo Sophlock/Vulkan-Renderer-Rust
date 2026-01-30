@@ -20,6 +20,7 @@ use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::WindowId,
 };
+use crate::application::assets::asset_traits::{RHIInterface, RHISceneInterface};
 
 pub struct Application {
     renderer: Option<Rc<Renderer>>,
@@ -36,7 +37,7 @@ impl Application {
         }
     }
 
-    fn scene(&mut self) -> Scene {
+    fn scene(&self) -> Scene {
         let mut asset_manager_guard = self.asset_manager.as_ref().unwrap().borrow_mut();
         let asset_manager = asset_manager_guard.deref_mut();
         let material = AssetHandle::<Material> {
@@ -77,7 +78,8 @@ impl ApplicationHandler for Application {
             event_loop,
             self.asset_manager.as_ref().unwrap().clone(),
         ));
-        self.scene = Some(self.scene().rhi::<VKScene>(self.renderer.as_ref().unwrap()));
+        let rhi = self.renderer.as_ref().unwrap();
+        self.scene = Some(VKScene::create(&self.scene(), rhi, rhi.resource_manager_mut().deref_mut()));
     }
 
     fn window_event(
