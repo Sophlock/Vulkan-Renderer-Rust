@@ -11,7 +11,7 @@ import globalData;
 uniform ViewData gViewData;
 uniform ModelData gModelData;
 
-uniform ILightEnvironment gLightEnvironment;
+//uniform ILightEnvironment gLightEnvironment;
 uniform IMaterial gMaterial;
 
 // Input to the vertex shader/Type of the vertex buffer
@@ -76,6 +76,6 @@ float4 fragmentMain(ProcessedVertex vertex : Vertex) : SV_Target
     // Evaluates the material into a BRDF
     let materialResult = gMaterial.evaluate(geometry);
     // Shades the BRDF using the light environment
-    float3 color = max(gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) + materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
+    float3 color = max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*/ materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
     return float4(1.f - exp(-color * gViewData.exposureValue), 1.);
 }
