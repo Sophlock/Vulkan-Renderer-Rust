@@ -27,3 +27,17 @@ struct SkySphereMaterial : IMaterial
         return {brdf, geometry};
     }
 }
+
+struct SingleColorUnlitMaterial : IMaterial
+{
+    typedef UnlitBRDF BRDF;
+
+    LargeBlock _;
+
+    MaterialResult<UnlitBRDF> evaluate(SurfaceGeometry geometry)
+    {
+        UnlitBRDF brdf = {};
+        brdf.emissive = geometry.worldNormal; //float3(0, .8, 1);
+        return {brdf, geometry};
+    }
+}
