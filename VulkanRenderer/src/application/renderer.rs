@@ -21,6 +21,7 @@ use std::{
 
 use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
+use egui_winit_vulkano::egui::{Color32, Frame, ViewportBuilder};
 use egui_winit_vulkano::{Gui, GuiConfig, egui};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
@@ -98,7 +99,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(event_loop: &ActiveEventLoop, asset_manager: Arc<RefCell<ResourceManager>>) -> Rc<Self> {
+    pub fn new(
+        event_loop: &ActiveEventLoop,
+        asset_manager: Arc<RefCell<ResourceManager>>,
+    ) -> Rc<Self> {
         let window = Self::create_window(event_loop);
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
         let surface = Self::create_surface(&instance, &window);
@@ -133,7 +137,10 @@ impl Renderer {
             surface.clone(),
             queues.graphics_queue.clone(),
             swapchain.format,
-            GuiConfig::default(),
+            GuiConfig {
+                is_overlay: true,
+                ..GuiConfig::default()
+            },
         ));
         let slang_compiler = SlangCompiler::new("resources/assets/materials/shaders".as_ref());
         let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
@@ -189,18 +196,20 @@ impl Renderer {
 
         self.gui_mut().immediate_ui(|ui| {
             let ctx = ui.context();
-            egui::CentralPanel::default().show(&ctx, |ui| {
-                ui.heading("My egui Application");
-                ui.horizontal(|ui| {
-                    ui.label("Your name: ");
-                    //ui.text_edit_singleline(&mut name);
+            egui::CentralPanel::default()
+                .frame(Frame::default().fill(Color32::TRANSPARENT))
+                .show(&ctx, |ui| {
+                    ui.heading("My egui Application");
+                    ui.horizontal(|ui| {
+                        ui.label("Your name: ");
+                        //ui.text_edit_singleline(&mut name);
+                    });
+                    //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
+                    if ui.button("Increment").clicked() {
+                        // age += 1;
+                    }
+                    //ui.label(format!("Hello '{name}', age {age}"));
                 });
-                //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-                if ui.button("Increment").clicked() {
-                    // age += 1;
-                }
-                //ui.label(format!("Hello '{name}', age {age}"));
-            });
         });
 
         let acquire_image_result = self.mutable_state_const().swapchain.acquire_next_image();
