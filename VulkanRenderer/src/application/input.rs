@@ -3,6 +3,7 @@
 pub enum InputAction {
     LeftClick,
     RightClick,
+    BothClick,
     ScrollClick,
     ScrollUp,
     ScrollDown,

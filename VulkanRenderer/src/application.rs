@@ -5,7 +5,6 @@ mod scene;
 
 use crate::AppEvent;
 use crate::application::input::InputAction;
-use crate::application::input::InputAction::LeftClick;
 use crate::application::{
     assets::{
         asset_traits::{RHIInterface, RHISceneInterface},
@@ -18,7 +17,7 @@ use crate::application::{
 };
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 use gilrs::Gilrs;
-use glam::{Quat, Vec3};
+use glam::{EulerRot, Quat, Vec3};
 use renderer::Renderer;
 use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
 use winit::event::{DeviceEvent, DeviceId};
@@ -100,7 +99,8 @@ impl Application {
                 (Left, KeyA),
                 (Right, KeyD),
                 (Down, KeyQ),
-                (Up, KeyE)
+                (Up, KeyE),
+                (BothClick, [MouseButton::Left, MouseButton::Right])
             )
         }
     }
@@ -121,23 +121,38 @@ impl Application {
         let mouse_move = self.input.dir(MouseLeft, MouseRight, MouseUp, MouseDown);
         let cam_move = self.input.dir(Forward, Back, Right, Left);
 
-        if self.input.pressing(LeftClick) {
+        let mut cam_euler = self.scene.camera.transform.rotation.to_euler(EulerRot::YXZ);
+        cam_euler.2 = 0.;
+
+        if self.input.pressing(BothClick) {
+            let right = self.scene.camera.transform.right();
+            let up = self.scene.camera.transform.up();
+            self.scene.camera.transform.location +=
+                (right * mouse_move.0 + up * mouse_move.1) * 0.5;
+        } else if self.input.pressing(LeftClick) {
             let forward = self.scene.camera.transform.forward();
             let forward_proj = forward.with_y(0.).normalize();
 
             self.scene.camera.transform.location += forward_proj * mouse_move.1;
-            self.scene.camera.transform.rotation *= Quat::from_rotation_y(mouse_move.0 * 0.1);
+            cam_euler.0 += mouse_move.0 * 0.1;
         } else if self.input.pressing(RightClick) {
+            cam_euler.0 += mouse_move.0 * 0.1;
+            cam_euler.1 -= mouse_move.1 * 0.1;
+        }
+
+        if self.input.pressing(LeftClick) || self.input.pressing(RightClick) {
             let forward = self.scene.camera.transform.forward();
             let right = self.scene.camera.transform.right();
             let vertical = self.input.axis(Up, Down);
 
             self.scene.camera.transform.location +=
-                (forward * cam_move.0 + right * cam_move.1 + Vec3::Y * vertical) * 0.1;
-
-            self.scene.camera.transform.rotation *= Quat::from_rotation_y(mouse_move.0 * 0.1)
-                * Quat::from_axis_angle(right, mouse_move.1 * 0.1);
+                (forward * cam_move.0 + right * cam_move.1 - Vec3::Y * vertical) * 0.1;
         }
+
+        cam_euler.1 = cam_euler.1.clamp(-1.5, 1.5);
+
+        self.scene.camera.transform.rotation =
+            Quat::from_euler(EulerRot::YXZ, cam_euler.0, cam_euler.1, cam_euler.2);
 
         self.input.init();
     }
