@@ -10,7 +10,7 @@ use vulkano::{
     },
     sync::{AccessFlags, PipelineStages},
 };
-
+use crate::application::rhi::VKRHI;
 use super::physical_device::find_depth_format;
 
 pub struct RenderPassBuilder {
@@ -52,7 +52,7 @@ impl RenderPassBuilder {
             load_op: AttachmentLoadOp::Clear,
             store_op: AttachmentStoreOp::Store,
             initial_layout: ImageLayout::Undefined,
-            final_layout: ImageLayout::PresentSrc,
+            final_layout: ImageLayout::ColorAttachmentOptimal,
             ..AttachmentDescription::default()
         })
     }
@@ -97,13 +97,12 @@ impl RenderPassBuilder {
     }
 
     pub fn build_default_render_pass(
-        device: &Arc<Device>,
-        physical_device: &PhysicalDevice,
+        rhi: &VKRHI,
         swapchain_format: Format,
     ) -> Self {
-        Self::new(device)
+        Self::new(rhi.device())
             .add_color_attachment(swapchain_format)
-            .add_depth_attachment(physical_device)
+            .add_depth_attachment(rhi.physical_device())
             .add_graphics_subpass(
                 vec![AttachmentReference {
                     attachment: 0,

@@ -3,9 +3,9 @@ use crate::application::{
         CameraInterface, RHIModelInterface, RHISceneInterface,
         SceneInterface,
     },
-    renderer::{
+    rhi::{
         rhi_assets::{vulkan_camera::VKCamera, vulkan_model::VKModel, RHIResourceManager},
-        Renderer,
+        VKRHI,
     },
 };
 
@@ -15,7 +15,7 @@ pub struct VKScene {
 }
 
 impl RHISceneInterface for VKScene {
-    type RHI = Renderer;
+    type RHI = VKRHI;
 
     fn create<T: SceneInterface>(
         source: &T,

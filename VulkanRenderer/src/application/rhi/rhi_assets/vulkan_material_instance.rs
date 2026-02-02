@@ -10,11 +10,11 @@ use crate::application::{
     assets::asset_traits::{
         MaterialInstanceInterface, RHIMaterialInstanceInterface, RHIResource,
     },
-    renderer::{
+    rhi::{
         rhi_assets::{vulkan_material::VKMaterial, RHIHandle, RHIResourceManager},
         shader_cursor::ShaderCursor,
         shader_object::ShaderObject,
-        Renderer,
+        VKRHI,
     },
 };
 
@@ -75,7 +75,7 @@ impl Resource for VKMaterialInstance {
 }
 
 impl RHIMaterialInstanceInterface for VKMaterialInstance {
-    type RHI = Renderer;
+    type RHI = VKRHI;
 
     fn create<T: MaterialInstanceInterface>(
         source: &T,

@@ -2,7 +2,7 @@ use glam::{Mat4, Vec3};
 
 use crate::application::{
     assets::asset_traits::{CameraInterface, RHICameraInterface},
-    renderer::Renderer,
+    rhi::VKRHI,
 };
 
 pub struct VKCamera {
@@ -11,7 +11,7 @@ pub struct VKCamera {
 }
 
 impl RHICameraInterface for VKCamera {
-    type RHI = Renderer;
+    type RHI = VKRHI;
 
     fn create<T: CameraInterface>(source: &T, _: &Self::RHI) -> Self {
         Self {

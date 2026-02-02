@@ -22,7 +22,7 @@ use vulkano::{
 
 use crate::application::{
     assets::asset_traits::{RHIResource, RHITextureInterface, TextureInterface},
-    renderer::{rhi_assets::RHIResourceManager, Renderer},
+    rhi::{rhi_assets::RHIResourceManager, VKRHI},
 };
 
 pub struct VKTexture {
@@ -43,7 +43,7 @@ impl RHIResource for VKTexture {
 }
 
 impl RHITextureInterface for VKTexture {
-    type RHI = Renderer;
+    type RHI = VKRHI;
 
     fn create<T: TextureInterface>(
         source: &T,

@@ -1,7 +1,7 @@
 use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
 use vulkano::buffer::BufferContents;
 
-use crate::application::renderer::{
+use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
 };
 

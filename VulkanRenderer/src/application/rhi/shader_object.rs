@@ -24,7 +24,7 @@ use vulkano::{
     DeviceSize,
 };
 
-use crate::application::renderer::{
+use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture,
     shader_cursor::{ShaderOffset, ShaderSize},
 };

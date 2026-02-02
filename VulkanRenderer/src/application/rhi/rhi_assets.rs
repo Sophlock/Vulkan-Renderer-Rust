@@ -15,8 +15,8 @@ use crate::application::{
         RHIMaterialInstanceInterface, RHIMaterialInterface, RHIMeshInterface, RHIModelInterface,
         RHIResource, RHITextureInterface, TextureInterface,
     },
-    renderer::{
-        Renderer,
+    rhi::{
+        VKRHI,
         rhi_assets::{
             vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
             vulkan_mesh::VKMesh, vulkan_model::VKModel, vulkan_texture::VKTexture,
@@ -36,7 +36,7 @@ pub struct RHIResourceManager {
     resources: ResourceManager,
     asset_to_rhi: HashMap<usize, usize>,
     asset_manager: Arc<RefCell<ResourceManager>>,
-    rhi: Option<Weak<Renderer>>,
+    rhi: Option<Weak<VKRHI>>,
 }
 
 pub struct RHIHandle<T: RHIResource + 'static> {
@@ -77,7 +77,7 @@ impl RHIResourceManager {
         }
     }
 
-    pub fn register_rhi(&mut self, rhi: &Rc<Renderer>) {
+    pub fn register_rhi(&mut self, rhi: &Rc<VKRHI>) {
         self.rhi = Some(Rc::downgrade(rhi));
     }
 
@@ -91,7 +91,7 @@ impl RHIResourceManager {
     );
     implement_rhi_resource!(create_model, VKModel, ModelInterface);
 
-    fn rhi(&self) -> Rc<Renderer> {
+    fn rhi(&self) -> Rc<VKRHI> {
         self.rhi.as_ref().unwrap().upgrade().unwrap()
     }
 

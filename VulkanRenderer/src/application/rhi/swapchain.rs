@@ -17,7 +17,8 @@ use vulkano::{
 };
 use winit::window::Window;
 
-use crate::application::renderer::queue::QueueFamilyIndices;
+use crate::application::rhi::queue::QueueFamilyIndices;
+use crate::application::rhi::VKRHI;
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -30,16 +31,10 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(
-        device: &Arc<Device>,
-        physical_device: &PhysicalDevice,
-        surface: &Arc<Surface>,
-        window: &Window,
-        queue_family_indices: &QueueFamilyIndices,
-    ) -> Self {
-        let create_info = Self::create_info(physical_device, surface, window, queue_family_indices);
+    pub fn new(rhi: &VKRHI) -> Self {
+        let create_info = Self::create_info(rhi.physical_device(), rhi.surface(), rhi.window(), rhi.queue_family_indices());
         let (swapchain, images) =
-            VKSwapchain::new(device.clone(), surface.clone(), create_info.clone()).unwrap();
+            VKSwapchain::new(rhi.device().clone(), rhi.surface().clone(), create_info.clone()).unwrap();
         Self::from_raw(swapchain, images, create_info)
     }
 
@@ -133,7 +128,7 @@ impl Swapchain {
         }
     }
 
-    fn choose_surface_format(formats: &Vec<(Format, ColorSpace)>) -> (Format, ColorSpace) {
+    pub fn choose_surface_format(formats: &Vec<(Format, ColorSpace)>) -> (Format, ColorSpace) {
         formats
             .iter()
             .filter(|(format, colorspace)| {
@@ -161,7 +156,7 @@ impl Swapchain {
             .unwrap_or_else(|| window.inner_size().into())
     }
 
-    fn decide_image_count(surface_capabilities: &SurfaceCapabilities) -> u32 {
+    pub fn decide_image_count(surface_capabilities: &SurfaceCapabilities) -> u32 {
         let desired_image_count = surface_capabilities.min_image_count + 1;
         surface_capabilities
             .max_image_count
@@ -196,14 +191,14 @@ impl Swapchain {
     }
 }
 
-struct SwapchainSupportDetails {
-    capabilities: SurfaceCapabilities,
-    formats: Vec<(Format, ColorSpace)>,
-    present_modes: Vec<PresentMode>,
+pub struct SwapchainSupportDetails {
+    pub capabilities: SurfaceCapabilities,
+    pub formats: Vec<(Format, ColorSpace)>,
+    pub present_modes: Vec<PresentMode>,
 }
 
 impl SwapchainSupportDetails {
-    fn query_swapchain_support(
+    pub fn query_swapchain_support(
         physical_device: &PhysicalDevice,
         surface: &Surface,
     ) -> SwapchainSupportDetails {

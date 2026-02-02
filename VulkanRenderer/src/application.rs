@@ -1,7 +1,8 @@
 mod assets;
 mod input;
-mod renderer;
+mod rhi;
 mod scene;
+mod renderer;
 
 use crate::AppEvent;
 use crate::application::input::InputAction;
@@ -12,13 +13,13 @@ use crate::application::{
         material_instance::MaterialInstance,
         mesh::Mesh,
     },
-    renderer::rhi_assets::vulkan_scene::VKScene,
+    rhi::rhi_assets::vulkan_scene::VKScene,
     scene::{Scene, model::Model, transform::Transform},
 };
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
-use renderer::Renderer;
+use rhi::VKRHI;
 use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
@@ -27,9 +28,11 @@ use winit::{
 };
 use winit_input_map::InputCode;
 use winit_input_map::{InputMap, input_map};
+use crate::application::assets::asset_traits::RendererInterface;
+use crate::application::renderer::VKRenderer;
 
 pub struct Application {
-    renderer: Option<Rc<Renderer>>,
+    renderer: Option<Rc<VKRenderer>>,
     asset_manager: Arc<RefCell<ResourceManager>>,
     rhi_scene_proxy: Option<VKScene>,
     scene: Scene,
@@ -107,7 +110,7 @@ impl Application {
 
     fn update_scene_proxy(&mut self) {
         // TODO: This should be more lazy
-        let rhi = self.renderer.as_ref().unwrap();
+        let rhi = self.renderer.as_ref().unwrap().rhi();
         self.rhi_scene_proxy = Some(VKScene::create(
             &self.scene,
             rhi,
@@ -177,14 +180,15 @@ impl Application {
 
 impl ApplicationHandler<AppEvent> for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.renderer = Some(Renderer::new(event_loop, self.asset_manager.clone()));
+        let rhi = VKRHI::new(event_loop, self.asset_manager.clone());
+        self.renderer = Some(Rc::new(VKRenderer::new(rhi)));
         self.update_scene_proxy();
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         match event {
             AppEvent::Tick => self.tick(),
-            AppEvent::Render => self.renderer.as_ref().unwrap().window().request_redraw(),
+            AppEvent::Render => self.renderer.as_ref().unwrap().rhi().window().request_redraw(),
         }
     }
 
@@ -195,7 +199,7 @@ impl ApplicationHandler<AppEvent> for Application {
         event: WindowEvent,
     ) {
         self.input.update_with_window_event(&event);
-        self.renderer.as_ref().unwrap().gui_mut().update(&event);
+        self.renderer.as_ref().unwrap().rhi().gui_mut().update(&event);
         match event {
             WindowEvent::Resized(size) =>  {
                 self.update_aspect_ratio(size.width, size.height);

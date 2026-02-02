@@ -15,11 +15,13 @@ use vulkano::{
 
 use crate::application::{
     assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource, Vertex},
-    renderer::{
-        Renderer, pipeline::graphics_pipeline, rhi_assets::RHIResourceManager,
+    rhi::{
+        VKRHI, pipeline::graphics_pipeline, rhi_assets::RHIResourceManager,
         shader_object::ShaderObjectLayout, shaders::SlangCompiler,
     },
 };
+use crate::application::assets::asset_traits::RendererInterface;
+use crate::application::renderer::VKRenderer;
 
 pub struct VKMaterial {
     vert_spirv: Blob,
@@ -143,17 +145,18 @@ impl RHIResource for VKMaterial {
 }
 
 impl RHIMaterialInterface for VKMaterial {
-    type RHI = Renderer;
+    type RendererType = VKRenderer;
 
     fn create<T: MaterialInterface>(
         source: &T,
-        rhi: &Self::RHI,
+        renderer: &Self::RendererType,
         _: &mut RHIResourceManager,
     ) -> Self {
+        let rhi = renderer.rhi();
         VKMaterial::new(
             &rhi.slang_compiler,
             &rhi.device,
-            rhi.render_pass.clone(),
+            renderer.render_pass().clone(),
             rhi.frames_in_flight,
             source.module(),
             source.material(),

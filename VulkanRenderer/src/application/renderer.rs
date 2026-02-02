@@ -1,79 +1,25 @@
-mod buffer;
-mod command_buffer;
-mod layers;
-mod physical_device;
-mod pipeline;
-mod queue;
-mod render_pass;
-mod render_sync;
-pub mod rhi_assets;
-mod shader_cursor;
-mod shader_object;
-mod shaders;
-mod swapchain;
-
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    ops::Deref,
-    rc::Rc,
-    sync::Arc,
-};
-
-use asset_system::resource_management::ResourceManager;
-use command_buffer::CommandBufferInterface;
-use egui_winit_vulkano::{
-    egui, egui::{Color32, Frame}, Gui,
-    GuiConfig,
-};
-use physical_device::find_depth_format;
-use queue::{QueueCollection, QueueFamilyIndices};
-use render_pass::RenderPassBuilder;
-use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
+use std::cell::{Ref, RefCell, RefMut};
+use std::ops::Deref;
+use std::rc::Rc;
+use std::sync::Arc;
+use egui_winit_vulkano::egui;
+use egui_winit_vulkano::egui::{Color32, Frame};
 use smallvec::smallvec;
-use swapchain::Swapchain;
-use vulkano::{
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
-    }, descriptor_set::allocator::{
-        DescriptorSetAllocator, StandardDescriptorSetAllocator,
-        StandardDescriptorSetAllocatorCreateInfo,
-    }, device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
-    }, format::{ClearValue, Format},
-    image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsage,
-        SampleCount,
-    },
-    instance::{Instance, InstanceCreateInfo, InstanceExtensions},
-    memory::allocator::{
-        AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
-    },
-    pipeline::{
-        graphics::viewport::{Scissor, Viewport},
-        PipelineBindPoint,
-    },
-    render_pass::{Framebuffer, RenderPass},
-    swapchain::{present, Surface, SwapchainPresentInfo},
-    sync::{future::FenceSignalFuture, GpuFuture, Sharing},
-    Validated,
-    ValidationError,
-    VulkanError,
-    VulkanLibrary,
-};
-use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
-
-use super::assets::asset_traits::{
-    RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
-};
-use crate::application::renderer::{
-    rhi_assets::{
-        vulkan_camera::VKCamera, vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
-        vulkan_model::VKModel, vulkan_scene::VKScene, RHIResourceManager,
-    },
-    shaders::SlangCompiler,
-};
+use vulkano::image::view::ImageView;
+use vulkano::render_pass::{Framebuffer, RenderPass};
+use vulkano::sync::future::FenceSignalFuture;
+use vulkano::sync::GpuFuture;
+use vulkano::{Validated, ValidationError, VulkanError};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::format::ClearValue;
+use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
+use vulkano::pipeline::PipelineBindPoint;
+use vulkano::swapchain::{present, SwapchainPresentInfo};
+use winit::dpi::PhysicalSize;
+use crate::application::assets::asset_traits::{RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, RendererInterface};
+use crate::application::rhi::{VKRHI, swapchain::Swapchain};
+use crate::application::rhi::render_pass::RenderPassBuilder;
+use crate::application::rhi::rhi_assets::vulkan_scene::VKScene;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -83,88 +29,24 @@ pub struct MutableRenderState {
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
 }
 
-pub struct Renderer {
-    frames_in_flight: usize,
-    window: Arc<Window>,
-    instance: Arc<Instance>,
-    surface: Arc<Surface>,
-    physical_device: Arc<PhysicalDevice>,
-    device: Arc<Device>,
-    queues: QueueCollection,
-    queue_family_indices: QueueFamilyIndices,
+pub struct VKRenderer {
+    rhi: Rc<VKRHI>,
     mutable_state: RefCell<MutableRenderState>,
     render_pass: Arc<RenderPass>,
-    command_buffer_interface: CommandBufferInterface,
-    gui: RefCell<Gui>,
-    slang_compiler: SlangCompiler,
-    buffer_allocator: Arc<dyn MemoryAllocator>,
-    descriptor_allocator: Arc<dyn DescriptorSetAllocator>,
-    resource_manager: RefCell<RHIResourceManager>,
 }
 
-impl Renderer {
-    pub fn new(
-        event_loop: &ActiveEventLoop,
-        asset_manager: Arc<RefCell<ResourceManager>>,
-    ) -> Rc<Self> {
-        let window = Self::create_window(event_loop);
-        let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
-        let surface = Self::create_surface(&instance, &window);
-        let physical_device = Self::pick_physical_device(&instance, &surface);
-        let queue_family_indices =
-            QueueFamilyIndices::find_queue_indices(&physical_device, &surface);
-        let (device, queues) = Self::create_logical_device(&physical_device, &queue_family_indices);
-        let swapchain = Swapchain::new(
-            &device,
-            &physical_device,
-            &surface,
-            &window,
-            &queue_family_indices,
-        );
-        let frames_in_flight = swapchain.image_count.try_into().unwrap();
+impl VKRenderer {
+    pub fn new(rhi: Rc<VKRHI>) -> Self {
+        let swapchain = Swapchain::new(rhi.as_ref());
         let render_pass = RenderPassBuilder::build_default_render_pass(
-            &device,
-            &physical_device,
+            rhi.as_ref(),
             swapchain.format,
-        )
-        .build();
-        let depth_image_view = Self::create_depth_resources(
-            &device,
-            find_depth_format(&physical_device),
-            swapchain.extent,
-        );
-        let command_buffer_interface =
-            CommandBufferInterface::new(device.clone(), frames_in_flight);
+        ).build();
+        let depth_image_view = rhi.create_depth_buffer(swapchain.extent);
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
-        let gui = RefCell::new(Gui::new(
-            event_loop,
-            surface.clone(),
-            queues.graphics_queue.clone(),
-            swapchain.format,
-            GuiConfig {
-                is_overlay: true,
-                ..GuiConfig::default()
-            },
-        ));
-        let slang_compiler = SlangCompiler::new("resources/assets/materials/shaders".as_ref());
-        let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-        let descriptor_allocator = Arc::new(StandardDescriptorSetAllocator::new(
-            device.clone(),
-            StandardDescriptorSetAllocatorCreateInfo {
-                update_after_bind: false,
-                ..StandardDescriptorSetAllocatorCreateInfo::default()
-            },
-        ));
-        let resource_manager = RefCell::new(RHIResourceManager::new(asset_manager));
-        let result = Rc::new(Self {
-            frames_in_flight,
-            window,
-            instance,
-            surface,
-            physical_device,
-            device,
-            queues,
-            queue_family_indices,
+
+        Self {
+            rhi,
             mutable_state: RefCell::new(MutableRenderState {
                 swapchain,
                 depth_image_view,
@@ -173,32 +55,23 @@ impl Renderer {
                 in_flight_future: None,
             }),
             render_pass,
-            command_buffer_interface,
-            gui,
-            slang_compiler,
-            buffer_allocator,
-            descriptor_allocator,
-            resource_manager,
-        });
-        result.resource_manager.borrow_mut().register_rhi(&result);
-        result
+        }
     }
 
     pub fn redraw(&self, scene: &VKScene) {
         self.mutable_state().in_flight_future = self.draw_frame(scene);
-        self.window.as_ref().request_redraw();
     }
 
     fn draw_frame(&self, scene: &VKScene) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
         if self.mutable_state_const().should_recreate_swapchain {
-            self.mutable_state().recreate_swapchain_internal(self);
+            self.mutable_state().recreate_swapchain_internal(self.rhi.as_ref(), &self.render_pass);
         }
         self.mutable_state_const()
             .in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
 
-        self.gui_mut().immediate_ui(|ui| {
+        self.rhi.gui_mut().immediate_ui(|ui| {
             let ctx = ui.context();
             egui::CentralPanel::default()
                 .frame(Frame::default().fill(Color32::TRANSPARENT))
@@ -231,21 +104,21 @@ impl Renderer {
         if suboptimal {
             self.mutable_state().request_recreate_swapchain();
         }
-        let mut command_buffer = self
-            .command_buffer_interface
-            .primary_command_buffer(self.queue_family_indices.graphics_family);
+        let mut command_buffer = self.rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
 
         let draw_finished_future = image_available_future
             .then_execute(
-                self.queues.graphics_queue.clone(),
+                self.rhi.queues().graphics_queue.clone(),
                 command_buffer.build().unwrap(),
             )
             .unwrap();
 
-        let gui_draw_future = self.gui_mut().draw_on_image(
+        let gui_draw_future = self.rhi.gui_mut().draw_on_image(
             draw_finished_future,
             self.mutable_state_const()
                 .swapchain
@@ -255,7 +128,7 @@ impl Renderer {
 
         let present_future = present(
             gui_draw_future,
-            self.queues.present_queue.clone(),
+            self.rhi.queues().present_queue.clone(),
             SwapchainPresentInfo::swapchain_image_index(
                 self.mutable_state_const().swapchain.raw().clone(),
                 swapchain_image_index,
@@ -317,7 +190,7 @@ impl Renderer {
                 extent: self.mutable_state_const().swapchain.extent,
             }])?;
 
-        let resources = self.resource_manager();
+        let resources = self.rhi.resource_manager();
         let rcs = resources.deref();
 
         scene
@@ -372,145 +245,21 @@ impl Renderer {
             .map(|_| ())
     }
 
-    fn create_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
-        let window_attributes = Window::default_attributes()
-            .with_title("Vulkan renderer")
-            .with_inner_size(winit::dpi::LogicalSize::new(1920.0, 1080.0));
-
-        let window = event_loop.create_window(window_attributes).unwrap().into();
-        window
-    }
-
-    fn create_instance(window_extensions: &InstanceExtensions) -> Arc<Instance> {
-        let library = VulkanLibrary::new().unwrap();
-        let instance_extensions = window_extensions.clone();
-        let instance_create_info = InstanceCreateInfo {
-            enabled_extensions: instance_extensions,
-            enabled_layers: vec![String::from("VK_LAYER_KHRONOS_validation")],
-            ..InstanceCreateInfo::application_from_cargo_toml()
-        };
-        let instance = Instance::new(library, instance_create_info).unwrap();
-        instance
-    }
-
-    fn create_surface(instance: &Arc<Instance>, window: &Arc<Window>) -> Arc<Surface> {
-        let surface = Surface::from_window(instance.clone(), window.clone()).unwrap();
-        surface
-    }
-
-    fn pick_physical_device(
-        instance: &Arc<Instance>,
-        surface: &Arc<Surface>,
-    ) -> Arc<PhysicalDevice> {
-        let physical_device = instance
-            .enumerate_physical_devices()
-            .unwrap()
-            .filter(|physical_device: &Arc<PhysicalDevice>| {
-                physical_device::is_physical_device_suitable_for_surface(physical_device, surface)
-            })
-            .last()
-            .expect("No suitable physical device found");
-
-        physical_device
-    }
-
-    fn create_logical_device(
-        physical_device: &Arc<PhysicalDevice>,
-        queue_indices: &QueueFamilyIndices,
-    ) -> (Arc<Device>, QueueCollection) {
-        let queue_create_infos = queue_indices.generate_create_infos();
-        let device_extensions = DeviceExtensions {
-            khr_swapchain: true,
-            ..DeviceExtensions::default()
-        };
-        let device_features = DeviceFeatures {
-            sampler_anisotropy: true,
-            ..DeviceFeatures::default()
-        };
-        let device_create_info = DeviceCreateInfo {
-            queue_create_infos,
-            enabled_extensions: device_extensions,
-            enabled_features: device_features,
-            physical_devices: vec![physical_device.clone()].into(),
-            ..DeviceCreateInfo::default()
-        };
-
-        let (device, queues) = Device::new(physical_device.clone(), device_create_info).unwrap();
-        (
-            device,
-            QueueCollection::new(queues.collect(), queue_indices),
-        )
-    }
-
-    fn create_depth_resources(
-        device: &Arc<Device>,
-        depth_format: Format,
-        extent: [u32; 2],
-    ) -> Arc<ImageView> {
-        let image_create_info = ImageCreateInfo {
-            image_type: ImageType::Dim2d,
-            format: depth_format,
-            extent: [extent[0], extent[1], 1],
-            array_layers: 1,
-            mip_levels: 1,
-            samples: SampleCount::Sample1,
-            tiling: ImageTiling::Optimal,
-            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-            sharing: Sharing::Exclusive,
-            initial_layout: ImageLayout::Undefined,
-            ..ImageCreateInfo::default()
-        };
-        let allocation_info = AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-            ..AllocationCreateInfo::default()
-        };
-        let image_view_create_info = ImageViewCreateInfo {
-            view_type: ImageViewType::Dim2d,
-            format: depth_format,
-            subresource_range: ImageSubresourceRange {
-                aspects: ImageAspects::DEPTH,
-                mip_levels: 0..1,
-                array_layers: 0..1,
-            },
-            ..ImageViewCreateInfo::default()
-        };
-        let alloc = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-        let depth_image = Image::new(alloc, image_create_info, allocation_info).unwrap();
-        let depth_image_view = ImageView::new(depth_image, image_view_create_info).unwrap();
-        depth_image_view
-    }
-
-    pub fn gui_mut(&self) -> RefMut<Gui> {
-        self.gui.borrow_mut()
-    }
-
     pub fn mutable_state_const(&self) -> Ref<MutableRenderState> {
         self.mutable_state.borrow()
     }
     pub fn mutable_state(&self) -> RefMut<MutableRenderState> {
         self.mutable_state.borrow_mut()
     }
-
-    pub fn window(&self) -> &Window {
-        self.window.as_ref()
+    
+    pub fn render_pass(&self) -> &Arc<RenderPass> {
+        &self.render_pass
     }
 }
-
-impl RHIInterface for Renderer {
-    type MeshType = VKMesh;
-    type TextureType = VKTexture;
-    type MaterialType = VKMaterial;
-    type MaterialInstanceType = VKMaterialInstance;
-    type CameraType = VKCamera;
-    type ModelType = VKModel;
-    type SceneType = VKScene;
-
-    fn resource_manager(&self) -> Ref<RHIResourceManager> {
-        self.resource_manager.borrow()
-    }
-
-    fn resource_manager_mut(&self) -> RefMut<RHIResourceManager> {
-        self.resource_manager.borrow_mut()
+impl RendererInterface for VKRenderer {
+    type RHI = VKRHI;
+    fn rhi(&self) -> &VKRHI {
+        &self.rhi
     }
 }
 
@@ -519,25 +268,21 @@ impl MutableRenderState {
         self.should_recreate_swapchain = true;
     }
 
-    fn recreate_swapchain_internal(&mut self, rhi: &Renderer) {
+    fn recreate_swapchain_internal(&mut self, rhi: &VKRHI, render_pass: &Arc<RenderPass>) {
         //unsafe { self.device.wait_idle().unwrap() }
-        if rhi.window.inner_size() == PhysicalSize::new(0, 0) {
+        if rhi.window().inner_size() == PhysicalSize::new(0, 0) {
             return;
         }
         self.swapchain = self.swapchain.recreate(
-            &rhi.physical_device,
-            &rhi.surface,
-            &rhi.window,
-            &rhi.queue_family_indices,
+            &rhi.physical_device(),
+            &rhi.surface(),
+            &rhi.window(),
+            &rhi.queue_family_indices(),
         );
-        self.depth_image_view = Renderer::create_depth_resources(
-            &rhi.device,
-            find_depth_format(&rhi.physical_device),
-            self.swapchain.extent,
-        );
+        self.depth_image_view = rhi.create_depth_buffer(self.swapchain.extent);
         self.framebuffers = self
             .swapchain
-            .create_framebuffers(&rhi.render_pass, &self.depth_image_view);
+            .create_framebuffers(render_pass, &self.depth_image_view);
         self.should_recreate_swapchain = false;
     }
 }

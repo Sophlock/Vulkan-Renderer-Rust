@@ -8,7 +8,7 @@ use glam::{Mat4, Vec2, Vec3};
 use vulkano::{buffer::BufferContents, pipeline::graphics::vertex_input};
 
 use crate::application::{
-    renderer::rhi_assets::{RHIHandle, RHIResourceManager},
+    rhi::rhi_assets::{RHIHandle, RHIResourceManager},
     scene::transform::Transform,
 };
 
@@ -46,6 +46,12 @@ pub trait RHIInterface {
 
     fn resource_manager(&self) -> Ref<RHIResourceManager>;
     fn resource_manager_mut(&self) -> RefMut<RHIResourceManager>;
+}
+
+pub trait RendererInterface {
+    type RHI: RHIInterface;
+
+    fn rhi(&self) -> &Self::RHI;
 }
 
 pub trait RHIResource: Resource {
@@ -167,10 +173,10 @@ pub trait MaterialInterface: Asset {
 }
 
 pub trait RHIMaterialInterface: RHIResource {
-    type RHI: RHIInterface;
+    type RendererType: RendererInterface;
     fn create<T: MaterialInterface>(
         source: &T,
-        rhi: &Self::RHI,
+        renderer: &Self::RendererType,
         resource_manager: &mut RHIResourceManager,
     ) -> Self;
 }

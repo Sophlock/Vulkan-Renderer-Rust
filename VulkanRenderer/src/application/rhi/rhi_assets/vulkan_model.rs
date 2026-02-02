@@ -3,12 +3,12 @@ use glam::Mat4;
 
 use crate::application::{
     assets::asset_traits::{ModelInterface, RHIModelInterface, RHIResource},
-    renderer::{
+    rhi::{
         rhi_assets::{
             vulkan_material_instance::VKMaterialInstance, vulkan_mesh::VKMesh, RHIHandle,
             RHIResourceManager,
         },
-        Renderer,
+        VKRHI,
     },
 };
 
@@ -32,7 +32,7 @@ impl Resource for VKModel {
 }
 
 impl RHIModelInterface for VKModel {
-    type RHI = Renderer;
+    type RHI = VKRHI;
 
     fn create<T: ModelInterface>(
         source: &T,
