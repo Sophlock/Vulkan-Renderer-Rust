@@ -226,21 +226,21 @@ impl VKRenderer {
                 model_cursor
                     .field("modelTransform")
                     .unwrap()
-                    .write(&model.transform());
+                    .write(model.transform().as_ref());
                 model_cursor
                     .field("inverseTransposeModelTransform")
                     .unwrap()
-                    .write(&model.transform().transpose().inverse());
+                    .write(model.transform().transpose().inverse().as_ref());
 
                 let view_cursor = cursor.field("gViewData").unwrap();
                 view_cursor
                     .field("viewPosition")
                     .unwrap()
-                    .write(&scene.camera().location());
+                    .write(scene.camera().location().as_ref());
                 view_cursor
                     .field("viewProjection")
                     .unwrap()
-                    .write(&scene.camera().view_projection());
+                    .write(scene.camera().view_projection().as_ref());
                 let ev = 1f32;
                 view_cursor.field("exposureValue").unwrap().write(&ev);
 
@@ -274,9 +274,6 @@ impl VKRenderer {
     }
     pub fn mutable_state(&self) -> RefMut<MutableRenderState> {
         self.mutable_state.borrow_mut()
-    }
-    pub fn render_pass(&self) -> &Arc<RenderPass> {
-        &self.render_pass
     }
 }
 impl RendererInterface for VKRenderer {

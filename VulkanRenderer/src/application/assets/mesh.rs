@@ -29,10 +29,10 @@ impl Mesh {
             .zip(tangent)
             .zip(uv.into_f32())
             .map(|(((p, n), t), tex)| Vertex {
-                position: p.into(),
-                normal: n.into(),
-                tangent: [t[0], t[1], t[2]].into(),
-                texture_coordinates: tex.into(),
+                position: p,
+                normal: n,
+                tangent: *t.first_chunk().unwrap(),
+                texture_coordinates: tex,
             })
             .collect();
 

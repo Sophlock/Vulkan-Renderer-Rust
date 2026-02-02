@@ -17,16 +17,16 @@ use crate::application::{
 pub struct Vertex {
     #[name("input.position")]
     #[format(R32G32B32_SFLOAT)]
-    pub position: Vec3,
+    pub position: [f32; 3],
     #[name("input.normal")]
     #[format(R32G32B32_SFLOAT)]
-    pub normal: Vec3,
+    pub normal: [f32; 3],
     #[name("input.tangent")]
     #[format(R32G32B32_SFLOAT)]
-    pub tangent: Vec3,
+    pub tangent: [f32; 3],
     #[name("input.textureCoordinate")]
     #[format(R32G32_SFLOAT)]
-    pub texture_coordinates: Vec2,
+    pub texture_coordinates: [f32; 2],
 }
 
 #[derive(BufferContents, Copy, Clone)]
@@ -60,7 +60,7 @@ pub trait RHIResource: Resource {
     fn set_uuid(&mut self, uuid: usize) {
         *self.uuid_mut() = uuid;
     }
-    
+
     fn uuid(&self) -> usize {
         let mut_self = self as *const Self as *mut Self;
         unsafe {(*mut_self).uuid_mut()}.clone()
