@@ -2,7 +2,7 @@ mod buffer;
 mod command_buffer;
 mod layers;
 mod physical_device;
-mod pipeline;
+pub(crate) mod pipeline;
 mod queue;
 pub mod render_pass;
 mod render_sync;

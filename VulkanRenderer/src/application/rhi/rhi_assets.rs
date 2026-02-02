@@ -98,6 +98,10 @@ impl RHIResourceManager {
     fn asset_manager(&self) -> Ref<ResourceManager> {
         self.asset_manager.borrow()
     }
+    
+    pub fn resource_iterator<T: RHIResource + 'static>(&self) -> Option<impl Iterator<Item=&T>> {
+        self.resources.get_iter()
+    }
 }
 
 impl<T: RHIResource + 'static> RHIHandle<T> {
@@ -110,6 +114,10 @@ impl<T: RHIResource + 'static> RHIHandle<T> {
 
     pub fn get<'a>(&self, manager: &'a RHIResourceManager) -> Option<&'a T> {
         manager.resources.get::<T>(self.uuid)
+    }
+    
+    pub fn id(&self) -> usize {
+        self.uuid
     }
 }
 

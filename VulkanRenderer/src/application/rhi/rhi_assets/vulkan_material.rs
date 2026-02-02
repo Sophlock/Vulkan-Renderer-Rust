@@ -27,7 +27,6 @@ pub struct VKMaterial {
     vert_spirv: Blob,
     frag_spirv: Blob,
     shader_object_layout: Arc<ShaderObjectLayout>,
-    pipeline: Arc<GraphicsPipeline>,
     uuid: usize,
 }
 
@@ -35,7 +34,6 @@ impl VKMaterial {
     fn new(
         compiler: &SlangCompiler,
         device: &Arc<Device>,
-        render_pass: Arc<RenderPass>,
         in_flight_frames: usize,
         module_name: &str,
         material_name: &str,
@@ -65,35 +63,8 @@ impl VKMaterial {
             device,
         );
 
-        let pipeline = graphics_pipeline()
-            .input_assembly(None, None)
-            .vertex_shader(
-                device.clone(),
-                bytes_to_words(vert_spirv.as_slice()).unwrap().deref(),
-            )
-            .vertex_input::<Vertex>()
-            .rasterizer(None, None, None, None, None, None)
-            .skip_multisample()
-            .fragment_shader(
-                device.clone(),
-                bytes_to_words(frag_spirv.as_slice()).unwrap().deref(),
-            )
-            .opaque_color_blend()
-            .default_depth_test()
-            .build_pipeline(
-                device.clone(),
-                shader_object_layout.pipeline_layout().clone(),
-                PipelineSubpassType::BeginRenderPass(render_pass.first_subpass()),
-                [
-                    DynamicState::ViewportWithCount,
-                    DynamicState::ScissorWithCount,
-                ]
-                .into(),
-            );
-
         Ok(Self {
             shader_object_layout,
-            pipeline,
             vert_spirv,
             frag_spirv,
             uuid: 0,
@@ -123,12 +94,17 @@ impl VKMaterial {
         &self.shader_object_layout
     }
 
-    pub fn pipeline(&self) -> &Arc<GraphicsPipeline> {
-        &self.pipeline
-    }
-
     pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
         self.shader_object_layout.pipeline_layout()
+    }
+    
+    // TODO: These should belong to the compiled material
+    pub fn vert_spirv(&self) -> &Blob {
+        &self.vert_spirv
+    }
+    
+    pub fn frag_spirv(&self) -> &Blob {
+        &self.frag_spirv
     }
 }
 
@@ -145,18 +121,16 @@ impl RHIResource for VKMaterial {
 }
 
 impl RHIMaterialInterface for VKMaterial {
-    type RendererType = VKRenderer;
+    type RHI = VKRHI;
 
     fn create<T: MaterialInterface>(
         source: &T,
-        renderer: &Self::RendererType,
+        rhi: &Self::RHI,
         _: &mut RHIResourceManager,
     ) -> Self {
-        let rhi = renderer.rhi();
         VKMaterial::new(
             &rhi.slang_compiler,
             &rhi.device,
-            renderer.render_pass().clone(),
             rhi.frames_in_flight,
             source.module(),
             source.material(),

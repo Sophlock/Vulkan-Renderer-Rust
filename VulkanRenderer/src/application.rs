@@ -183,6 +183,8 @@ impl ApplicationHandler<AppEvent> for Application {
         let rhi = VKRHI::new(event_loop, self.asset_manager.clone());
         self.renderer = Some(Rc::new(VKRenderer::new(rhi)));
         self.update_scene_proxy();
+        // TODO: This should be called on demand as well
+        self.renderer.as_ref().unwrap().compile_materials();
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {

@@ -113,6 +113,10 @@ impl ResourceManager {
         }
     }
 
+    pub fn get_iter<T: Resource + 'static>(&self) -> Option<impl Iterator<Item=&T>> {
+        Some(self.data.get_vec::<T>()?.iter())
+    }
+
     pub fn add<T: Resource + 'static>(&mut self, mut data: T) -> usize {
         let id = self.next_id;
         data.set_uuid(id);

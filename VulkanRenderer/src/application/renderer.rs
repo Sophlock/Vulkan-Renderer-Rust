@@ -1,4 +1,5 @@
 use std::cell::{Ref, RefCell, RefMut};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -11,14 +12,21 @@ use vulkano::sync::future::FenceSignalFuture;
 use vulkano::sync::GpuFuture;
 use vulkano::{Validated, ValidationError, VulkanError};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::device::Device;
 use vulkano::format::ClearValue;
 use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
-use vulkano::pipeline::PipelineBindPoint;
+use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineBindPoint};
+use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
+use vulkano::shader::spirv::bytes_to_words;
 use vulkano::swapchain::{present, SwapchainPresentInfo};
 use winit::dpi::PhysicalSize;
-use crate::application::assets::asset_traits::{RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, RendererInterface};
+use crate::application::assets::asset_traits::{RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, RendererInterface, Vertex};
 use crate::application::rhi::{VKRHI, swapchain::Swapchain};
+use crate::application::rhi::pipeline::graphics_pipeline;
 use crate::application::rhi::render_pass::RenderPassBuilder;
+use crate::application::rhi::rhi_assets::RHIHandle;
+use crate::application::rhi::rhi_assets::vulkan_material::VKMaterial;
+use crate::application::rhi::rhi_assets::vulkan_material_instance::VKMaterialInstance;
 use crate::application::rhi::rhi_assets::vulkan_scene::VKScene;
 
 pub struct MutableRenderState {
@@ -33,6 +41,15 @@ pub struct VKRenderer {
     rhi: Rc<VKRHI>,
     mutable_state: RefCell<MutableRenderState>,
     render_pass: Arc<RenderPass>,
+    material_compiler: RefCell<MaterialCompiler>
+}
+
+struct MaterialCompiler {
+    compiled_materials: HashMap<usize, CompiledMaterial>
+}
+
+struct CompiledMaterial {
+    pipeline: Arc<GraphicsPipeline>,
 }
 
 impl VKRenderer {
@@ -55,6 +72,7 @@ impl VKRenderer {
                 in_flight_future: None,
             }),
             render_pass,
+            material_compiler: RefCell::new(MaterialCompiler::new())
         }
     }
 
@@ -191,6 +209,7 @@ impl VKRenderer {
             }])?;
 
         let resources = self.rhi.resource_manager();
+        let compiler = self.material_compiler.borrow();
         let rcs = resources.deref();
 
         scene
@@ -199,6 +218,7 @@ impl VKRenderer {
             .map(|model| {
                 let material_instance = model.material().get(rcs).unwrap();
                 let material = material_instance.material().get(rcs).unwrap();
+                let compiled_material = compiler.find_compiled_material(material).unwrap();
                 let mesh = model.mesh().get(rcs).unwrap();
 
                 let cursor = material_instance.shader_cursor();
@@ -225,7 +245,7 @@ impl VKRenderer {
                 view_cursor.field("exposureValue").unwrap().write(&ev);
 
                 command_buffer
-                    .bind_pipeline_graphics(material.pipeline().clone())?
+                    .bind_pipeline_graphics(compiled_material.pipeline.clone())?
                     .bind_descriptor_sets(
                         PipelineBindPoint::Graphics,
                         material.pipeline_layout().clone(),
@@ -244,6 +264,10 @@ impl VKRenderer {
             .end_render_pass(SubpassEndInfo::default())
             .map(|_| ())
     }
+    
+    pub fn compile_materials(&self) {
+        self.material_compiler.borrow_mut().compile_materials(&self.rhi, &self.render_pass);
+    }
 
     pub fn mutable_state_const(&self) -> Ref<MutableRenderState> {
         self.mutable_state.borrow()
@@ -251,7 +275,6 @@ impl VKRenderer {
     pub fn mutable_state(&self) -> RefMut<MutableRenderState> {
         self.mutable_state.borrow_mut()
     }
-    
     pub fn render_pass(&self) -> &Arc<RenderPass> {
         &self.render_pass
     }
@@ -284,5 +307,55 @@ impl MutableRenderState {
             .swapchain
             .create_framebuffers(render_pass, &self.depth_image_view);
         self.should_recreate_swapchain = false;
+    }
+}
+
+impl MaterialCompiler {
+    fn new() -> Self {
+        Self {
+            compiled_materials: HashMap::new(),
+        }
+    }
+
+    fn compile_material(&self, material: &VKMaterial, device: &Arc<Device>, render_pass: &Arc<RenderPass>) -> CompiledMaterial {
+        let pipeline = graphics_pipeline()
+            .input_assembly(None, None)
+            .vertex_shader(
+                device.clone(),
+                bytes_to_words(material.vert_spirv().as_slice()).unwrap().deref(),
+            )
+            .vertex_input::<Vertex>()
+            .rasterizer(None, None, None, None, None, None)
+            .skip_multisample()
+            .fragment_shader(
+                device.clone(),
+                bytes_to_words(material.frag_spirv().as_slice()).unwrap().deref(),
+            )
+            .opaque_color_blend()
+            .default_depth_test()
+            .build_pipeline(
+                device.clone(),
+                material.shader_object_layout().pipeline_layout().clone(),
+                PipelineSubpassType::BeginRenderPass(render_pass.clone().first_subpass()),
+                [
+                    DynamicState::ViewportWithCount,
+                    DynamicState::ScissorWithCount,
+                ]
+                    .into(),
+            );
+        CompiledMaterial {
+            pipeline,
+        }
+    }
+
+    fn find_compiled_material(&self, material: &VKMaterial) -> Option<&CompiledMaterial> {
+        self.compiled_materials.get(&material.uuid())
+    }
+
+    pub fn compile_materials(&mut self, rhi: &VKRHI, render_pass: &Arc<RenderPass>) {
+        let resource_manager = rhi.resource_manager();
+        self.compiled_materials = resource_manager.resource_iterator::<VKMaterial>().unwrap().map(|material| {
+            (material.uuid(), self.compile_material(material, rhi.device(), render_pass))
+        }).collect();
     }
 }

@@ -60,6 +60,11 @@ pub trait RHIResource: Resource {
     fn set_uuid(&mut self, uuid: usize) {
         *self.uuid_mut() = uuid;
     }
+    
+    fn uuid(&self) -> usize {
+        let mut_self = self as *const Self as *mut Self;
+        unsafe {(*mut_self).uuid_mut()}.clone()
+    }
 }
 
 pub trait MeshInterface: Asset {
@@ -173,10 +178,10 @@ pub trait MaterialInterface: Asset {
 }
 
 pub trait RHIMaterialInterface: RHIResource {
-    type RendererType: RendererInterface;
+    type RHI: RHIInterface;
     fn create<T: MaterialInterface>(
         source: &T,
-        renderer: &Self::RendererType,
+        rhi: &Self::RHI,
         resource_manager: &mut RHIResourceManager,
     ) -> Self;
 }
