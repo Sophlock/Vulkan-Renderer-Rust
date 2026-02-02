@@ -1,35 +1,38 @@
 mod assets;
 mod input;
+mod renderer;
 mod rhi;
 mod scene;
-mod renderer;
 
-use crate::AppEvent;
-use crate::application::input::InputAction;
-use crate::application::{
-    assets::{
-        asset_traits::{RHIInterface, RHISceneInterface},
-        material::Material,
-        material_instance::MaterialInstance,
-        mesh::Mesh,
-    },
-    rhi::rhi_assets::vulkan_scene::VKScene,
-    scene::{Scene, model::Model, transform::Transform},
-};
+use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
+
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
-use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
-use winit::event::{DeviceEvent, DeviceId};
 use winit::{
-    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
+    application::ApplicationHandler,
+    event::{DeviceEvent, DeviceId, WindowEvent},
+    event_loop::ActiveEventLoop,
     window::WindowId,
 };
-use winit_input_map::InputCode;
-use winit_input_map::{InputMap, input_map};
-use crate::application::assets::asset_traits::RendererInterface;
-use crate::application::renderer::VKRenderer;
+use winit_input_map::{input_map, InputCode, InputMap};
+
+use crate::{
+    application::{
+        assets::{
+            asset_traits::{RHIInterface, RHISceneInterface, RendererInterface},
+            material::Material,
+            material_instance::MaterialInstance,
+            mesh::Mesh,
+        },
+        input::InputAction,
+        renderer::VKRenderer,
+        rhi::rhi_assets::vulkan_scene::VKScene,
+        scene::{model::Model, transform::Transform, Scene},
+    },
+    AppEvent,
+};
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,
@@ -141,8 +144,7 @@ impl Application {
         if both {
             let right = cam.transform.right();
             let up = cam.transform.up();
-            cam.transform.location +=
-                (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
+            cam.transform.location += (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
         } else if left {
             let forward = cam.transform.forward();
             let forward_proj = forward.with_y(0.).normalize();
@@ -164,8 +166,7 @@ impl Application {
 
             cam.speed += scroll * 0.01;
             cam.speed = cam.speed.max(0.);
-        }
-        else {
+        } else {
             cam.fov += scroll * cam.speed * 0.1;
         }
 
@@ -190,7 +191,13 @@ impl ApplicationHandler<AppEvent> for Application {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         match event {
             AppEvent::Tick => self.tick(),
-            AppEvent::Render => self.renderer.as_ref().unwrap().rhi().window().request_redraw(),
+            AppEvent::Render => self
+                .renderer
+                .as_ref()
+                .unwrap()
+                .rhi()
+                .window()
+                .request_redraw(),
         }
     }
 
@@ -201,17 +208,21 @@ impl ApplicationHandler<AppEvent> for Application {
         event: WindowEvent,
     ) {
         self.input.update_with_window_event(&event);
-        self.renderer.as_ref().unwrap().rhi().gui_mut().update(&event);
+        self.renderer
+            .as_ref()
+            .unwrap()
+            .rhi()
+            .gui_mut()
+            .update(&event);
         match event {
-            WindowEvent::Resized(size) =>  {
+            WindowEvent::Resized(size) => {
                 self.update_aspect_ratio(size.width, size.height);
-                self
-                    .renderer
+                self.renderer
                     .as_ref()
                     .unwrap()
                     .mutable_state()
                     .request_recreate_swapchain()
-            },
+            }
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
                 self.update_scene_proxy();

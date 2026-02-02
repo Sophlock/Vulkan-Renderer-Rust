@@ -7,9 +7,7 @@ use vulkano::{
 };
 
 use crate::application::{
-    assets::asset_traits::{
-        MaterialInstanceInterface, RHIMaterialInstanceInterface, RHIResource,
-    },
+    assets::asset_traits::{MaterialInstanceInterface, RHIMaterialInstanceInterface, RHIResource},
     rhi::{
         rhi_assets::{vulkan_material::VKMaterial, RHIHandle, RHIResourceManager},
         shader_cursor::ShaderCursor,

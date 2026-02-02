@@ -2,11 +2,11 @@ extern crate winit;
 mod application;
 
 use application::Application;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 
 pub enum AppEvent {
     Tick,
-    Render
+    Render,
 }
 
 fn main() {

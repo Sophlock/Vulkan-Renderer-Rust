@@ -1,27 +1,26 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use asset_system::resource_management::Resource;
 use shader_slang::{
-    Blob, ComponentType, LayoutRules, structs::specialization_arg::SpecializationArg,
+    structs::specialization_arg::SpecializationArg, Blob, ComponentType, LayoutRules,
 };
 use vulkano::{
     device::Device,
-    pipeline::{
-        DynamicState, GraphicsPipeline, PipelineLayout, graphics::subpass::PipelineSubpassType,
-    },
-    render_pass::RenderPass,
-    shader::spirv::bytes_to_words,
+    pipeline::PipelineLayout
+
+    ,
 };
 
 use crate::application::{
-    assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource, Vertex},
+    assets::asset_traits::{
+        MaterialInterface, RHIMaterialInterface, RHIResource, RendererInterface,
+    }
+    ,
     rhi::{
-        VKRHI, pipeline::graphics_pipeline, rhi_assets::RHIResourceManager,
-        shader_object::ShaderObjectLayout, shaders::SlangCompiler,
+        rhi_assets::RHIResourceManager, shader_object::ShaderObjectLayout,
+        shaders::SlangCompiler, VKRHI,
     },
 };
-use crate::application::assets::asset_traits::RendererInterface;
-use crate::application::renderer::VKRenderer;
 
 pub struct VKMaterial {
     vert_spirv: Blob,
@@ -97,12 +96,12 @@ impl VKMaterial {
     pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
         self.shader_object_layout.pipeline_layout()
     }
-    
+
     // TODO: These should belong to the compiled material
     pub fn vert_spirv(&self) -> &Blob {
         &self.vert_spirv
     }
-    
+
     pub fn frag_spirv(&self) -> &Blob {
         &self.frag_spirv
     }

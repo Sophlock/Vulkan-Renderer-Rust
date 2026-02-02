@@ -16,11 +16,11 @@ use crate::application::{
         RHIResource, RHITextureInterface, TextureInterface,
     },
     rhi::{
-        VKRHI,
         rhi_assets::{
             vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
             vulkan_mesh::VKMesh, vulkan_model::VKModel, vulkan_texture::VKTexture,
         },
+        VKRHI,
     },
 };
 
@@ -56,8 +56,7 @@ macro_rules! implement_rhi_resource {
             let asset_id = source_data.asset_metadata().uuid();
             if let Some(id) = self.asset_to_rhi.get(&asset_id) {
                 RHIHandle::<$rhi_type>::new(id.clone())
-            }
-            else {
+            } else {
                 let new_rhi = $rhi_type::create(source_data, self.rhi().as_ref(), self);
                 let id = self.resources.add(new_rhi);
                 self.asset_to_rhi.insert(asset_id, id);
@@ -98,8 +97,8 @@ impl RHIResourceManager {
     fn asset_manager(&self) -> Ref<ResourceManager> {
         self.asset_manager.borrow()
     }
-    
-    pub fn resource_iterator<T: RHIResource + 'static>(&self) -> Option<impl Iterator<Item=&T>> {
+
+    pub fn resource_iterator<T: RHIResource + 'static>(&self) -> Option<impl Iterator<Item = &T>> {
         self.resources.get_iter()
     }
 }
@@ -115,7 +114,7 @@ impl<T: RHIResource + 'static> RHIHandle<T> {
     pub fn get<'a>(&self, manager: &'a RHIResourceManager) -> Option<&'a T> {
         manager.resources.get::<T>(self.uuid)
     }
-    
+
     pub fn id(&self) -> usize {
         self.uuid
     }

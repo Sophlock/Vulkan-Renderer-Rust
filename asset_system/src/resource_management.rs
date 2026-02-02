@@ -113,7 +113,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn get_iter<T: Resource + 'static>(&self) -> Option<impl Iterator<Item=&T>> {
+    pub fn get_iter<T: Resource + 'static>(&self) -> Option<impl Iterator<Item = &T>> {
         Some(self.data.get_vec::<T>()?.iter())
     }
 

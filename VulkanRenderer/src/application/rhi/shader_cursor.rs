@@ -1,9 +1,7 @@
-use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
+use shader_slang::{reflection::TypeLayout, ParameterCategory, TypeKind};
 use vulkano::buffer::BufferContents;
 
-use crate::application::rhi::{
-    rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
-};
+use crate::application::rhi::{rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject};
 
 pub struct ShaderCursor<'a> {
     shader_object: &'a ShaderObject,

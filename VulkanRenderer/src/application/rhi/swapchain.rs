@@ -1,24 +1,23 @@
 use std::{cmp::max, sync::Arc};
 
 use vulkano::{
-    Validated, VulkanError,
-    device::{Device, physical::PhysicalDevice},
-    format::Format,
+    device::physical::PhysicalDevice, format::Format,
     image::{
-        Image, ImageAspects, ImageSubresourceRange, ImageUsage,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageSubresourceRange,
+        ImageUsage,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{
-        ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo,
-        Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo, acquire_next_image,
+        acquire_next_image, ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities,
+        SurfaceInfo, Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
     },
     sync::Sharing,
+    Validated,
+    VulkanError,
 };
 use winit::window::Window;
 
-use crate::application::rhi::queue::QueueFamilyIndices;
-use crate::application::rhi::VKRHI;
+use crate::application::rhi::{queue::QueueFamilyIndices, VKRHI};
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -32,9 +31,18 @@ pub struct Swapchain {
 
 impl Swapchain {
     pub fn new(rhi: &VKRHI) -> Self {
-        let create_info = Self::create_info(rhi.physical_device(), rhi.surface(), rhi.window(), rhi.queue_family_indices());
-        let (swapchain, images) =
-            VKSwapchain::new(rhi.device().clone(), rhi.surface().clone(), create_info.clone()).unwrap();
+        let create_info = Self::create_info(
+            rhi.physical_device(),
+            rhi.surface(),
+            rhi.window(),
+            rhi.queue_family_indices(),
+        );
+        let (swapchain, images) = VKSwapchain::new(
+            rhi.device().clone(),
+            rhi.surface().clone(),
+            create_info.clone(),
+        )
+        .unwrap();
         Self::from_raw(swapchain, images, create_info)
     }
 

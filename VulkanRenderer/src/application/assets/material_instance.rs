@@ -1,6 +1,6 @@
 use asset_system::{
-    Asset,
     assets::{AssetHandle, AssetMetadata},
+    Asset,
 };
 
 use crate::application::assets::{asset_traits::MaterialInstanceInterface, material::Material};

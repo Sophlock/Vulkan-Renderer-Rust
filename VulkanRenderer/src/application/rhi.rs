@@ -22,59 +22,50 @@ use std::{
 use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{
-    Gui, GuiConfig, egui,
-    egui::{Color32, Frame},
+    Gui, GuiConfig
+    ,
 };
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
-use render_pass::RenderPassBuilder;
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
-use smallvec::smallvec;
 use swapchain::Swapchain;
-use vulkano::command_buffer::CommandBuffer;
 use vulkano::{
-    Validated, ValidationError, VulkanError, VulkanLibrary,
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
-    },
     descriptor_set::allocator::{
         DescriptorSetAllocator, StandardDescriptorSetAllocator,
         StandardDescriptorSetAllocatorCreateInfo,
-    },
+    }
+    ,
     device::{
-        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
+        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
     },
-    format::{ClearValue, Format},
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsage, SampleCount,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
-    },
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsage,
+        SampleCount,
+    }
+    ,
     instance::{Instance, InstanceCreateInfo, InstanceExtensions},
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
     },
-    pipeline::{
-        PipelineBindPoint,
-        graphics::viewport::{Scissor, Viewport},
-    },
-    render_pass::{Framebuffer, RenderPass},
-    swapchain::{Surface, SwapchainPresentInfo, present},
-    sync::{GpuFuture, Sharing, future::FenceSignalFuture},
+    swapchain::Surface
+
+    ,
+    sync::{GpuFuture, Sharing},
+    VulkanLibrary,
 };
-use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, window::Window};
+use winit::{event_loop::ActiveEventLoop, window::Window};
 
 use super::assets::asset_traits::{
     RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
 };
-use crate::application::rhi::swapchain::SwapchainSupportDetails;
 use crate::application::rhi::{
     rhi_assets::{
-        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
-        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
+        vulkan_camera::VKCamera, vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+        vulkan_model::VKModel, vulkan_scene::VKScene, RHIResourceManager,
     },
     shaders::SlangCompiler,
+    swapchain::SwapchainSupportDetails,
 };
 
 pub struct VKRHI {
@@ -108,10 +99,10 @@ impl VKRHI {
             QueueFamilyIndices::find_queue_indices(&physical_device, &surface);
         let (device, queues) = Self::create_logical_device(&physical_device, &queue_family_indices);
 
-        let swapchain_support = SwapchainSupportDetails::query_swapchain_support(&physical_device, &surface);
-        let frames_in_flight = Swapchain::decide_image_count(
-            &swapchain_support.capabilities,
-        ) as usize;
+        let swapchain_support =
+            SwapchainSupportDetails::query_swapchain_support(&physical_device, &surface);
+        let frames_in_flight =
+            Swapchain::decide_image_count(&swapchain_support.capabilities) as usize;
         let swapchain_format = Swapchain::choose_surface_format(&swapchain_support.formats).0;
 
         let command_buffer_interface =

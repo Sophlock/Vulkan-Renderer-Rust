@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use vulkano::{
-    device::{Device, physical::PhysicalDevice},
+    device::{physical::PhysicalDevice, Device},
     format::Format,
     image::{ImageLayout, SampleCount},
     render_pass::{
@@ -10,8 +10,9 @@ use vulkano::{
     },
     sync::{AccessFlags, PipelineStages},
 };
-use crate::application::rhi::VKRHI;
+
 use super::physical_device::find_depth_format;
+use crate::application::rhi::VKRHI;
 
 pub struct RenderPassBuilder {
     create_info: RenderPassCreateInfo,
@@ -96,10 +97,7 @@ impl RenderPassBuilder {
         })
     }
 
-    pub fn build_default_render_pass(
-        rhi: &VKRHI,
-        swapchain_format: Format,
-    ) -> Self {
+    pub fn build_default_render_pass(rhi: &VKRHI, swapchain_format: Format) -> Self {
         Self::new(rhi.device())
             .add_color_attachment(swapchain_format)
             .add_depth_attachment(rhi.physical_device())

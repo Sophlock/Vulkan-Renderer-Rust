@@ -1,8 +1,5 @@
 use crate::application::{
-    assets::asset_traits::{
-        CameraInterface, RHIModelInterface, RHISceneInterface,
-        SceneInterface,
-    },
+    assets::asset_traits::{CameraInterface, RHIModelInterface, RHISceneInterface, SceneInterface},
     rhi::{
         rhi_assets::{vulkan_camera::VKCamera, vulkan_model::VKModel, RHIResourceManager},
         VKRHI,

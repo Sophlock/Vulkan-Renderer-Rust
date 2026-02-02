@@ -1,4 +1,4 @@
-use asset_system::{Asset, assets::AssetMetadata};
+use asset_system::{assets::AssetMetadata, Asset};
 
 use crate::application::assets::asset_traits::MaterialInterface;
 

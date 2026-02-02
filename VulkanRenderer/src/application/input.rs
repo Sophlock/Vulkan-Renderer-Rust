@@ -1,4 +1,3 @@
-
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub enum InputAction {
     LeftClick,
@@ -16,5 +15,5 @@ pub enum InputAction {
     Left,
     Right,
     Up,
-    Down
+    Down,
 }

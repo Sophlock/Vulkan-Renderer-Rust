@@ -2,9 +2,9 @@ use std::cell::{Ref, RefMut};
 
 use asset_system::{
     assets::{Asset, AssetHandle},
-    resource_management::{Resource, ResourceManager},
+    resource_management::Resource,
 };
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Mat4, Vec3};
 use vulkano::{buffer::BufferContents, pipeline::graphics::vertex_input};
 
 use crate::application::{
@@ -63,7 +63,7 @@ pub trait RHIResource: Resource {
 
     fn uuid(&self) -> usize {
         let mut_self = self as *const Self as *mut Self;
-        unsafe {(*mut_self).uuid_mut()}.clone()
+        unsafe { (*mut_self).uuid_mut() }.clone()
     }
 }
 

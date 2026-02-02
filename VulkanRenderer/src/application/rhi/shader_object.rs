@@ -1,19 +1,16 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use shader_slang::{
-    reflection::TypeLayout, BindingType, ComponentType,
-    ParameterCategory,
-};
+use shader_slang::{reflection::TypeLayout, BindingType, ComponentType, ParameterCategory};
 use vulkano::{
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::{
         allocator::DescriptorSetAllocator, layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
-        }, pool::{DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo},
-        DescriptorImageViewInfo,
+        }, DescriptorImageViewInfo,
         DescriptorSet,
-        WriteDescriptorSet,
+        WriteDescriptorSet
+        ,
     },
     device::{Device, DeviceOwned},
     image::ImageLayout,

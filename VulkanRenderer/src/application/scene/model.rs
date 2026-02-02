@@ -1,6 +1,6 @@
 use asset_system::{
-    Asset,
     assets::{AssetHandle, AssetMetadata},
+    Asset,
 };
 use egui_winit_vulkano::egui::Ui;
 
