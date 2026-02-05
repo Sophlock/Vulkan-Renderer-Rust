@@ -1,23 +1,23 @@
 use std::{cmp::max, sync::Arc};
 
 use vulkano::{
-    device::physical::PhysicalDevice, format::Format,
+    Validated, VulkanError,
+    device::physical::PhysicalDevice,
+    format::Format,
     image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageSubresourceRange,
-        ImageUsage,
+        Image, ImageAspects, ImageSubresourceRange, ImageUsage,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{
-        acquire_next_image, ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities,
-        SurfaceInfo, Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
+        ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo,
+        Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo, acquire_next_image,
     },
     sync::Sharing,
-    Validated,
-    VulkanError,
 };
 use winit::window::Window;
 
-use crate::application::rhi::{queue::QueueFamilyIndices, VKRHI};
+use crate::application::rhi::{VKRHI, queue::QueueFamilyIndices};
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -118,7 +118,7 @@ impl Swapchain {
                         mip_levels: 0..1,
                         array_layers: 0..image.array_layers(),
                     },
-                    usage: ImageUsage::COLOR_ATTACHMENT,
+                    usage: create_info.image_usage,
                     sampler_ycbcr_conversion: None,
                     ..ImageViewCreateInfo::default()
                 };
