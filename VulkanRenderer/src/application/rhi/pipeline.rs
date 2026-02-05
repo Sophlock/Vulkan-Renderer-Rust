@@ -5,7 +5,11 @@ use vulkano::{
     device::Device,
     image::SampleCount,
     pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineLayout,
+        PipelineShaderStageCreateInfo,
+        compute::ComputePipelineCreateInfo,
         graphics::{
+            GraphicsPipelineCreateInfo,
             color_blend::{
                 AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents,
             },
@@ -16,11 +20,9 @@ use vulkano::{
             subpass::PipelineSubpassType,
             vertex_input::{Vertex, VertexDefinition, VertexInputState},
             viewport::ViewportState,
-            GraphicsPipelineCreateInfo,
-        }, DynamicState, GraphicsPipeline, PipelineLayout,
-        PipelineShaderStageCreateInfo,
+        },
     },
-    shader::{spirv::ExecutionModel, ShaderModule, ShaderModuleCreateInfo},
+    shader::{ShaderModule, ShaderModuleCreateInfo, spirv::ExecutionModel},
 };
 
 pub struct EmptyGraphicsPipeline {}
@@ -67,8 +69,18 @@ pub struct DepthStencilGraphicsPipeline {
     depth_stencil_state: DepthStencilState,
 }
 
+pub struct EmptyComputePipelineBuilder {}
+
+pub struct ShaderComputePipelineBuilder {
+    shader: PipelineShaderStageCreateInfo,
+}
+
 pub fn graphics_pipeline() -> EmptyGraphicsPipeline {
     EmptyGraphicsPipeline {}
+}
+
+pub fn compute_pipeline() -> EmptyComputePipelineBuilder {
+    EmptyComputePipelineBuilder {}
 }
 
 impl EmptyGraphicsPipeline {
@@ -346,5 +358,37 @@ impl DepthStencilGraphicsPipeline {
             },
             ..ViewportState::default()
         }
+    }
+}
+
+impl EmptyComputePipelineBuilder {
+    pub fn shader(self, device: Arc<Device>, shader: &[u32]) -> ShaderComputePipelineBuilder {
+        let shader_module =
+            unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(shader)).unwrap() };
+        let shader = PipelineShaderStageCreateInfo::new(
+            shader_module
+                .single_entry_point_with_execution(ExecutionModel::GLCompute)
+                .unwrap(),
+        );
+        ShaderComputePipelineBuilder { shader }
+    }
+}
+
+impl ShaderComputePipelineBuilder {
+    pub fn build_create_info(self, layout: Arc<PipelineLayout>) -> ComputePipelineCreateInfo {
+        ComputePipelineCreateInfo {
+            flags: Default::default(),
+            base_pipeline: None,
+            ..ComputePipelineCreateInfo::stage_layout(self.shader, layout)
+        }
+    }
+
+    pub fn build_pipeline(
+        self,
+        device: Arc<Device>,
+        layout: Arc<PipelineLayout>,
+    ) -> Arc<ComputePipeline> {
+        let create_info = self.build_create_info(layout);
+        ComputePipeline::new(device.clone(), None, create_info).unwrap()
     }
 }
