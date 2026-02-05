@@ -16,11 +16,11 @@ use crate::application::{
         RHIResource, RHITextureInterface, TextureInterface,
     },
     rhi::{
+        VKRHI,
         rhi_assets::{
             vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
             vulkan_mesh::VKMesh, vulkan_model::VKModel, vulkan_texture::VKTexture,
         },
-        VKRHI,
     },
 };
 

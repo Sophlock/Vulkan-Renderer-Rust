@@ -16,9 +16,10 @@ use winit::{
     event_loop::ActiveEventLoop,
     window::WindowId,
 };
-use winit_input_map::{input_map, InputCode, InputMap};
+use winit_input_map::{InputCode, InputMap, input_map};
 
 use crate::{
+    AppEvent,
     application::{
         assets::{
             asset_traits::{RHIInterface, RHISceneInterface, RendererInterface},
@@ -29,9 +30,8 @@ use crate::{
         input::InputAction,
         renderer::VKRenderer,
         rhi::rhi_assets::vulkan_scene::VKScene,
-        scene::{model::Model, transform::Transform, Scene},
+        scene::{Scene, model::Model, transform::Transform},
     },
-    AppEvent,
 };
 
 pub struct Application {

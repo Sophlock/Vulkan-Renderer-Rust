@@ -4,11 +4,11 @@ use glam::Mat4;
 use crate::application::{
     assets::asset_traits::{ModelInterface, RHIModelInterface, RHIResource},
     rhi::{
-        rhi_assets::{
-            vulkan_material_instance::VKMaterialInstance, vulkan_mesh::VKMesh, RHIHandle,
-            RHIResourceManager,
-        },
         VKRHI,
+        rhi_assets::{
+            RHIHandle, RHIResourceManager, vulkan_material_instance::VKMaterialInstance,
+            vulkan_mesh::VKMesh,
+        },
     },
 };
 

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use vulkano::{
-    device::{physical::PhysicalDevice, Queue, QueueCreateInfo, QueueFamilyProperties, QueueFlags},
+    device::{Queue, QueueCreateInfo, QueueFamilyProperties, QueueFlags, physical::PhysicalDevice},
     swapchain::Surface,
 };
 

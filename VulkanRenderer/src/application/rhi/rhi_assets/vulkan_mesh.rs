@@ -10,8 +10,8 @@ use vulkano::{
 use crate::application::{
     assets::asset_traits::{Index, MeshInterface, RHIMeshInterface, RHIResource, Vertex},
     rhi::{
-        buffer::buffer_from_slice, command_buffer::CommandBufferInterface, rhi_assets::RHIResourceManager,
-        VKRHI,
+        VKRHI, buffer::buffer_from_slice, command_buffer::CommandBufferInterface,
+        rhi_assets::RHIResourceManager,
     },
 };
 

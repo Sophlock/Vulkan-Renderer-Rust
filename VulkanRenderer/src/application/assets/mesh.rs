@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use asset_system::{assets::AssetMetadata, Asset};
+use asset_system::{Asset, assets::AssetMetadata};
 
 use crate::application::assets::asset_traits::{Index, MeshInterface, Vertex};
 

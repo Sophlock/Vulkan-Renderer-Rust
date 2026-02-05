@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use vulkano::{
+    DeviceSize, Validated, VulkanError,
     buffer::{
         AllocateBufferError, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer,
-    }, command_buffer::{CopyBufferInfoTyped, PrimaryCommandBufferAbstract}, device::Queue,
+    },
+    command_buffer::{CopyBufferInfoTyped, PrimaryCommandBufferAbstract},
+    device::Queue,
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
     sync::{GpuFuture, Sharing},
-    DeviceSize,
-    Validated,
-    VulkanError,
 };
 
 use super::command_buffer::CommandBufferInterface;

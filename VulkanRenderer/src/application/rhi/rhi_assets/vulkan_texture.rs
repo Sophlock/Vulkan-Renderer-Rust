@@ -3,26 +3,26 @@ use std::{cmp::max, sync::Arc};
 use asset_system::resource_management::Resource;
 use smallvec::smallvec;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{
+    Validated, ValidationError, VulkanError,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{
         AutoCommandBufferBuilder, BlitImageInfo, CopyBufferToImageInfo, ImageBlit,
         PrimaryAutoCommandBuffer, PrimaryCommandBufferAbstract,
-    }, format::Format,
+    },
+    format::Format,
     image::{
-        sampler::Filter, view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo,
-        ImageLayout, ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType,
-        ImageUsage,
-        SampleCount,
+        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsage, SampleCount,
+        sampler::Filter,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     sync::{GpuFuture, Sharing},
-    Validated,
-    ValidationError,
-    VulkanError,
 };
 
 use crate::application::{
     assets::asset_traits::{RHIResource, RHITextureInterface, TextureInterface},
-    rhi::{rhi_assets::RHIResourceManager, VKRHI},
+    rhi::{VKRHI, rhi_assets::RHIResourceManager},
 };
 
 pub struct VKTexture {

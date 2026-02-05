@@ -2,17 +2,17 @@ use std::{ops::Deref, sync::Arc};
 
 use asset_system::resource_management::Resource;
 use vulkano::{
-    descriptor_set::{allocator::DescriptorSetAllocator, DescriptorSet},
+    descriptor_set::{DescriptorSet, allocator::DescriptorSetAllocator},
     memory::allocator::MemoryAllocator,
 };
 
 use crate::application::{
     assets::asset_traits::{MaterialInstanceInterface, RHIMaterialInstanceInterface, RHIResource},
     rhi::{
-        rhi_assets::{vulkan_material::VKMaterial, RHIHandle, RHIResourceManager},
+        VKRHI,
+        rhi_assets::{RHIHandle, RHIResourceManager, vulkan_material::VKMaterial},
         shader_cursor::ShaderCursor,
         shader_object::ShaderObject,
-        VKRHI,
     },
 };
 
