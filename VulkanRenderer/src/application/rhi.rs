@@ -1,15 +1,16 @@
 mod buffer;
 mod command_buffer;
+mod device_helper;
 mod layers;
 mod physical_device;
-pub(crate) mod pipeline;
+pub mod pipeline;
 mod queue;
 pub mod render_pass;
 mod render_sync;
 pub mod rhi_assets;
-mod shader_cursor;
-mod shader_object;
-mod shaders;
+pub mod shader_cursor;
+pub mod shader_object;
+pub mod shaders;
 pub mod swapchain;
 
 use std::{
@@ -21,38 +22,35 @@ use std::{
 
 use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
-use egui_winit_vulkano::{
-    Gui, GuiConfig
-    ,
-};
+use egui_winit_vulkano::{Gui, GuiConfig};
 use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use swapchain::Swapchain;
 use vulkano::{
+    VulkanLibrary,
     descriptor_set::allocator::{
         DescriptorSetAllocator, StandardDescriptorSetAllocator,
         StandardDescriptorSetAllocatorCreateInfo,
-    }
-    ,
-    device::{
-        physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
     },
+    device::{
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
+    },
+    format::Format,
     image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsage,
-        SampleCount,
-    }
-    ,
-    instance::{Instance, InstanceCreateInfo, InstanceExtensions},
+        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
+        ImageType, ImageUsage, SampleCount,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+    },
+    instance::{
+        Instance, InstanceCreateInfo, InstanceExtensions,
+        debug::{DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo},
+    },
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
     },
-    swapchain::Surface
-
-    ,
+    swapchain::Surface,
     sync::{GpuFuture, Sharing},
-    VulkanLibrary,
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
@@ -61,8 +59,8 @@ use super::assets::asset_traits::{
 };
 use crate::application::rhi::{
     rhi_assets::{
-        vulkan_camera::VKCamera, vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
-        vulkan_model::VKModel, vulkan_scene::VKScene, RHIResourceManager,
+        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
+        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
     },
     shaders::SlangCompiler,
     swapchain::SwapchainSupportDetails,
@@ -72,6 +70,7 @@ pub struct VKRHI {
     frames_in_flight: usize,
     window: Arc<Window>,
     instance: Arc<Instance>,
+    debug_messenger: DebugUtilsMessenger,
     surface: Arc<Surface>,
     physical_device: Arc<PhysicalDevice>,
     device: Arc<Device>,
@@ -93,6 +92,7 @@ impl VKRHI {
     ) -> Rc<Self> {
         let window = Self::create_window(event_loop);
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());
+        let debug_messenger = Self::create_debug_messenger(instance.clone());
         let surface = Self::create_surface(&instance, &window);
         let physical_device = Self::pick_physical_device(&instance, &surface);
         let queue_family_indices =
@@ -131,6 +131,7 @@ impl VKRHI {
             frames_in_flight,
             window,
             instance,
+            debug_messenger,
             surface,
             physical_device,
             device,
@@ -158,7 +159,10 @@ impl VKRHI {
 
     fn create_instance(window_extensions: &InstanceExtensions) -> Arc<Instance> {
         let library = VulkanLibrary::new().unwrap();
-        let instance_extensions = window_extensions.clone();
+        let instance_extensions = InstanceExtensions {
+            ext_debug_utils: true,
+            ..window_extensions.clone()
+        };
         let instance_create_info = InstanceCreateInfo {
             enabled_extensions: instance_extensions,
             enabled_layers: vec![String::from("VK_LAYER_KHRONOS_validation")],
@@ -166,6 +170,16 @@ impl VKRHI {
         };
         let instance = Instance::new(library, instance_create_info).unwrap();
         instance
+    }
+
+    fn create_debug_messenger(instance: Arc<Instance>) -> DebugUtilsMessenger {
+        let callback = unsafe {
+            DebugUtilsMessengerCallback::new(|severity, message_type, data| {
+                println!("{:?} {:?}: {}", message_type, severity, data.message);
+            })
+        };
+        let create_info = DebugUtilsMessengerCreateInfo::user_callback(callback);
+        DebugUtilsMessenger::new(instance, create_info).unwrap()
     }
 
     fn create_surface(instance: &Arc<Instance>, window: &Arc<Window>) -> Arc<Surface> {
@@ -193,13 +207,14 @@ impl VKRHI {
         physical_device: &Arc<PhysicalDevice>,
         queue_indices: &QueueFamilyIndices,
     ) -> (Arc<Device>, QueueCollection) {
-        let queue_create_infos = queue_indices.generate_create_infos();
+        /*let queue_create_infos = queue_indices.generate_create_infos();
         let device_extensions = DeviceExtensions {
             khr_swapchain: true,
             ..DeviceExtensions::default()
         };
         let device_features = DeviceFeatures {
             sampler_anisotropy: true,
+            compute_derivative_group_quads: true,
             ..DeviceFeatures::default()
         };
         let device_create_info = DeviceCreateInfo {
@@ -214,20 +229,26 @@ impl VKRHI {
         (
             device,
             QueueCollection::new(queues.collect(), queue_indices),
-        )
+        )*/
+        device_helper::create_logical_device(physical_device, queue_indices)
     }
 
-    pub fn create_depth_buffer(&self, extent: [u32; 2]) -> Arc<ImageView> {
-        let depth_format = find_depth_format(self.physical_device());
+    pub fn create_gbuffer(
+        &self,
+        extent: [u32; 2],
+        format: Format,
+        usage: ImageUsage,
+        aspects: ImageAspects,
+    ) -> Arc<ImageView> {
         let image_create_info = ImageCreateInfo {
             image_type: ImageType::Dim2d,
-            format: depth_format,
+            format,
             extent: [extent[0], extent[1], 1],
             array_layers: 1,
             mip_levels: 1,
             samples: SampleCount::Sample1,
             tiling: ImageTiling::Optimal,
-            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            usage,
             sharing: Sharing::Exclusive,
             initial_layout: ImageLayout::Undefined,
             ..ImageCreateInfo::default()
@@ -238,18 +259,32 @@ impl VKRHI {
         };
         let image_view_create_info = ImageViewCreateInfo {
             view_type: ImageViewType::Dim2d,
-            format: depth_format,
+            format,
             subresource_range: ImageSubresourceRange {
-                aspects: ImageAspects::DEPTH,
+                aspects,
                 mip_levels: 0..1,
                 array_layers: 0..1,
             },
             ..ImageViewCreateInfo::default()
         };
-        let alloc = Arc::new(StandardMemoryAllocator::new_default(self.device.clone()));
-        let depth_image = Image::new(alloc, image_create_info, allocation_info).unwrap();
-        let depth_image_view = ImageView::new(depth_image, image_view_create_info).unwrap();
-        depth_image_view
+        let image = Image::new(
+            self.buffer_allocator.clone(),
+            image_create_info,
+            allocation_info,
+        )
+        .unwrap();
+        let image_view = ImageView::new(image, image_view_create_info).unwrap();
+        image_view
+    }
+
+    pub fn create_depth_buffer(&self, extent: [u32; 2]) -> Arc<ImageView> {
+        let depth_format = find_depth_format(self.physical_device());
+        self.create_gbuffer(
+            extent,
+            depth_format,
+            ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            ImageAspects::DEPTH,
+        )
     }
 
     pub fn gui_mut(&self) -> RefMut<Gui> {
@@ -282,6 +317,22 @@ impl VKRHI {
 
     pub fn command_buffer_interface(&self) -> &CommandBufferInterface {
         &self.command_buffer_interface
+    }
+
+    pub fn descriptor_allocator(&self) -> &Arc<dyn DescriptorSetAllocator> {
+        &self.descriptor_allocator
+    }
+
+    pub fn buffer_allocator(&self) -> &Arc<dyn MemoryAllocator> {
+        &self.buffer_allocator
+    }
+
+    pub fn in_flight_frames(&self) -> usize {
+        self.frames_in_flight
+    }
+
+    pub fn slang_compiler(&self) -> &SlangCompiler {
+        &self.slang_compiler
     }
 }
 
