@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use vulkano::{
-    device::{physical::PhysicalDevice, Device},
+    device::{Device, physical::PhysicalDevice},
     format::Format,
     image::{ImageLayout, SampleCount},
     render_pass::{
@@ -53,7 +53,7 @@ impl RenderPassBuilder {
             load_op: AttachmentLoadOp::Clear,
             store_op: AttachmentStoreOp::Store,
             initial_layout: ImageLayout::Undefined,
-            final_layout: ImageLayout::ColorAttachmentOptimal,
+            final_layout: ImageLayout::ShaderReadOnlyOptimal,
             ..AttachmentDescription::default()
         })
     }
@@ -97,9 +97,9 @@ impl RenderPassBuilder {
         })
     }
 
-    pub fn build_default_render_pass(rhi: &VKRHI, swapchain_format: Format) -> Self {
+    pub fn build_default_render_pass(rhi: &VKRHI, color_format: Format) -> Self {
         Self::new(rhi.device())
-            .add_color_attachment(swapchain_format)
+            .add_color_attachment(color_format)
             .add_depth_attachment(rhi.physical_device())
             .add_graphics_subpass(
                 vec![AttachmentReference {
