@@ -10,27 +10,32 @@ use egui_winit_vulkano::{
     egui,
     egui::{Color32, Frame},
 };
+use shader_slang::ComponentType;
 use smallvec::smallvec;
 use vulkano::{
+    Validated, ValidationError, VulkanError,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
-    }, device::Device, format::ClearValue,
-    image::view::ImageView,
+    },
+    device::Device,
+    format::{ClearValue, Format},
+    image::{
+        ImageAspects, ImageLayout, ImageUsage,
+        sampler::{Sampler, SamplerCreateInfo},
+        view::ImageView,
+    },
     pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
         graphics::{
             subpass::PipelineSubpassType,
             viewport::{Scissor, Viewport},
-        }, DynamicState, GraphicsPipeline,
-        PipelineBindPoint,
+        },
     },
-    render_pass::{Framebuffer, RenderPass},
-    shader::spirv::bytes_to_words,
-    swapchain::{present, SwapchainPresentInfo},
-    sync::{future::FenceSignalFuture, GpuFuture},
-    Validated,
-    ValidationError,
-    VulkanError,
+    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    shader::{ShaderStages, spirv::bytes_to_words},
+    swapchain::{SwapchainPresentInfo, present},
+    sync::{GpuFuture, future::FenceSignalFuture},
 };
 use winit::dpi::PhysicalSize;
 
@@ -40,20 +45,23 @@ use crate::application::{
         RendererInterface, Vertex,
     },
     rhi::{
-        pipeline::graphics_pipeline,
-        render_pass::RenderPassBuilder,
-        rhi_assets::{
-            vulkan_material::VKMaterial,
-            vulkan_scene::VKScene,
-        },
-        swapchain::Swapchain,
         VKRHI,
+        pipeline::{compute_pipeline, graphics_pipeline},
+        render_pass::RenderPassBuilder,
+        rhi_assets::{vulkan_material::VKMaterial, vulkan_scene::VKScene},
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+        shaders::SlangCompiler,
+        swapchain::Swapchain,
     },
 };
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
     depth_image_view: Arc<ImageView>,
+    color_render_target: Arc<ImageView>,
+    pp_render_target: Arc<ImageView>,
+    rt_framebuffer: Arc<Framebuffer>,
     framebuffers: Vec<Arc<Framebuffer>>,
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
@@ -64,6 +72,7 @@ pub struct VKRenderer {
     mutable_state: RefCell<MutableRenderState>,
     render_pass: Arc<RenderPass>,
     material_compiler: RefCell<MaterialCompiler>,
+    post_process: PostProcessPass,
 }
 
 struct MaterialCompiler {
@@ -74,25 +83,75 @@ struct CompiledMaterial {
     pipeline: Arc<GraphicsPipeline>,
 }
 
+struct PostProcessPass {
+    shader_object_layout: Arc<ShaderObjectLayout>,
+    shader_object: ShaderObject,
+    pipeline: Arc<ComputePipeline>,
+    sampler: Arc<Sampler>,
+}
+
 impl VKRenderer {
     pub fn new(rhi: Rc<VKRHI>) -> Self {
         let swapchain = Swapchain::new(rhi.as_ref());
         let render_pass =
-            RenderPassBuilder::build_default_render_pass(rhi.as_ref(), swapchain.format).build();
+            RenderPassBuilder::build_default_render_pass(rhi.as_ref(), Format::R32G32B32A32_SFLOAT)
+                .build();
         let depth_image_view = rhi.create_depth_buffer(swapchain.extent);
+
+        let color_render_target = rhi.create_gbuffer(
+            swapchain.extent,
+            Format::R32G32B32A32_SFLOAT,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+        let pp_render_target = rhi.create_gbuffer(
+            swapchain.extent,
+            Format::R32G32B32A32_SFLOAT,
+            ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+        let rt_framebuffer = Framebuffer::new(
+            render_pass.clone(),
+            FramebufferCreateInfo {
+                attachments: vec![color_render_target.clone(), depth_image_view.clone()],
+                extent: swapchain.extent,
+                layers: 1,
+                ..FramebufferCreateInfo::default()
+            },
+        )
+        .unwrap();
+
         let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
+        let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref());
+
+        let global_cursor = ShaderCursor::new(&post_process.shader_object);
+        let cursor = global_cursor.field("gComputeInput").unwrap();
+        cursor
+            .field("input")
+            .unwrap()
+            .write_image_view_sampler(color_render_target.clone(), post_process.sampler.clone());
+        cursor.field("screenSize").unwrap().write(&swapchain.extent);
+        cursor.field("exposureValue").unwrap().write(&1.0f32);
+        cursor
+            .field("result")
+            .unwrap()
+            .write_image_view(pp_render_target.clone());
 
         Self {
             rhi,
             mutable_state: RefCell::new(MutableRenderState {
                 swapchain,
                 depth_image_view,
+                color_render_target,
+                pp_render_target,
+                rt_framebuffer,
                 framebuffers,
                 should_recreate_swapchain: false,
                 in_flight_future: None,
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
+            post_process,
         }
     }
 
@@ -158,8 +217,26 @@ impl VKRenderer {
             )
             .unwrap();
 
+        let mut compute_command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
+
+        self.record_post_process_command_buffer(
+            &mut compute_command_buffer,
+            swapchain_image_index as usize,
+        )
+        .unwrap();
+
+        let post_process_finished_future = draw_finished_future
+            .then_execute(
+                self.rhi.queues().compute_queue.clone(),
+                compute_command_buffer.build().unwrap(),
+            )
+            .unwrap();
+
         let gui_draw_future = self.rhi.gui_mut().draw_on_image(
-            draw_finished_future,
+            post_process_finished_future,
             self.mutable_state_const()
                 .swapchain
                 .image_view(swapchain_image_index as usize)
@@ -208,7 +285,7 @@ impl VKRenderer {
                     ],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(
-                        self.mutable_state_const().framebuffers[image_index].clone(),
+                        self.mutable_state_const().rt_framebuffer.clone(),
                     )
                 },
                 SubpassBeginInfo {
@@ -287,6 +364,46 @@ impl VKRenderer {
             .map(|_| ())
     }
 
+    fn record_post_process_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+    ) -> Result<(), Box<ValidationError>> {
+        let render_target = self
+            .mutable_state()
+            .swapchain
+            .image_view(image_index)
+            .clone();
+
+        /*let global_cursor = ShaderCursor::new(&self.post_process.shader_object);
+        let cursor = global_cursor.field("gComputeInput").unwrap();
+        cursor
+            .field("result")
+            .unwrap()
+            .write_image_view(render_target.clone());*/
+
+        let extent = self.mutable_state().swapchain.extent;
+        let groups = [extent[0] / 16, extent[1] / 16, 1];
+
+        command_buffer
+            .bind_pipeline_compute(self.post_process.pipeline.clone())?
+            .bind_descriptor_sets(
+                PipelineBindPoint::Compute,
+                self.post_process
+                    .shader_object_layout
+                    .pipeline_layout()
+                    .clone(),
+                0,
+                self.post_process.shader_object.descriptor_sets()[image_index].clone(),
+            )?;
+        unsafe { command_buffer.dispatch(groups) }?;
+        /* command_buffer.copy_image(CopyImageInfo::images(
+            self.mutable_state().pp_render_target.image().clone(),
+            render_target.image().clone(),
+        ))?;*/
+        Ok(())
+    }
+
     pub fn compile_materials(&self) {
         self.material_compiler
             .borrow_mut()
@@ -324,6 +441,33 @@ impl MutableRenderState {
             &rhi.queue_family_indices(),
         );
         self.depth_image_view = rhi.create_depth_buffer(self.swapchain.extent);
+
+        self.color_render_target = rhi.create_gbuffer(
+            self.swapchain.extent,
+            Format::R32G32B32A32_SFLOAT,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+        self.pp_render_target = rhi.create_gbuffer(
+            self.swapchain.extent,
+            Format::R32G32B32A32_SFLOAT,
+            ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+        self.rt_framebuffer = Framebuffer::new(
+            render_pass.clone(),
+            FramebufferCreateInfo {
+                attachments: vec![
+                    self.color_render_target.clone(),
+                    self.depth_image_view.clone(),
+                ],
+                extent: self.swapchain.extent,
+                layers: 1,
+                ..FramebufferCreateInfo::default()
+            },
+        )
+        .unwrap();
+
         self.framebuffers = self
             .swapchain
             .create_framebuffers(render_pass, &self.depth_image_view);
@@ -392,5 +536,54 @@ impl MaterialCompiler {
                 )
             })
             .collect();
+    }
+}
+
+impl PostProcessPass {
+    fn new(compiler: &SlangCompiler, rhi: &VKRHI) -> Self {
+        let module = compiler
+            .session()
+            .load_module("Compute/compute_test")
+            .unwrap();
+        let entry = module.find_entry_point_by_name("compute_test").unwrap();
+        let module_component: ComponentType = module.into();
+        let composed = compiler
+            .session()
+            .create_composite_component_type(&[module_component, entry.into()])
+            .unwrap();
+        let linked = composed.link().unwrap();
+        let spirv = linked.entry_point_code(0, 0).unwrap();
+
+        let shader_object_layout =
+            ShaderObjectLayout::new(linked, &[], rhi.device(), ShaderStages::COMPUTE);
+        let shader_object = ShaderObject::new(
+            shader_object_layout.clone(),
+            rhi.descriptor_allocator(),
+            rhi.buffer_allocator(),
+            rhi.in_flight_frames() as u32,
+        );
+
+        let pipeline = compute_pipeline()
+            .shader(
+                rhi.device().clone(),
+                bytes_to_words(spirv.as_slice()).unwrap().deref(),
+            )
+            .build_pipeline(
+                rhi.device().clone(),
+                shader_object_layout.pipeline_layout().clone(),
+            );
+
+        let sampler = Sampler::new(
+            rhi.device().clone(),
+            SamplerCreateInfo::simple_repeat_linear_no_mipmap(),
+        )
+        .unwrap();
+
+        Self {
+            shader_object_layout,
+            shader_object,
+            pipeline,
+            sampler,
+        }
     }
 }
