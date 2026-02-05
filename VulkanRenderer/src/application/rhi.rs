@@ -1,5 +1,5 @@
-mod buffer;
-mod command_buffer;
+pub mod buffer;
+pub mod command_buffer;
 mod device_helper;
 mod layers;
 mod physical_device;

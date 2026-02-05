@@ -1,3 +1,5 @@
+mod full_screen_pass;
+
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
@@ -12,6 +14,7 @@ use egui_winit_vulkano::{
 };
 use shader_slang::ComponentType;
 use smallvec::smallvec;
+use vulkano::sync::{AccessFlags, PipelineStages};
 use vulkano::{
     Validated, ValidationError, VulkanError,
     command_buffer::{
@@ -39,6 +42,7 @@ use vulkano::{
 };
 use winit::dpi::PhysicalSize;
 
+use crate::application::renderer::full_screen_pass::FullScreenPass;
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
@@ -65,6 +69,7 @@ pub struct MutableRenderState {
     framebuffers: Vec<Arc<Framebuffer>>,
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
+    fullscreen_pass: FullScreenPass,
 }
 
 pub struct VKRenderer {
@@ -137,6 +142,20 @@ impl VKRenderer {
             .unwrap()
             .write_image_view(pp_render_target.clone());
 
+        let fullscreen_pass = FullScreenPass::new(
+            rhi.as_ref(),
+            Format::R32G32B32A32_SFLOAT,
+            swapchain.format,
+            ImageLayout::PresentSrc,
+            PipelineStages::empty(),
+            AccessFlags::empty(),
+            ImageLayout::ShaderReadOnlyOptimal,
+            None,
+            pp_render_target.clone(),
+            swapchain.image_view_iter().cloned(),
+            swapchain.extent,
+        );
+
         Self {
             rhi,
             mutable_state: RefCell::new(MutableRenderState {
@@ -148,6 +167,7 @@ impl VKRenderer {
                 framebuffers,
                 should_recreate_swapchain: false,
                 in_flight_future: None,
+                fullscreen_pass,
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
@@ -235,8 +255,29 @@ impl VKRenderer {
             )
             .unwrap();
 
+        let mut command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
+
+        self.mutable_state()
+            .fullscreen_pass
+            .record_command_buffer(
+                &mut command_buffer,
+                self.mutable_state().swapchain.extent,
+                swapchain_image_index as usize,
+            )
+            .unwrap();
+
+        let final_output_finished_future = post_process_finished_future
+            .then_execute(
+                self.rhi.queues().graphics_queue.clone(),
+                command_buffer.build().unwrap(),
+            )
+            .unwrap();
+
         let gui_draw_future = self.rhi.gui_mut().draw_on_image(
-            post_process_finished_future,
+            final_output_finished_future,
             self.mutable_state_const()
                 .swapchain
                 .image_view(swapchain_image_index as usize)

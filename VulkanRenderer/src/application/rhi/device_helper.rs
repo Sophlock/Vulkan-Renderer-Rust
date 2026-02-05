@@ -26,6 +26,7 @@ pub fn create_logical_device(
     let device_features = DeviceFeatures {
         sampler_anisotropy: true,
         compute_derivative_group_quads: true,
+        synchronization2: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {

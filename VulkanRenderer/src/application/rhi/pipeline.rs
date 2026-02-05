@@ -66,7 +66,7 @@ pub struct ColorBlendGraphicsPipeline {
 
 pub struct DepthStencilGraphicsPipeline {
     previous: ColorBlendGraphicsPipeline,
-    depth_stencil_state: DepthStencilState,
+    depth_stencil_state: Option<DepthStencilState>,
 }
 
 pub struct EmptyComputePipelineBuilder {}
@@ -249,12 +249,12 @@ impl ColorBlendGraphicsPipeline {
         depth_bounds: Option<RangeInclusive<f32>>,
         stencil: Option<StencilState>,
     ) -> DepthStencilGraphicsPipeline {
-        let depth_stencil_state = DepthStencilState {
+        let depth_stencil_state = Some(DepthStencilState {
             depth,
             depth_bounds,
             stencil,
             ..DepthStencilState::default()
-        };
+        });
         DepthStencilGraphicsPipeline {
             previous: self,
             depth_stencil_state,
@@ -262,7 +262,10 @@ impl ColorBlendGraphicsPipeline {
     }
 
     pub fn skip_depth_test(self) -> DepthStencilGraphicsPipeline {
-        self.depth_stencil(None, None, None)
+        DepthStencilGraphicsPipeline {
+            previous: self,
+            depth_stencil_state: None,
+        }
     }
 
     pub fn default_depth_test(self) -> DepthStencilGraphicsPipeline {
@@ -318,7 +321,7 @@ impl DepthStencilGraphicsPipeline {
             viewport_state: Some(Self::find_viewport_state(&dynamic_state)),
             rasterization_state: Some(self.previous.previous.previous.previous.rasterizer_state),
             multisample_state: Some(self.previous.previous.previous.multisample_state),
-            depth_stencil_state: Some(self.depth_stencil_state),
+            depth_stencil_state: self.depth_stencil_state,
             color_blend_state: Some(self.previous.color_blend_state),
             dynamic_state: dynamic_state.iter().copied().collect(),
             subpass: Some(subpass),

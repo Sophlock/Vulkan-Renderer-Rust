@@ -55,6 +55,10 @@ impl Swapchain {
     pub fn image_view(&self, index: usize) -> &Arc<ImageView> {
         &self.image_views[index]
     }
+    
+    pub fn image_view_iter(&self) -> impl Iterator<Item = &Arc<ImageView>> {
+        self.image_views.iter()
+    }
 
     pub fn recreate(
         &self,
