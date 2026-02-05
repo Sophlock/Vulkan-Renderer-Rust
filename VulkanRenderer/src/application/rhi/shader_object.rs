@@ -334,12 +334,38 @@ impl ShaderObject {
     }
 
     pub fn write_texture(&self, offset: ShaderOffset, texture: &VKTexture) {
+        self.write_image_view(offset, texture.image_view().clone());
+    }
+
+    pub fn write_image_view(&self, offset: ShaderOffset, view: Arc<ImageView>) {
         let write = WriteDescriptorSet::image_view_with_layout(
             offset.binding_offset,
             DescriptorImageViewInfo {
-                image_view: texture.image_view().clone(),
+                image_view: view,
                 image_layout: ImageLayout::ShaderReadOnlyOptimal, // TODO: Is this always correct?
             },
+        );
+        self.perform_descriptor_write([write].iter().cloned());
+    }
+
+    pub fn write_sampler(&self, offset: ShaderOffset, sampler: Arc<Sampler>) {
+        let write = WriteDescriptorSet::sampler(offset.binding_offset, sampler);
+        self.perform_descriptor_write([write].iter().cloned());
+    }
+
+    pub fn write_image_view_sampler(
+        &self,
+        offset: ShaderOffset,
+        view: Arc<ImageView>,
+        sampler: Arc<Sampler>,
+    ) {
+        let write = WriteDescriptorSet::image_view_with_layout_sampler(
+            offset.binding_offset,
+            DescriptorImageViewInfo {
+                image_view: view,
+                image_layout: ImageLayout::ShaderReadOnlyOptimal, // TODO: Is this always correct?
+            },
+            sampler,
         );
         self.perform_descriptor_write([write].iter().cloned());
     }

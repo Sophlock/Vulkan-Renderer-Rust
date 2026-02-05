@@ -1,5 +1,10 @@
-use shader_slang::{reflection::TypeLayout, ParameterCategory, TypeKind};
-use vulkano::buffer::BufferContents;
+use std::sync::Arc;
+
+use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
+use vulkano::{
+    buffer::BufferContents,
+    image::{sampler::Sampler, view::ImageView},
+};
 
 use crate::application::rhi::{rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject};
 
@@ -90,6 +95,19 @@ impl<'a> ShaderCursor<'a> {
 
     pub fn write_texture(&mut self, texture: &VKTexture) {
         self.shader_object.write_texture(self.offset, texture);
+    }
+
+    pub fn write_image_view(&mut self, view: Arc<ImageView>) {
+        self.shader_object.write_image_view(self.offset, view);
+    }
+
+    pub fn write_sampler(&mut self, sampler: Arc<Sampler>) {
+        self.shader_object.write_sampler(self.offset, sampler);
+    }
+
+    pub fn write_image_view_sampler(&mut self, view: Arc<ImageView>, sampler: Arc<Sampler>) {
+        self.shader_object
+            .write_image_view_sampler(self.offset, view, sampler);
     }
 }
 
