@@ -143,12 +143,13 @@ impl ShaderObjectLayout {
     fn bindings_for_layout(
         layout: &TypeLayout,
         size: i64,
+        shader_stages: ShaderStages,
     ) -> impl Iterator<Item = DescriptorSetLayoutBinding> + Clone {
-        (0..size).map(|i| {
+        (0..size).map(move |i| {
             let descriptor_type = Self::map_descriptor_type(layout.binding_range_type(i));
             DescriptorSetLayoutBinding {
                 descriptor_count: layout.binding_range_binding_count(i) as u32,
-                stages: ShaderStages::all_graphics(),
+                stages: shader_stages,
                 ..DescriptorSetLayoutBinding::descriptor_type(descriptor_type)
             }
         })

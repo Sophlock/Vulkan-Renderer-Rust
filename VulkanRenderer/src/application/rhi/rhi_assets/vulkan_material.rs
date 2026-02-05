@@ -52,6 +52,7 @@ impl VKMaterial {
             linked,
             existential_objects.as_slice(),
             device,
+            ShaderStages::all_graphics(),
         );
 
         Ok(Self {
