@@ -53,7 +53,6 @@ impl ShaderObjectLayout {
         shader_stages: ShaderStages,
     ) -> Arc<Self> {
         // TODO: This currently does not handle ParameterBlocks!
-        // TODO: We don't need to support all shader stage flags
 
         let variable_layout = linked_program
             .layout(0)
@@ -62,7 +61,14 @@ impl ShaderObjectLayout {
             .unwrap();
 
         let type_layout = variable_layout.type_layout().unwrap();
+
         let inner_type_layout = type_layout.element_type_layout().unwrap();
+        for field in inner_type_layout.fields() {
+            println!("Field: {:?}, Type: {:?}", field.name(), field.type_layout().unwrap().name());
+            for i in 0..field.type_layout().unwrap().binding_range_count() {
+                println!("\t{} binding of type {:?}", field.type_layout().unwrap().binding_range_binding_count(i), field.type_layout().unwrap().binding_range_type(i));
+            }
+        }
 
         let (existential_sizes, existential_offsets) =
             Self::build_sizes_offsets(type_layout, existential_objects);
@@ -135,7 +141,8 @@ impl ShaderObjectLayout {
             BindingType::InlineUniformData => DescriptorType::InlineUniformBlock,
             BindingType::RayTracingAccelerationStructure => DescriptorType::AccelerationStructure,
             BindingType::MutableTeture => DescriptorType::StorageImage,
-            _ => DescriptorType::UniformBuffer, /*BindingType::TypedBuffer => {}
+            BindingType::InputRenderTarget => DescriptorType::InputAttachment,
+            _ => panic!("Unknown slang binding type {:?}", binding_type), /*BindingType::TypedBuffer => {}
                                                 BindingType::RawBuffer => {}
                                                 BindingType::InputRenderTarget => {}
                                                 BindingType::VaryingInput => {}
