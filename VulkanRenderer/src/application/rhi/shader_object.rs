@@ -1,24 +1,27 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use shader_slang::{reflection::TypeLayout, BindingType, ComponentType, ParameterCategory};
+use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
 use vulkano::{
+    DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::{
-        allocator::DescriptorSetAllocator, layout::{
+        DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
+        allocator::DescriptorSetAllocator,
+        layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
-        }, DescriptorImageViewInfo,
-        DescriptorSet,
-        WriteDescriptorSet
-        ,
+        },
     },
     device::{Device, DeviceOwned},
-    image::ImageLayout,
+    image::{
+        ImageLayout,
+        sampler::{Sampler, SamplerCreateInfo},
+        view::ImageView,
+    },
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
-    pipeline::{layout::PipelineLayoutCreateInfo, PipelineLayout},
-    shader::ShaderStages,
+    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
+    shader::{ShaderStages, spirv::Decoration::Binding},
     sync::Sharing,
-    DeviceSize,
 };
 
 use crate::application::rhi::{
@@ -46,8 +49,8 @@ impl ShaderObjectLayout {
     pub fn new(
         linked_program: ComponentType,
         existential_objects: &[&TypeLayout],
-        in_flight_frames: u32,
         device: &Arc<Device>,
+        shader_stages: ShaderStages,
     ) -> Arc<Self> {
         // TODO: This currently does not handle ParameterBlocks!
         // TODO: We don't need to support all shader stage flags
@@ -66,7 +69,7 @@ impl ShaderObjectLayout {
         let ordinary_data = if type_layout.size(ParameterCategory::Uniform) > 0 {
             Some(DescriptorSetLayoutBinding {
                 descriptor_count: 1,
-                stages: ShaderStages::all_graphics(),
+                stages: shader_stages,
                 ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer)
             })
         } else {
