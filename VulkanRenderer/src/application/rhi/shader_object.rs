@@ -386,7 +386,8 @@ impl ShaderObject {
     {
         self.descriptor_sets
             .iter()
-            .for_each(|set| unsafe { set.update_by_ref(writes.clone(), []) }.unwrap());
+            // TODO: This should use the safe checked version but this requires manual layout transitions
+            .for_each(|set| unsafe { set.update_by_ref_unchecked(writes.clone(), []) });
     }
 
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
