@@ -62,11 +62,12 @@ impl ShaderObjectLayout {
             .unwrap();
 
         let type_layout = variable_layout.type_layout().unwrap();
+        let inner_type_layout = type_layout.element_type_layout().unwrap();
 
         let (existential_sizes, existential_offsets) =
             Self::build_sizes_offsets(type_layout, existential_objects);
 
-        let ordinary_data = if type_layout.size(ParameterCategory::Uniform) > 0 {
+        let ordinary_data = if inner_type_layout.size(ParameterCategory::Uniform) > 0 {
             Some(DescriptorSetLayoutBinding {
                 descriptor_count: 1,
                 stages: shader_stages,
@@ -77,10 +78,18 @@ impl ShaderObjectLayout {
         };
 
         let bindings =
-            Self::bindings_for_layout(type_layout, type_layout.binding_range_count())
-                .chain(ordinary_data)
+            ordinary_data
+                .iter()
+                .cloned()
+                .chain(Self::bindings_for_layout(
+                    inner_type_layout,
+                    inner_type_layout.binding_range_count(),
+                    shader_stages,
+                ))
                 .chain(existential_objects.iter().zip(&existential_sizes).flat_map(
-                    |(layout, size)| Self::bindings_for_layout(layout, size.binding_size as i64),
+                    |(layout, size)| {
+                        Self::bindings_for_layout(layout, size.binding_size as i64, shader_stages)
+                    },
                 ))
                 .enumerate()
                 .map(|(i, binding)| (i as u32, binding))
@@ -291,9 +300,9 @@ impl ShaderObject {
             None
         };
 
-        let initial_writes = uniform_buffer
-            .clone()
-            .map(|buffer| WriteDescriptorSet::buffer(0, buffer));
+        let initial_writes = uniform_buffer.clone().map(|buffer| {
+            WriteDescriptorSet::buffer(0, buffer)
+        });
 
         let descriptor_sets = (0..in_flight_frames)
             .map(|_| {
