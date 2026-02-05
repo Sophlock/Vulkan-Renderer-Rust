@@ -115,7 +115,7 @@ impl Default for ShaderOffset {
     fn default() -> Self {
         Self {
             byte_offset: 0,
-Up            binding_offset: 1,
+            binding_offset: 1,
             binding_array_element: 0,
         }
     }
