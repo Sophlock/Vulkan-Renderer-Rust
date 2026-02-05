@@ -2,23 +2,17 @@ use std::sync::Arc;
 
 use asset_system::resource_management::Resource;
 use shader_slang::{
-    structs::specialization_arg::SpecializationArg, Blob, ComponentType, LayoutRules,
+    Blob, ComponentType, LayoutRules, structs::specialization_arg::SpecializationArg,
 };
-use vulkano::{
-    device::Device,
-    pipeline::PipelineLayout
-
-    ,
-};
+use vulkano::{device::Device, pipeline::PipelineLayout, shader::ShaderStages};
 
 use crate::application::{
     assets::asset_traits::{
         MaterialInterface, RHIMaterialInterface, RHIResource, RendererInterface,
-    }
-    ,
+    },
     rhi::{
-        rhi_assets::RHIResourceManager, shader_object::ShaderObjectLayout,
-        shaders::SlangCompiler, VKRHI,
+        VKRHI, rhi_assets::RHIResourceManager, shader_object::ShaderObjectLayout,
+        shaders::SlangCompiler,
     },
 };
 
@@ -33,7 +27,6 @@ impl VKMaterial {
     fn new(
         compiler: &SlangCompiler,
         device: &Arc<Device>,
-        in_flight_frames: usize,
         module_name: &str,
         material_name: &str,
     ) -> shader_slang::Result<Self> {
@@ -58,7 +51,6 @@ impl VKMaterial {
         let shader_object_layout = ShaderObjectLayout::new(
             linked,
             existential_objects.as_slice(),
-            in_flight_frames as u32,
             device,
         );
 
@@ -130,7 +122,6 @@ impl RHIMaterialInterface for VKMaterial {
         VKMaterial::new(
             &rhi.slang_compiler,
             &rhi.device,
-            rhi.frames_in_flight,
             source.module(),
             source.material(),
         )
