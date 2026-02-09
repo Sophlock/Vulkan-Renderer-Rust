@@ -37,7 +37,7 @@ pub fn create_logical_device(
         ..DeviceCreateInfo::default()
     };
 
-    let extra_device_extensions = ["VK_KHR_compute_shader_derivatives", "VK_KHR_swapchain"];
+    /*let extra_device_extensions = ["VK_KHR_compute_shader_derivatives"];
 
     let raw_queue_create_infos = device_create_info
         .queue_create_infos
@@ -84,15 +84,16 @@ pub fn create_logical_device(
 
     let raw_device =
         unsafe { raw_instance.create_device(physical_device.handle(), &raw_create_info, None) }
-            .unwrap();
+            .unwrap();*/
 
-    let (device, queues) = unsafe {
+    let (device, queues) = Device::new(physical_device.clone(), device_create_info).unwrap();
+        /*unsafe {
         Device::from_handle(
             physical_device.clone(),
             raw_device.handle(),
             device_create_info,
         )
-    };
+    };*/
     (
         device,
         QueueCollection::new(queues.collect(), queue_indices),
