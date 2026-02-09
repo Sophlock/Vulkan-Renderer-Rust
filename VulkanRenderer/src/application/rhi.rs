@@ -27,6 +27,7 @@ use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use swapchain::Swapchain;
+use vulkano::instance::debug::DebugUtilsMessageSeverity;
 use vulkano::{
     VulkanLibrary,
     descriptor_set::allocator::{
@@ -178,7 +179,13 @@ impl VKRHI {
                 println!("{:?} {:?}: {}", message_type, severity, data.message);
             })
         };
-        let create_info = DebugUtilsMessengerCreateInfo::user_callback(callback);
+        let create_info = DebugUtilsMessengerCreateInfo {
+            message_severity: DebugUtilsMessageSeverity::ERROR
+                | DebugUtilsMessageSeverity::WARNING,
+                //| DebugUtilsMessageSeverity::INFO
+                //| DebugUtilsMessageSeverity::VERBOSE,
+            ..DebugUtilsMessengerCreateInfo::user_callback(callback)
+        };
         DebugUtilsMessenger::new(instance, create_info).unwrap()
     }
 
