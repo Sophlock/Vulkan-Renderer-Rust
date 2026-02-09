@@ -1,36 +1,34 @@
-use crate::application::rhi::VKRHI;
 use crate::application::rhi::buffer::buffer_from_slice;
 use crate::application::rhi::command_buffer::CommandBufferInterface;
 use crate::application::rhi::pipeline::graphics_pipeline;
 use crate::application::rhi::shader_cursor::ShaderCursor;
 use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
 use crate::application::rhi::shaders::SlangCompiler;
+use crate::application::rhi::VKRHI;
 use shader_slang::{Blob, ComponentType};
 use smallvec::smallvec;
 use std::ops::Deref;
 use std::sync::Arc;
-use vulkano::ValidationError;
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents,
-};
+use vulkano::buffer::{BufferContents, BufferUsage, Subbuffer};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
+use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
 use vulkano::image::{ImageAspects, ImageLayout};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter};
+use vulkano::memory::allocator::{MemoryAllocator, MemoryTypeFilter};
 use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
 use vulkano::pipeline::graphics::vertex_input;
 use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
 use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineBindPoint};
 use vulkano::render_pass::{
     AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp, Framebuffer,
-    FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDependency, SubpassDescription,
+    FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDescription,
 };
-use vulkano::shader::ShaderStages;
 use vulkano::shader::spirv::bytes_to_words;
-use vulkano::sync::{AccessFlags, PipelineStages, Sharing};
+use vulkano::shader::ShaderStages;
+use vulkano::sync::{AccessFlags, PipelineStages};
+use vulkano::ValidationError;
 
 pub struct FullScreenPass {
     render_pass: Arc<RenderPass>,
@@ -139,7 +137,7 @@ impl FullScreenPass {
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
                     render_area_extent: extent,
-                    clear_values: vec![None],
+                    clear_values: vec![None, None],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].clone())
                 },
@@ -168,6 +166,7 @@ impl FullScreenPass {
             .bind_index_buffer(self.index_buffer.clone())?;
 
         unsafe { command_buffer.draw_indexed(6, 1, 0, 0, 0) }?;
+        command_buffer.end_render_pass(SubpassEndInfo::default())?;
         Ok(())
     }
 

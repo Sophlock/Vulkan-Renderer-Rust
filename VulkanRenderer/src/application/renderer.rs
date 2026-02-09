@@ -112,7 +112,7 @@ impl VKRenderer {
         let pp_render_target = rhi.create_gbuffer(
             swapchain.extent,
             Format::R32G32B32A32_SFLOAT,
-            ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ImageUsage::STORAGE | ImageUsage::SAMPLED | ImageUsage::INPUT_ATTACHMENT,
             ImageAspects::COLOR,
         );
         let rt_framebuffer = Framebuffer::new(
@@ -260,11 +260,11 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
-        self.mutable_state()
+        self.mutable_state_const()
             .fullscreen_pass
             .record_command_buffer(
                 &mut command_buffer,
-                self.mutable_state().swapchain.extent,
+                self.mutable_state_const().swapchain.extent,
                 swapchain_image_index as usize,
             )
             .unwrap();

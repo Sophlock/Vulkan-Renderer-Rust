@@ -21,7 +21,7 @@ struct FullcreenPassInput {
     LargeBlock _filler;
 }
 
-FullcreenPassInput gInput;
+uniform FullcreenPassInput gInput;
 
 [shader("vertex")]
 func vertexMain(input: VertexInput)->VertexOutput {
@@ -32,7 +32,7 @@ func vertexMain(input: VertexInput)->VertexOutput {
 }
 
 [shader("fragment")]
-func fragmentMain(vertex: float2 : UV)->FragmentOutput
+func fragmentMain(uv: float2 : UV)->FragmentOutput
 {
     FragmentOutput output = {};
     output.finalColor = gInput.colorInput.SubpassLoad();

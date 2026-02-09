@@ -64,10 +64,70 @@ impl ShaderObjectLayout {
 
         let inner_type_layout = type_layout.element_type_layout().unwrap();
         for field in inner_type_layout.fields() {
-            println!("Field: {:?}, Type: {:?}", field.name(), field.type_layout().unwrap().name());
+            println!(
+                "Field: {:?}, Type: {:?}",
+                field.name(),
+                field.type_layout().unwrap().name()
+            );
             for i in 0..field.type_layout().unwrap().binding_range_count() {
-                println!("\t{} binding of type {:?}", field.type_layout().unwrap().binding_range_binding_count(i), field.type_layout().unwrap().binding_range_type(i));
+                println!(
+                    "\t{} binding of type {:?}",
+                    field.type_layout().unwrap().binding_range_binding_count(i),
+                    field.type_layout().unwrap().binding_range_type(i)
+                );
             }
+            for sub_field in field.type_layout().unwrap().fields() {
+                println!(
+                    "\tField: {:?}, Type: {:?}, Binding ranges: {}, Category: {:?}, Size: {}",
+                    sub_field.name(),
+                    sub_field.type_layout().unwrap().name(),
+                    sub_field.type_layout().unwrap().binding_range_count(),
+                    sub_field.type_layout().unwrap().parameter_category(),
+                    sub_field.type_layout().unwrap().size(ParameterCategory::Uniform)
+                );
+                for category in sub_field.categories() {
+                    println!("\t\tCategory {:?} has size {}", category, sub_field.type_layout().unwrap().size(category));
+                }
+                for i in 0..sub_field.type_layout().unwrap().binding_range_count() {
+                    println!(
+                        "\t\t{} binding of type {:?}",
+                        sub_field
+                            .type_layout()
+                            .unwrap()
+                            .binding_range_binding_count(i),
+                        sub_field.type_layout().unwrap().binding_range_type(i)
+                    );
+                }
+                for sub_sub_field in sub_field.type_layout().unwrap().fields() {
+                    println!(
+                        "\t\tField: {:?}, Type: {:?}, Binding ranges: {}",
+                        sub_sub_field.name(),
+                        sub_sub_field.type_layout().unwrap().name(),
+                        sub_sub_field.type_layout().unwrap().binding_range_count()
+                    );
+                }
+            }
+        }
+        println!(
+            "Shader has {} descriptor sets",
+            type_layout.descriptor_set_count()
+        );
+        for i in 0..type_layout.descriptor_set_count() {
+            let range_count = type_layout.descriptor_set_descriptor_range_count(i);
+            println!("Descriptor set {} has {} descriptor ranges", i, range_count);
+            for j in 0..range_count {
+                println!(
+                    "\tRange {} has {} bindings of binding type {:?} and category {:?}",
+                    j,
+                    type_layout.descriptor_set_descriptor_range_descriptor_count(i, j),
+                    type_layout.descriptor_set_descriptor_range_type(i, j),
+                    type_layout.descriptor_set_descriptor_range_category(i, j)
+                );
+            }
+        }
+        println!("Categories:");
+        for category in type_layout.categories() {
+            println!("Category {:?} has size {}", category, type_layout.size(category));
         }
 
         let (existential_sizes, existential_offsets) =
@@ -142,20 +202,21 @@ impl ShaderObjectLayout {
             BindingType::RayTracingAccelerationStructure => DescriptorType::AccelerationStructure,
             BindingType::MutableTeture => DescriptorType::StorageImage,
             BindingType::InputRenderTarget => DescriptorType::InputAttachment,
-            _ => panic!("Unknown slang binding type {:?}", binding_type), /*BindingType::TypedBuffer => {}
-                                                BindingType::RawBuffer => {}
-                                                BindingType::InputRenderTarget => {}
-                                                BindingType::VaryingInput => {}
-                                                BindingType::VaryingOutput => {}
-                                                BindingType::ExistentialValue => {}
-                                                BindingType::PushConstant => {}
-                                                BindingType::MutableFlag => {}
-                                                BindingType::MutableTypedBuffer => {}
-                                                BindingType::MutableRawBuffer => {}
-                                                BindingType::BaseMask => {}
-                                                BindingType::ExtMask => {}
-                                                BindingType::Unknown => {}*/
-                                                // TODO: Missing: eUniformTexelBuffer, eStorageTexelBuffer, eUniformBuffer, eStorageBuffer, eUniformBufferDynamic, eStorageBufferDynamic, eInputAttachment, eMutableEXT
+            _ => DescriptorType::UniformBuffer, //panic!("Unknown slang binding type {:?}", binding_type),
+            /*BindingType::TypedBuffer => {}
+                                                                          BindingType::RawBuffer => {}
+                                                                          BindingType::InputRenderTarget => {}
+                                                                          BindingType::VaryingInput => {}
+                                                                          BindingType::VaryingOutput => {}
+                                                                          BindingType::ExistentialValue => {}
+                                                                          BindingType::PushConstant => {}
+                                                                          BindingType::MutableFlag => {}
+                                                                          BindingType::MutableTypedBuffer => {}
+                                                                          BindingType::MutableRawBuffer => {}
+                                                                          BindingType::BaseMask => {}
+                                                                          BindingType::ExtMask => {}
+                                                                          BindingType::Unknown => {}*/
+                                                                          // TODO: Missing: eUniformTexelBuffer, eStorageTexelBuffer, eUniformBuffer, eStorageBuffer, eUniformBufferDynamic, eStorageBufferDynamic, eInputAttachment, eMutableEXT
         }
     }
 
@@ -307,9 +368,9 @@ impl ShaderObject {
             None
         };
 
-        let initial_writes = uniform_buffer.clone().map(|buffer| {
-            WriteDescriptorSet::buffer(0, buffer)
-        });
+        let initial_writes = uniform_buffer
+            .clone()
+            .map(|buffer| WriteDescriptorSet::buffer(0, buffer));
 
         let descriptor_sets = (0..in_flight_frames)
             .map(|_| {
