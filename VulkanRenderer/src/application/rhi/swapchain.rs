@@ -177,6 +177,7 @@ impl Swapchain {
             })
     }
 
+    // TODO: This function should probably be removed
     pub fn create_framebuffers(
         &self,
         render_pass: &Arc<RenderPass>,
@@ -192,9 +193,8 @@ impl Swapchain {
                     layers: 1,
                     ..FramebufferCreateInfo::default()
                 };
-                Framebuffer::new(render_pass.clone(), create_info)
-            })
-            .flatten();
+                Framebuffer::new(render_pass.clone(), create_info).unwrap()
+            });
         frame_buffers.collect()
     }
 
