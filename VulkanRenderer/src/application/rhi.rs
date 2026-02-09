@@ -341,6 +341,10 @@ impl VKRHI {
     pub fn slang_compiler(&self) -> &SlangCompiler {
         &self.slang_compiler
     }
+
+    pub fn shutdown(&self) {
+        unsafe {self.device.wait_idle().unwrap();}
+    }
 }
 
 impl RHIInterface for VKRHI {

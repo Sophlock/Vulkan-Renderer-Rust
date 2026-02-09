@@ -247,4 +247,8 @@ impl ApplicationHandler<AppEvent> for Application {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.input.update_with_gilrs(&mut self.gilrs);
     }
+
+    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        self.renderer.as_ref().unwrap().rhi().shutdown();
+    }
 }
