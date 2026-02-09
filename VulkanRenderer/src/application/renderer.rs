@@ -66,7 +66,6 @@ pub struct MutableRenderState {
     color_render_target: Arc<ImageView>,
     pp_render_target: Arc<ImageView>,
     rt_framebuffer: Arc<Framebuffer>,
-    framebuffers: Vec<Arc<Framebuffer>>,
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
     fullscreen_pass: FullScreenPass,
@@ -126,7 +125,6 @@ impl VKRenderer {
         )
         .unwrap();
 
-        let framebuffers = swapchain.create_framebuffers(&render_pass, &depth_image_view);
         let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref());
 
         let global_cursor = ShaderCursor::new(&post_process.shader_object);
@@ -147,8 +145,8 @@ impl VKRenderer {
             Format::R32G32B32A32_SFLOAT,
             swapchain.format,
             ImageLayout::PresentSrc,
-            PipelineStages::empty(),
-            AccessFlags::empty(),
+            PipelineStages::COLOR_ATTACHMENT_OUTPUT,
+            AccessFlags::COLOR_ATTACHMENT_WRITE,
             ImageLayout::ShaderReadOnlyOptimal,
             None,
             pp_render_target.clone(),
@@ -164,7 +162,6 @@ impl VKRenderer {
                 color_render_target,
                 pp_render_target,
                 rt_framebuffer,
-                framebuffers,
                 should_recreate_swapchain: false,
                 in_flight_future: None,
                 fullscreen_pass,
@@ -509,9 +506,7 @@ impl MutableRenderState {
         )
         .unwrap();
 
-        self.framebuffers = self
-            .swapchain
-            .create_framebuffers(render_pass, &self.depth_image_view);
+        self.fullscreen_pass.recreate_framebuffers(self.swapchain.image_view_iter().cloned(), self.swapchain.extent);
         self.should_recreate_swapchain = false;
     }
 }

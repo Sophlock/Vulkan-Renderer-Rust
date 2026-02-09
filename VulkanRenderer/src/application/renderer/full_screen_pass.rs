@@ -10,12 +10,15 @@ use smallvec::smallvec;
 use std::ops::Deref;
 use std::sync::Arc;
 use vulkano::buffer::{BufferContents, BufferUsage, Subbuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+    SubpassContents, SubpassEndInfo,
+};
 use vulkano::device::{Device, Queue};
-use vulkano::format::Format;
+use vulkano::format::{ClearValue, Format};
 use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAspects, ImageLayout};
+use vulkano::image::{ImageLayout, SampleCount};
 use vulkano::memory::allocator::{MemoryAllocator, MemoryTypeFilter};
 use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
 use vulkano::pipeline::graphics::vertex_input;
@@ -23,7 +26,7 @@ use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
 use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineBindPoint};
 use vulkano::render_pass::{
     AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp, Framebuffer,
-    FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDescription,
+    FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDependency, SubpassDescription,
 };
 use vulkano::shader::spirv::bytes_to_words;
 use vulkano::shader::ShaderStages;
@@ -75,9 +78,33 @@ impl FullScreenPass {
             input_initial_layout,
             output_initial_layout,
         );
+
+        let framebuffers = target_images
+            .map(|target| {
+                Framebuffer::new(
+                    render_pass.clone(),
+                    FramebufferCreateInfo {
+                        attachments: vec![target /*, source_image.clone()*/],
+                        extent: image_extent,
+                        layers: 1,
+                        ..FramebufferCreateInfo::default()
+                    },
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
         let queue = &rhi.queues().graphics_queue;
-        let vertex_buffer = Self::create_vertex_buffer(rhi.buffer_allocator().clone(), rhi.command_buffer_interface(), queue.clone());
-        let index_buffer = Self::create_index_buffer(rhi.buffer_allocator().clone(), rhi.command_buffer_interface(), queue.clone());
+        let vertex_buffer = Self::create_vertex_buffer(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            queue.clone(),
+        );
+        let index_buffer = Self::create_index_buffer(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            queue.clone(),
+        );
         let (vert, frag, linked) = Self::compile_shader(rhi.slang_compiler());
         let shader_object_layout =
             ShaderObjectLayout::new(linked, &[], rhi.device(), ShaderStages::all_graphics());
@@ -88,19 +115,7 @@ impl FullScreenPass {
             &shader_object_layout,
             render_pass.clone(),
         );
-        let framebuffers = target_images
-            .map(|target| {
-                Framebuffer::new(
-                    render_pass.clone(),
-                    FramebufferCreateInfo {
-                        attachments: vec![target, source_image.clone()],
-                        extent: image_extent,
-                        ..FramebufferCreateInfo::default()
-                    },
-                )
-                .unwrap()
-            })
-            .collect::<Vec<_>>();
+
         let shader_object = ShaderObject::new(
             shader_object_layout.clone(),
             rhi.descriptor_allocator(),
@@ -145,7 +160,9 @@ impl FullScreenPass {
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
                     render_area_extent: extent,
-                    clear_values: vec![None, None],
+                    clear_values: vec![
+                        Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0]))
+                    ],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].clone())
                 },
@@ -194,28 +211,28 @@ impl FullScreenPass {
                 attachments: vec![
                     AttachmentDescription {
                         format: output_format,
-                        load_op: AttachmentLoadOp::DontCare,
+                        load_op: AttachmentLoadOp::Clear,
                         store_op: AttachmentStoreOp::Store,
                         initial_layout: output_initial_layout.unwrap_or(ImageLayout::Undefined),
                         final_layout: output_final_layout,
                         ..AttachmentDescription::default()
                     },
-                    AttachmentDescription {
+                    /*AttachmentDescription {
                         format: input_format,
                         load_op: AttachmentLoadOp::Load,
                         store_op: AttachmentStoreOp::DontCare,
                         initial_layout: input_initial_layout,
                         final_layout: ImageLayout::ShaderReadOnlyOptimal,
                         ..AttachmentDescription::default()
-                    },
+                    },*/
                 ],
                 subpasses: vec![SubpassDescription {
-                    input_attachments: vec![Some(AttachmentReference {
+                    /*input_attachments: vec![Some(AttachmentReference {
                         attachment: 1,
                         layout: ImageLayout::ShaderReadOnlyOptimal,
                         aspects: ImageAspects::COLOR,
                         ..AttachmentReference::default()
-                    })],
+                    })],*/
                     color_attachments: vec![Some(AttachmentReference {
                         attachment: 0,
                         layout: ImageLayout::ColorAttachmentOptimal,
@@ -223,16 +240,30 @@ impl FullScreenPass {
                     })],
                     ..SubpassDescription::default()
                 }],
-                dependencies: vec![SubpassDependency {
-                    src_subpass: None,
-                    dst_subpass: Some(0),
-                    src_stages: previous_stages,
-                    dst_stages: PipelineStages::COLOR_ATTACHMENT_OUTPUT,
-                    src_access: previous_access,
-                    dst_access: AccessFlags::COLOR_ATTACHMENT_WRITE
-                        | AccessFlags::COLOR_ATTACHMENT_READ,
-                    ..SubpassDependency::default()
-                }],
+                dependencies: vec![
+                    /*SubpassDependency {
+                        src_subpass: None,
+                        dst_subpass: Some(0),
+                        src_stages: previous_stages,
+                        dst_stages: PipelineStages::COLOR_ATTACHMENT_OUTPUT,
+                        src_access: previous_access,
+                        dst_access: AccessFlags::COLOR_ATTACHMENT_WRITE
+                            | AccessFlags::COLOR_ATTACHMENT_READ,
+                        ..SubpassDependency::default()
+                    }*/
+                    SubpassDependency {
+                        src_subpass: None,
+                        dst_subpass: Some(0),
+                        src_stages: PipelineStages::COLOR_ATTACHMENT_OUTPUT
+                            | PipelineStages::EARLY_FRAGMENT_TESTS,
+                        dst_stages: PipelineStages::COLOR_ATTACHMENT_OUTPUT
+                            | PipelineStages::EARLY_FRAGMENT_TESTS,
+                        src_access: AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                        dst_access: AccessFlags::COLOR_ATTACHMENT_WRITE
+                            | AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                        ..SubpassDependency::default()
+                    },
+                ],
                 ..RenderPassCreateInfo::default()
             },
         )
@@ -335,5 +366,26 @@ impl FullScreenPass {
             linked.entry_point_code(1, 0).unwrap(),
             linked,
         )
+    }
+
+    pub fn recreate_framebuffers(
+        &mut self,
+        target_images: impl Iterator<Item = Arc<ImageView>>,
+        image_extent: [u32; 2],
+    ) {
+        self.framebuffers = target_images
+            .map(|target| {
+                Framebuffer::new(
+                    self.render_pass.clone(),
+                    FramebufferCreateInfo {
+                        attachments: vec![target /*, source_image.clone()*/],
+                        extent: image_extent,
+                        layers: 1,
+                        ..FramebufferCreateInfo::default()
+                    },
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
     }
 }
