@@ -108,12 +108,20 @@ impl FullScreenPass {
             framebuffers.len() as u32,
         );
 
+        let sampler = Sampler::new(
+            rhi.device().clone(),
+            SamplerCreateInfo {
+                ..SamplerCreateInfo::default()
+            },
+        )
+        .unwrap();
+
         ShaderCursor::new(&shader_object)
             .field("gInput")
             .unwrap()
             .field("colorInput")
             .unwrap()
-            .write_image_view(source_image);
+            .write_image_view_sampler(source_image, sampler);
 
         Self {
             render_pass,

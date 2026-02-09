@@ -16,12 +16,12 @@ struct FragmentOutput {
     float4 finalColor : SV_Target;
 }
 
-struct FullcreenPassInput {
-    SubpassInput colorInput;
+struct FullscreenPassInput {
+    Sampler2D colorInput;
     LargeBlock _filler;
 }
 
-uniform FullcreenPassInput gInput;
+uniform FullscreenPassInput gInput;
 
 [shader("vertex")]
 func vertexMain(input: VertexInput)->VertexOutput {
@@ -35,6 +35,6 @@ func vertexMain(input: VertexInput)->VertexOutput {
 func fragmentMain(uv: float2 : UV)->FragmentOutput
 {
     FragmentOutput output = {};
-    output.finalColor = gInput.colorInput.SubpassLoad();
+    output.finalColor = gInput.colorInput.SampleLevel(uv, 0);
     return output;
 }
