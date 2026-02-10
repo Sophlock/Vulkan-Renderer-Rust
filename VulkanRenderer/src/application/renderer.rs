@@ -1,5 +1,11 @@
 mod full_screen_pass;
 
+use egui_winit_vulkano::{
+    egui,
+    egui::{Color32, Frame},
+};
+use shader_slang::ComponentType;
+use smallvec::smallvec;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
@@ -7,38 +13,31 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-
-use egui_winit_vulkano::{
-    egui,
-    egui::{Color32, Frame},
-};
-use shader_slang::ComponentType;
-use smallvec::smallvec;
 use vulkano::sync::{AccessFlags, PipelineStages};
 use vulkano::{
-    Validated, ValidationError, VulkanError,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
-    },
-    device::Device,
-    format::{ClearValue, Format},
-    image::{
-        ImageAspects, ImageLayout, ImageUsage,
-        sampler::{Sampler, SamplerCreateInfo},
-        view::ImageView,
+    }, device::Device, format::{ClearValue, Format}, image::{
+        sampler::{Sampler, SamplerCreateInfo}, view::ImageView, ImageAspects,
+        ImageLayout,
+        ImageUsage,
     },
     pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
         graphics::{
             subpass::PipelineSubpassType,
             viewport::{Scissor, Viewport},
-        },
+        }, ComputePipeline, DynamicState, GraphicsPipeline,
+        PipelineBindPoint,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
-    shader::{ShaderStages, spirv::bytes_to_words},
-    swapchain::{SwapchainPresentInfo, present},
-    sync::{GpuFuture, future::FenceSignalFuture},
+    shader::{spirv::bytes_to_words, ShaderStages},
+    swapchain::{present, SwapchainPresentInfo},
+    sync::{future::FenceSignalFuture, GpuFuture},
+    Validated,
+    ValidationError,
+    VulkanError,
+    VulkanObject,
 };
 use winit::dpi::PhysicalSize;
 
@@ -49,7 +48,6 @@ use crate::application::{
         RendererInterface, Vertex,
     },
     rhi::{
-        VKRHI,
         pipeline::{compute_pipeline, graphics_pipeline},
         render_pass::RenderPassBuilder,
         rhi_assets::{vulkan_material::VKMaterial, vulkan_scene::VKScene},
@@ -57,6 +55,7 @@ use crate::application::{
         shader_object::{ShaderObject, ShaderObjectLayout},
         shaders::SlangCompiler,
         swapchain::Swapchain,
+        VKRHI,
     },
 };
 
@@ -123,7 +122,7 @@ impl VKRenderer {
                 ..FramebufferCreateInfo::default()
             },
         )
-            .unwrap();
+        .unwrap();
 
         let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref());
 
@@ -234,7 +233,7 @@ impl VKRenderer {
             &mut compute_command_buffer,
             swapchain_image_index as usize,
         )
-            .unwrap();
+        .unwrap();
 
         let post_process_finished_future = draw_finished_future
             .then_execute(
@@ -258,6 +257,7 @@ impl VKRenderer {
             .unwrap();
 
         let final_output_finished_future = post_process_finished_future
+            .then_signal_semaphore()
             .then_execute(
                 self.rhi.queues().graphics_queue.clone(),
                 command_buffer.build().unwrap(),
@@ -433,21 +433,23 @@ impl VKRenderer {
     fn write_framebuffer_descriptors(&self) {
         let global_cursor = ShaderCursor::new(&self.post_process.shader_object);
         let cursor = global_cursor.field("gComputeInput").unwrap();
-        /*cursor.field("input").unwrap().write_image_view_sampler(
+        cursor.field("input").unwrap().write_image_view_sampler(
             self.mutable_state_const().color_render_target.clone(),
             self.post_process.sampler.clone(),
-        );*/
-        cursor
-            .field("screenSize")
-            .unwrap()
-            .write(&self.mutable_state_const().swapchain.extent.map(|i| i as f32));
+        );
+        cursor.field("screenSize").unwrap().write(
+            &self
+                .mutable_state_const()
+                .swapchain
+                .extent
+                .map(|i| i as f32),
+        );
         cursor.field("exposureValue").unwrap().write(&1.0f32);
         cursor
             .field("result")
             .unwrap()
             .write_image_view(self.mutable_state_const().pp_render_target.clone());
     }
-
 }
 impl RendererInterface for VKRenderer {
     type RHI = VKRHI;
@@ -498,14 +500,13 @@ impl MutableRenderState {
                 ..FramebufferCreateInfo::default()
             },
         )
-            .unwrap();
+        .unwrap();
 
-        self.fullscreen_pass.recreate_framebuffers(self.swapchain.image_view_iter().cloned(), self.swapchain.extent);
-            self.fullscreen_pass.recreate_framebuffers(
-                self.swapchain.image_view_iter().cloned(),
-                self.pp_render_target.clone(),
-                self.swapchain.extent,
-            );
+        self.fullscreen_pass.recreate_framebuffers(
+            self.swapchain.image_view_iter().cloned(),
+            self.pp_render_target.clone(),
+            self.swapchain.extent,
+        );
         self.should_recreate_swapchain = false;
     }
 }
@@ -550,7 +551,7 @@ impl MaterialCompiler {
                     DynamicState::ViewportWithCount,
                     DynamicState::ScissorWithCount,
                 ]
-                    .into(),
+                .into(),
             );
         CompiledMaterial { pipeline }
     }
@@ -612,7 +613,7 @@ impl PostProcessPass {
             rhi.device().clone(),
             SamplerCreateInfo::simple_repeat_linear_no_mipmap(),
         )
-            .unwrap();
+        .unwrap();
 
         Self {
             shader_object_layout,
