@@ -22,8 +22,7 @@ impl SlangCompiler {
         let search_paths = [shader_base_path.to_str().unwrap().as_ptr() as *const i8];
         let options = CompilerOptions::default()
             .optimization(OptimizationLevel::High)
-            // TODO: Once Vulkano supports the vulkan extension for compute shader derivatives (or slang doesn't use it anymore), we should directly emit spirv code
-            .emit_spirv_directly(false)
+            .emit_spirv_directly(true)
             .matrix_layout_column(true);
         let session_description = SessionDesc::default()
             .targets(&targets)

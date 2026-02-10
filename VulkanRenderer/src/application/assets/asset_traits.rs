@@ -15,16 +15,16 @@ use crate::application::{
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
 pub struct Vertex {
-    #[name("input_position_0")]
+    #[name("input.position")]
     #[format(R32G32B32_SFLOAT)]
     pub position: [f32; 3],
-    #[name("input_normal_0")]
+    #[name("input.normal")]
     #[format(R32G32B32_SFLOAT)]
     pub normal: [f32; 3],
-    #[name("input_tangent_0")]
+    #[name("input.tangent")]
     #[format(R32G32B32_SFLOAT)]
     pub tangent: [f32; 3],
-    #[name("input_textureCoordinate_0")]
+    #[name("input.textureCoordinate")]
     #[format(R32G32_SFLOAT)]
     pub texture_coordinates: [f32; 2],
 }

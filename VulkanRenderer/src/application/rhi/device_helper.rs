@@ -20,12 +20,12 @@ pub fn create_logical_device(
     let queue_create_infos = queue_indices.generate_create_infos();
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
-        nv_compute_shader_derivatives: true,
+        //nv_compute_shader_derivatives: true,
         ..DeviceExtensions::default()
     };
     let device_features = DeviceFeatures {
         sampler_anisotropy: true,
-        compute_derivative_group_quads: true,
+        //compute_derivative_group_quads: true,
         synchronization2: true,
         ..DeviceFeatures::default()
     };
