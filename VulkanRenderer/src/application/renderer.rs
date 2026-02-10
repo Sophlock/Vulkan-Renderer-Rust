@@ -156,7 +156,6 @@ impl VKRenderer {
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
-        }
         };
         result.write_framebuffer_descriptors();
         result
