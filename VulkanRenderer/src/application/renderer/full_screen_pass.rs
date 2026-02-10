@@ -18,7 +18,7 @@ use vulkano::device::{Device, Queue};
 use vulkano::format::{ClearValue, Format};
 use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageLayout, SampleCount};
+use vulkano::image::ImageLayout;
 use vulkano::memory::allocator::{MemoryAllocator, MemoryTypeFilter};
 use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
 use vulkano::pipeline::graphics::vertex_input;
@@ -41,6 +41,7 @@ pub struct FullScreenPass {
     shader_object: ShaderObject,
     pipeline: Arc<GraphicsPipeline>,
     framebuffers: Vec<Arc<Framebuffer>>,
+    sampler: Arc<Sampler>
 }
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
@@ -131,12 +132,7 @@ impl FullScreenPass {
         )
         .unwrap();
 
-        ShaderCursor::new(&shader_object)
-            .field("gInput")
-            .unwrap()
-            .field("colorInput")
-            .unwrap()
-            .write_image_view_sampler(source_image, sampler);
+        Self::write_descriptor_sets(&shader_object, source_image, sampler.clone());
 
         Self {
             render_pass,
@@ -146,6 +142,7 @@ impl FullScreenPass {
             shader_object,
             pipeline,
             framebuffers,
+            sampler
         }
     }
 
@@ -281,12 +278,12 @@ impl FullScreenPass {
                 texture_coordinates: [0f32, 0f32],
             },
             FullScreenPassVertex {
-                position: [1f32, -1f32, 0f32],
-                texture_coordinates: [1f32, 0f32],
-            },
-            FullScreenPassVertex {
                 position: [-1f32, 1f32, 0f32],
                 texture_coordinates: [0f32, 1f32],
+            },
+            FullScreenPassVertex {
+                position: [1f32, -1f32, 0f32],
+                texture_coordinates: [1f32, 0f32],
             },
             FullScreenPassVertex {
                 position: [1f32, 1f32, 0f32],
@@ -371,6 +368,7 @@ impl FullScreenPass {
     pub fn recreate_framebuffers(
         &mut self,
         target_images: impl Iterator<Item = Arc<ImageView>>,
+        source_image: Arc<ImageView>,
         image_extent: [u32; 2],
     ) {
         self.framebuffers = target_images
@@ -387,5 +385,15 @@ impl FullScreenPass {
                 .unwrap()
             })
             .collect::<Vec<_>>();
+
+        Self::write_descriptor_sets(&self.shader_object, source_image, self.sampler.clone());
+    }
+
+    fn write_descriptor_sets(shader_object: &ShaderObject, source_image: Arc<ImageView>, sampler: Arc<Sampler>) {
+        let pin = ShaderCursor::new(shader_object);
+        let cursor = pin.field("gInput").unwrap();
+        cursor.field("colorInput")
+            .unwrap()
+            .write_image_view_sampler(source_image, sampler);
     }
 }

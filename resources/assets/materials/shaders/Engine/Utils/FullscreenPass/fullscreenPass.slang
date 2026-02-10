@@ -26,7 +26,7 @@ uniform FullscreenPassInput gInput;
 [shader("vertex")]
 func vertexMain(input: VertexInput)->VertexOutput {
     VertexOutput output = {};
-    output.position = float4(input.position, 0);
+    output.position = float4(input.position, 1);
     output.textureCoordinate = input.textureCoordinate;
     return output;
 }
