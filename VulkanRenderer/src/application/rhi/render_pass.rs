@@ -74,10 +74,12 @@ impl RenderPassBuilder {
         &mut self,
         color_attachments: Vec<AttachmentReference>,
         depth_stencil_attachment: AttachmentReference,
+        preserve_attachments: Vec<u32>,
     ) -> &mut Self {
         self.add_subpass(SubpassDescription {
             color_attachments: color_attachments.iter().map(|x| Some(x.clone())).collect(),
             depth_stencil_attachment: Some(depth_stencil_attachment),
+            preserve_attachments,
             ..SubpassDescription::default()
         })
     }
@@ -112,6 +114,7 @@ impl RenderPassBuilder {
                     layout: ImageLayout::DepthStencilAttachmentOptimal,
                     ..AttachmentReference::default()
                 },
+                vec![]
             )
             .add_depth_dependency()
             .clone()
