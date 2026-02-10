@@ -1,11 +1,5 @@
 mod full_screen_pass;
 
-use egui_winit_vulkano::{
-    egui,
-    egui::{Color32, Frame},
-};
-use shader_slang::ComponentType;
-use smallvec::smallvec;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
@@ -13,7 +7,13 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-use vulkano::sync::{AccessFlags, PipelineStages};
+
+use egui_winit_vulkano::{
+    egui,
+    egui::{Color32, Frame},
+};
+use shader_slang::ComponentType;
+use smallvec::smallvec;
 use vulkano::{
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
@@ -33,7 +33,7 @@ use vulkano::{
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     shader::{spirv::bytes_to_words, ShaderStages},
     swapchain::{present, SwapchainPresentInfo},
-    sync::{future::FenceSignalFuture, GpuFuture},
+    sync::{future::FenceSignalFuture, AccessFlags, GpuFuture, PipelineStages},
     Validated,
     ValidationError,
     VulkanError,
@@ -41,12 +41,12 @@ use vulkano::{
 };
 use winit::dpi::PhysicalSize;
 
-use crate::application::renderer::full_screen_pass::FullScreenPass;
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
         RendererInterface, Vertex,
     },
+    renderer::full_screen_pass::FullScreenPass,
     rhi::{
         pipeline::{compute_pipeline, graphics_pipeline},
         render_pass::RenderPassBuilder,

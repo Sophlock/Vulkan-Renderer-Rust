@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use vulkano::{
-    device::{Device, physical::PhysicalDevice},
+    device::{physical::PhysicalDevice, Device},
     format::Format,
     image::{ImageLayout, SampleCount},
     render_pass::{
@@ -114,7 +114,7 @@ impl RenderPassBuilder {
                     layout: ImageLayout::DepthStencilAttachmentOptimal,
                     ..AttachmentReference::default()
                 },
-                vec![]
+                vec![],
             )
             .add_depth_dependency()
             .clone()

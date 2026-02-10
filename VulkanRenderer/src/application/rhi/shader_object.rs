@@ -1,27 +1,27 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
+use shader_slang::{reflection::TypeLayout, BindingType, ComponentType, ParameterCategory};
 use vulkano::{
-    DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::{
-        DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
-        allocator::DescriptorSetAllocator,
-        layout::{
+        allocator::DescriptorSetAllocator, layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
-        },
+        }, DescriptorImageViewInfo,
+        DescriptorSet,
+        WriteDescriptorSet,
     },
     device::{Device, DeviceOwned},
     image::{
-        ImageLayout,
-        sampler::{Sampler, SamplerCreateInfo},
+        sampler::Sampler,
         view::ImageView,
+        ImageLayout,
     },
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
-    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
-    shader::{ShaderStages, spirv::Decoration::Binding},
+    pipeline::{layout::PipelineLayoutCreateInfo, PipelineLayout},
+    shader::ShaderStages,
     sync::Sharing,
+    DeviceSize,
 };
 
 use crate::application::rhi::{
@@ -83,10 +83,17 @@ impl ShaderObjectLayout {
                     sub_field.type_layout().unwrap().name(),
                     sub_field.type_layout().unwrap().binding_range_count(),
                     sub_field.type_layout().unwrap().parameter_category(),
-                    sub_field.type_layout().unwrap().size(ParameterCategory::Uniform)
+                    sub_field
+                        .type_layout()
+                        .unwrap()
+                        .size(ParameterCategory::Uniform)
                 );
                 for category in sub_field.categories() {
-                    println!("\t\tCategory {:?} has size {}", category, sub_field.type_layout().unwrap().size(category));
+                    println!(
+                        "\t\tCategory {:?} has size {}",
+                        category,
+                        sub_field.type_layout().unwrap().size(category)
+                    );
                 }
                 for i in 0..sub_field.type_layout().unwrap().binding_range_count() {
                     println!(
@@ -127,7 +134,11 @@ impl ShaderObjectLayout {
         }
         println!("Categories:");
         for category in type_layout.categories() {
-            println!("Category {:?} has size {}", category, type_layout.size(category));
+            println!(
+                "Category {:?} has size {}",
+                category,
+                type_layout.size(category)
+            );
         }
 
         let (existential_sizes, existential_offsets) =
@@ -203,20 +214,20 @@ impl ShaderObjectLayout {
             BindingType::MutableTeture => DescriptorType::StorageImage,
             BindingType::InputRenderTarget => DescriptorType::InputAttachment,
             _ => DescriptorType::UniformBuffer, //panic!("Unknown slang binding type {:?}", binding_type),
-            /*BindingType::TypedBuffer => {}
-                                                                          BindingType::RawBuffer => {}
-                                                                          BindingType::InputRenderTarget => {}
-                                                                          BindingType::VaryingInput => {}
-                                                                          BindingType::VaryingOutput => {}
-                                                                          BindingType::ExistentialValue => {}
-                                                                          BindingType::PushConstant => {}
-                                                                          BindingType::MutableFlag => {}
-                                                                          BindingType::MutableTypedBuffer => {}
-                                                                          BindingType::MutableRawBuffer => {}
-                                                                          BindingType::BaseMask => {}
-                                                                          BindingType::ExtMask => {}
-                                                                          BindingType::Unknown => {}*/
-                                                                          // TODO: Missing: eUniformTexelBuffer, eStorageTexelBuffer, eUniformBuffer, eStorageBuffer, eUniformBufferDynamic, eStorageBufferDynamic, eInputAttachment, eMutableEXT
+                                                /*BindingType::TypedBuffer => {}
+                                                BindingType::RawBuffer => {}
+                                                BindingType::InputRenderTarget => {}
+                                                BindingType::VaryingInput => {}
+                                                BindingType::VaryingOutput => {}
+                                                BindingType::ExistentialValue => {}
+                                                BindingType::PushConstant => {}
+                                                BindingType::MutableFlag => {}
+                                                BindingType::MutableTypedBuffer => {}
+                                                BindingType::MutableRawBuffer => {}
+                                                BindingType::BaseMask => {}
+                                                BindingType::ExtMask => {}
+                                                BindingType::Unknown => {}*/
+                                                // TODO: Missing: eUniformTexelBuffer, eStorageTexelBuffer, eUniformBuffer, eStorageBuffer, eUniformBufferDynamic, eStorageBufferDynamic, eInputAttachment, eMutableEXT
         }
     }
 

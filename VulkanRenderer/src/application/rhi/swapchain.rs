@@ -1,23 +1,23 @@
 use std::{cmp::max, sync::Arc};
 
 use vulkano::{
-    Validated, VulkanError,
-    device::physical::PhysicalDevice,
-    format::Format,
+    device::physical::PhysicalDevice, format::Format,
     image::{
-        Image, ImageAspects, ImageSubresourceRange, ImageUsage,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageSubresourceRange,
+        ImageUsage,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{
-        ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo,
-        Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo, acquire_next_image,
+        acquire_next_image, ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities,
+        SurfaceInfo, Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
     },
     sync::Sharing,
+    Validated,
+    VulkanError,
 };
 use winit::window::Window;
 
-use crate::application::rhi::{VKRHI, queue::QueueFamilyIndices};
+use crate::application::rhi::{queue::QueueFamilyIndices, VKRHI};
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -55,7 +55,7 @@ impl Swapchain {
     pub fn image_view(&self, index: usize) -> &Arc<ImageView> {
         &self.image_views[index]
     }
-    
+
     pub fn image_view_iter(&self) -> impl Iterator<Item = &Arc<ImageView>> {
         self.image_views.iter()
     }
@@ -183,18 +183,15 @@ impl Swapchain {
         render_pass: &Arc<RenderPass>,
         depth_image_view: &Arc<ImageView>,
     ) -> Vec<Arc<Framebuffer>> {
-        let frame_buffers = self
-            .image_views
-            .iter()
-            .map(|image_view| {
-                let create_info = FramebufferCreateInfo {
-                    attachments: vec![image_view.clone(), depth_image_view.clone()],
-                    extent: self.extent,
-                    layers: 1,
-                    ..FramebufferCreateInfo::default()
-                };
-                Framebuffer::new(render_pass.clone(), create_info).unwrap()
-            });
+        let frame_buffers = self.image_views.iter().map(|image_view| {
+            let create_info = FramebufferCreateInfo {
+                attachments: vec![image_view.clone(), depth_image_view.clone()],
+                extent: self.extent,
+                layers: 1,
+                ..FramebufferCreateInfo::default()
+            };
+            Framebuffer::new(render_pass.clone(), create_info).unwrap()
+        });
         frame_buffers.collect()
     }
 

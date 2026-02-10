@@ -1,37 +1,48 @@
-use crate::application::rhi::buffer::buffer_from_slice;
-use crate::application::rhi::command_buffer::CommandBufferInterface;
-use crate::application::rhi::pipeline::graphics_pipeline;
-use crate::application::rhi::shader_cursor::ShaderCursor;
-use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
-use crate::application::rhi::shaders::SlangCompiler;
-use crate::application::rhi::VKRHI;
+use std::{ops::Deref, sync::Arc};
+
 use shader_slang::{Blob, ComponentType};
 use smallvec::smallvec;
-use std::ops::Deref;
-use std::sync::Arc;
-use vulkano::buffer::{BufferContents, BufferUsage, Subbuffer};
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents, SubpassEndInfo,
+use vulkano::{
+    buffer::{BufferContents, BufferUsage, Subbuffer},
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    },
+    device::{Device, Queue},
+    format::{ClearValue, Format},
+    image::{
+        sampler::{Sampler, SamplerCreateInfo},
+        view::ImageView,
+        ImageLayout,
+    },
+    memory::allocator::{MemoryAllocator, MemoryTypeFilter},
+    pipeline::{
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input,
+            viewport::{Scissor, Viewport},
+        }, DynamicState, GraphicsPipeline,
+        PipelineBindPoint,
+    },
+    render_pass::{
+        AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp,
+        Framebuffer, FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDependency,
+        SubpassDescription,
+    },
+    shader::{spirv::bytes_to_words, ShaderStages},
+    sync::{AccessFlags, PipelineStages},
+    ValidationError,
 };
-use vulkano::device::{Device, Queue};
-use vulkano::format::{ClearValue, Format};
-use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
-use vulkano::image::view::ImageView;
-use vulkano::image::ImageLayout;
-use vulkano::memory::allocator::{MemoryAllocator, MemoryTypeFilter};
-use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
-use vulkano::pipeline::graphics::vertex_input;
-use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
-use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineBindPoint};
-use vulkano::render_pass::{
-    AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp, Framebuffer,
-    FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDependency, SubpassDescription,
+
+use crate::application::rhi::{
+    buffer::buffer_from_slice,
+    command_buffer::CommandBufferInterface,
+    pipeline::graphics_pipeline,
+    shader_cursor::ShaderCursor,
+    shader_object::{ShaderObject, ShaderObjectLayout},
+    shaders::SlangCompiler,
+    VKRHI,
 };
-use vulkano::shader::spirv::bytes_to_words;
-use vulkano::shader::ShaderStages;
-use vulkano::sync::{AccessFlags, PipelineStages};
-use vulkano::ValidationError;
 
 pub struct FullScreenPass {
     render_pass: Arc<RenderPass>,
@@ -41,7 +52,7 @@ pub struct FullScreenPass {
     shader_object: ShaderObject,
     pipeline: Arc<GraphicsPipeline>,
     framebuffers: Vec<Arc<Framebuffer>>,
-    sampler: Arc<Sampler>
+    sampler: Arc<Sampler>,
 }
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
@@ -142,7 +153,7 @@ impl FullScreenPass {
             shader_object,
             pipeline,
             framebuffers,
-            sampler
+            sampler,
         }
     }
 
@@ -157,9 +168,7 @@ impl FullScreenPass {
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
                     render_area_extent: extent,
-                    clear_values: vec![
-                        Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0]))
-                    ],
+                    clear_values: vec![Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0]))],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].clone())
                 },
@@ -389,10 +398,15 @@ impl FullScreenPass {
         Self::write_descriptor_sets(&self.shader_object, source_image, self.sampler.clone());
     }
 
-    fn write_descriptor_sets(shader_object: &ShaderObject, source_image: Arc<ImageView>, sampler: Arc<Sampler>) {
+    fn write_descriptor_sets(
+        shader_object: &ShaderObject,
+        source_image: Arc<ImageView>,
+        sampler: Arc<Sampler>,
+    ) {
         let pin = ShaderCursor::new(shader_object);
         let cursor = pin.field("gInput").unwrap();
-        cursor.field("colorInput")
+        cursor
+            .field("colorInput")
             .unwrap()
             .write_image_view_sampler(source_image, sampler);
     }

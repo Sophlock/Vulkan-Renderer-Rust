@@ -12,7 +12,10 @@ pub struct SlangCompiler {
 impl SlangCompiler {
     pub fn new(shader_base_path: &Path) -> Self {
         let global_session = GlobalSession::new().unwrap();
-        println!("Using slang compiler version {}", global_session.build_tag_string());
+        println!(
+            "Using slang compiler version {}",
+            global_session.build_tag_string()
+        );
         let targets = [TargetDesc::default()
             .format(CompileTarget::Spirv)
             .profile(global_session.find_profile("spirv_1_6"))];

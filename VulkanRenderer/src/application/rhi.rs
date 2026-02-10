@@ -27,31 +27,33 @@ use physical_device::find_depth_format;
 use queue::{QueueCollection, QueueFamilyIndices};
 use rhi_assets::{vulkan_mesh::VKMesh, vulkan_texture::VKTexture};
 use swapchain::Swapchain;
-use vulkano::instance::debug::DebugUtilsMessageSeverity;
 use vulkano::{
-    VulkanLibrary,
     descriptor_set::allocator::{
         DescriptorSetAllocator, StandardDescriptorSetAllocator,
         StandardDescriptorSetAllocatorCreateInfo,
     },
     device::{
-        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
+        physical::PhysicalDevice, Device,
     },
     format::Format,
     image::{
-        Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsage, SampleCount,
-        view::{ImageView, ImageViewCreateInfo, ImageViewType},
+        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsage,
+        SampleCount,
     },
     instance::{
-        Instance, InstanceCreateInfo, InstanceExtensions,
-        debug::{DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo},
+        debug::{
+            DebugUtilsMessageSeverity, DebugUtilsMessenger, DebugUtilsMessengerCallback,
+            DebugUtilsMessengerCreateInfo,
+        }, Instance, InstanceCreateInfo,
+        InstanceExtensions,
     },
     memory::allocator::{
         AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
     },
     swapchain::Surface,
     sync::{GpuFuture, Sharing},
+    VulkanLibrary,
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
@@ -60,8 +62,8 @@ use super::assets::asset_traits::{
 };
 use crate::application::rhi::{
     rhi_assets::{
-        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
-        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
+        vulkan_camera::VKCamera, vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+        vulkan_model::VKModel, vulkan_scene::VKScene, RHIResourceManager,
     },
     shaders::SlangCompiler,
     swapchain::SwapchainSupportDetails,
@@ -180,10 +182,9 @@ impl VKRHI {
             })
         };
         let create_info = DebugUtilsMessengerCreateInfo {
-            message_severity: DebugUtilsMessageSeverity::ERROR
-                | DebugUtilsMessageSeverity::WARNING,
-                //| DebugUtilsMessageSeverity::INFO
-                //| DebugUtilsMessageSeverity::VERBOSE,
+            message_severity: DebugUtilsMessageSeverity::ERROR | DebugUtilsMessageSeverity::WARNING,
+            //| DebugUtilsMessageSeverity::INFO
+            //| DebugUtilsMessageSeverity::VERBOSE,
             ..DebugUtilsMessengerCreateInfo::user_callback(callback)
         };
         DebugUtilsMessenger::new(instance, create_info).unwrap()
@@ -343,7 +344,9 @@ impl VKRHI {
     }
 
     pub fn shutdown(&self) {
-        unsafe {self.device.wait_idle().unwrap();}
+        unsafe {
+            self.device.wait_idle().unwrap();
+        }
     }
 }
 

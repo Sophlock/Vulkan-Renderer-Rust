@@ -1,8 +1,12 @@
 use std::sync::Arc;
-use vulkano::{command_buffer::{
-    allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo}, AutoCommandBufferBuilder, CommandBufferUsage,
-    PrimaryAutoCommandBuffer,
-}, device::Device};
+
+use vulkano::{
+    command_buffer::{
+        allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo}, AutoCommandBufferBuilder, CommandBufferUsage,
+        PrimaryAutoCommandBuffer,
+    },
+    device::Device,
+};
 
 pub struct CommandBufferInterface {
     allocator: Arc<StandardCommandBufferAllocator>,
