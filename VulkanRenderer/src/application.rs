@@ -144,7 +144,7 @@ impl Application {
         if both {
             let right = cam.transform.right();
             let up = cam.transform.up();
-            cam.transform.location += (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
+            cam.transform.location -= (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
         } else if left {
             let forward = cam.transform.forward();
             let forward_proj = forward.with_y(0.).normalize();
