@@ -1,6 +1,6 @@
 pub mod buffer;
 pub mod command_buffer;
-mod device_helper;
+pub mod device_helper;
 mod layers;
 mod physical_device;
 pub mod pipeline;

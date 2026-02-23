@@ -1,4 +1,7 @@
 mod full_screen_pass;
+mod device_generated_commands;
+mod visibility_buffer_shading;
+mod visibility_buffer_generation;
 
 use std::{
     cell::{Ref, RefCell, RefMut},

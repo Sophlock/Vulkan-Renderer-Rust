@@ -407,6 +407,14 @@ impl ShaderObject {
         self.layout.device()
     }
 
+    pub fn layout(&self) -> &Arc<ShaderObjectLayout> {
+        &self.layout
+    }
+
+    pub fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
+        &self.layout.pipeline_layout
+    }
+
     pub fn type_layout(&self) -> &TypeLayout {
         unsafe { &*self.type_layout }
     }

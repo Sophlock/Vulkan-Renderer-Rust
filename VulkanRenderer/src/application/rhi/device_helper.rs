@@ -10,7 +10,7 @@ use vulkano::{
         Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
     },
 };
-
+use vulkano::instance::Instance;
 use crate::application::rhi::queue::{QueueCollection, QueueFamilyIndices};
 
 pub fn create_logical_device(
@@ -20,6 +20,8 @@ pub fn create_logical_device(
     let queue_create_infos = queue_indices.generate_create_infos();
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
+        nv_device_generated_commands: true,
+        nv_device_generated_commands_compute: true,
         //nv_compute_shader_derivatives: true,
         ..DeviceExtensions::default()
     };
@@ -27,6 +29,7 @@ pub fn create_logical_device(
         sampler_anisotropy: true,
         //compute_derivative_group_quads: true,
         synchronization2: true,
+        device_generated_commands: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {
@@ -39,7 +42,7 @@ pub fn create_logical_device(
 
     let extra_device_extensions = [
         //"VK_KHR_compute_shader_derivatives",
-        "VK_EXT_device_generated_commands",
+        //"VK_EXT_device_generated_commands",
     ];
 
     let raw_queue_create_infos = device_create_info
@@ -100,5 +103,24 @@ pub fn create_logical_device(
     (
         device,
         QueueCollection::new(queues.collect(), queue_indices),
+    )
+}
+
+pub unsafe fn ash_instance(instance: &Arc<Instance>) -> ash::Instance {
+    ash::Instance::from_parts_1_3(
+        instance.handle(),
+        instance.fns().v1_0.clone(),
+        instance.fns().v1_1.clone(),
+        instance.fns().v1_3.clone(),
+    )
+}
+
+pub unsafe fn ash_device(device: &Arc<Device>) -> ash::Device {
+    ash::Device::from_parts_1_3(
+        device.handle(),
+        device.fns().v1_0.clone(),
+        device.fns().v1_1.clone(),
+        device.fns().v1_2.clone(),
+        device.fns().v1_3.clone(),
     )
 }
