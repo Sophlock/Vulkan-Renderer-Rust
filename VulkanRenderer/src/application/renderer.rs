@@ -149,9 +149,10 @@ impl VKRenderer {
             &swapchain,
         );
 
-        let vis_buffer_rasterizer = VisibilityBufferRasterizer::new(rhi.clone(), swapchain.extent);
+        let vis_buffer_rasterizer = VisibilityBufferRasterizer::new(rhi.clone(), &swapchain);
+        // TODO: Correct num materials
         let vis_buffer_processing =
-            VisibilityBufferProcessingPass::new(rhi.as_ref(), swapchain.extent, 1);
+            VisibilityBufferProcessingPass::new(rhi.as_ref(), 1);
 
         let result = Self {
             rhi,
@@ -229,7 +230,7 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
-        /*self.mutable_state_const()
+        self.mutable_state_const()
         .vis_buffer_rasterizer
         .record_command_buffer(
             &mut command_buffer,
@@ -237,20 +238,20 @@ impl VKRenderer {
             self.mutable_state_const().swapchain.extent,
             scene,
         )
-        .unwrap();*/
+        .unwrap();
 
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
 
-        /*let mut compute_command_buffer = self
+        let mut compute_command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
         self.mutable_state_const()
             .vis_buffer_processing
-            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
-            .unwrap();*/
+            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize, self.mutable_state_const().swapchain.extent)
+            .unwrap();
 
         let draw_finished_future = image_available_future
             .then_execute(
