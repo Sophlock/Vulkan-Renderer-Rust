@@ -12,6 +12,7 @@ pub mod shader_cursor;
 pub mod shader_object;
 pub mod shaders;
 pub mod swapchain;
+pub mod swapchain_resources;
 
 use std::{
     cell::{Ref, RefCell, RefMut},

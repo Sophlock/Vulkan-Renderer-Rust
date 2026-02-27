@@ -10,7 +10,7 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-
+use std::sync::RwLock;
 use egui_winit_vulkano::{
     egui,
     egui::{Color32, Frame},
@@ -64,13 +64,15 @@ use crate::application::{
         swapchain::Swapchain,
     },
 };
+use crate::application::rhi::swapchain;
+use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
-    depth_image_view: Arc<ImageView>,
-    color_render_target: Arc<ImageView>,
+    depth_image_view: Arc<RwLock<SwapchainImage>>,
+    color_render_target: Arc<RwLock<SwapchainImage>>,
     pp_render_target: Arc<ImageView>,
-    rt_framebuffer: Arc<Framebuffer>,
+    rt_framebuffer: Arc<RwLock<SwapchainFramebuffer>>,
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
     fullscreen_pass: FullScreenPass,
@@ -107,10 +109,10 @@ impl VKRenderer {
         let render_pass =
             RenderPassBuilder::build_default_render_pass(rhi.as_ref(), Format::R32G32B32A32_SFLOAT)
                 .build();
-        let depth_image_view = rhi.create_depth_buffer(swapchain.extent);
+        let depth_image_view = swapchain.create_depth_buffer(rhi.as_ref());
 
-        let color_render_target = rhi.create_gbuffer(
-            swapchain.extent,
+        let color_render_target = swapchain.create_gbuffer(
+            rhi.as_ref(),
             Format::R32G32B32A32_SFLOAT,
             ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
@@ -121,16 +123,14 @@ impl VKRenderer {
             ImageUsage::STORAGE | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
         );
-        let rt_framebuffer = Framebuffer::new(
+        let rt_framebuffer = swapchain.create_framebuffer(
             render_pass.clone(),
-            FramebufferCreateInfo {
+            SwapchainFramebufferCreateInfo {
                 attachments: vec![color_render_target.clone(), depth_image_view.clone()],
-                extent: swapchain.extent,
                 layers: 1,
-                ..FramebufferCreateInfo::default()
+                ..SwapchainFramebufferCreateInfo::default()
             },
-        )
-        .unwrap();
+        );
 
         let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref());
 
@@ -228,7 +228,7 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
-        self.mutable_state_const()
+        /*self.mutable_state_const()
             .vis_buffer_rasterizer
             .record_command_buffer(
                 &mut command_buffer,
@@ -236,12 +236,12 @@ impl VKRenderer {
                 self.mutable_state_const().swapchain.extent,
                 scene,
             )
-            .unwrap();
+            .unwrap();*/
 
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
 
-        let mut compute_command_buffer = self
+        /*let mut compute_command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
@@ -249,7 +249,7 @@ impl VKRenderer {
         self.mutable_state_const()
             .vis_buffer_processing
             .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
-            .unwrap();
+            .unwrap();*/
 
         let draw_finished_future = image_available_future
             .then_execute(
@@ -348,7 +348,7 @@ impl VKRenderer {
                     ],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(
-                        self.mutable_state_const().rt_framebuffer.clone(),
+                        self.mutable_state_const().rt_framebuffer.read().unwrap().framebuffer().clone(),
                     )
                 },
                 SubpassBeginInfo {
@@ -468,7 +468,7 @@ impl VKRenderer {
         let global_cursor = ShaderCursor::new(&self.post_process.shader_object);
         let cursor = global_cursor.field("gComputeInput").unwrap();
         cursor.field("input").unwrap().write_image_view_sampler(
-            self.mutable_state_const().color_render_target.clone(),
+            self.mutable_state_const().color_render_target.read().unwrap().image_view().clone(),
             self.post_process.sampler.clone(),
         );
         cursor.field("screenSize").unwrap().write(
@@ -502,27 +502,27 @@ impl MutableRenderState {
         if rhi.window().inner_size() == PhysicalSize::new(0, 0) {
             return;
         }
-        self.swapchain = self.swapchain.recreate(
+        self.swapchain.recreate(
             &rhi.physical_device(),
             &rhi.surface(),
             &rhi.window(),
             &rhi.queue_family_indices(),
         );
-        self.depth_image_view = rhi.create_depth_buffer(self.swapchain.extent);
+        /*self.depth_image_view = rhi.create_depth_buffer(self.swapchain.extent);
 
         self.color_render_target = rhi.create_gbuffer(
             self.swapchain.extent,
             Format::R32G32B32A32_SFLOAT,
             ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
-        );
+        );*/
         self.pp_render_target = rhi.create_gbuffer(
             self.swapchain.extent,
             Format::R32G32B32A32_SFLOAT,
             ImageUsage::STORAGE | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
         );
-        self.rt_framebuffer = Framebuffer::new(
+        /*self.rt_framebuffer = Framebuffer::new(
             render_pass.clone(),
             FramebufferCreateInfo {
                 attachments: vec![
@@ -534,7 +534,7 @@ impl MutableRenderState {
                 ..FramebufferCreateInfo::default()
             },
         )
-        .unwrap();
+        .unwrap();*/
 
         self.fullscreen_pass.recreate_framebuffers(
             self.swapchain.image_view_iter().cloned(),

@@ -1,23 +1,24 @@
+use std::sync::{Mutex, RwLock, Weak};
 use std::{cmp::max, sync::Arc};
-
 use vulkano::{
-    device::physical::PhysicalDevice, format::Format,
+    Validated, VulkanError,
+    device::physical::PhysicalDevice,
+    format::Format,
     image::{
-        view::{ImageView, ImageViewCreateInfo, ImageViewType}, Image, ImageAspects, ImageSubresourceRange,
-        ImageUsage,
+        Image, ImageAspects, ImageSubresourceRange, ImageUsage,
+        view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{
-        acquire_next_image, ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities,
-        SurfaceInfo, Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
+        ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo,
+        Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo, acquire_next_image,
     },
     sync::Sharing,
-    Validated,
-    VulkanError,
 };
 use winit::window::Window;
 
-use crate::application::rhi::{queue::QueueFamilyIndices, VKRHI};
+use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
+use crate::application::rhi::{VKRHI, queue::QueueFamilyIndices};
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -27,6 +28,12 @@ pub struct Swapchain {
     pub image_count: u32,
     images: Vec<Arc<Image>>,
     image_views: Vec<Arc<ImageView>>,
+    resources: Mutex<SwapchainResourceCollection>,
+}
+
+struct SwapchainResourceCollection {
+    images: Vec<Weak<RwLock<SwapchainImage>>>,
+    framebuffers: Vec<Weak<RwLock<SwapchainFramebuffer>>>,
 }
 
 impl Swapchain {
@@ -61,15 +68,26 @@ impl Swapchain {
     }
 
     pub fn recreate(
-        &self,
+        &mut self,
         physical_device: &PhysicalDevice,
         surface: &Arc<Surface>,
         window: &Window,
         queue_family_indices: &QueueFamilyIndices,
-    ) -> Self {
+    ) {
         let create_info = Self::create_info(physical_device, surface, window, queue_family_indices);
         let (swapchain, images) = self.swapchain.recreate(create_info.clone()).unwrap();
-        Self::from_raw(swapchain, images, create_info)
+        let new_swapchain = Self::from_raw(swapchain, images, create_info);
+        self.swapchain = new_swapchain.swapchain;
+        self.format = new_swapchain.format;
+        self.color_space = new_swapchain.color_space;
+        self.extent = new_swapchain.extent;
+        self.images = new_swapchain.images;
+        self.image_views = new_swapchain.image_views;
+        self.image_count = new_swapchain.image_count;
+        self.resources
+            .lock()
+            .unwrap()
+            .recreate_all(new_swapchain.extent);
     }
 
     fn create_info(
@@ -129,6 +147,7 @@ impl Swapchain {
                 ImageView::new(image.clone(), image_view_create_info).unwrap()
             })
             .collect();
+        let resources = Mutex::new(SwapchainResourceCollection::new());
         Self {
             swapchain,
             format: create_info.image_format,
@@ -137,6 +156,7 @@ impl Swapchain {
             images,
             image_views,
             image_count: create_info.min_image_count,
+            resources,
         }
     }
 
@@ -195,8 +215,86 @@ impl Swapchain {
         frame_buffers.collect()
     }
 
+    pub fn create_gbuffer(
+        &self,
+        rhi: &VKRHI,
+        format: Format,
+        usage: ImageUsage,
+        aspects: ImageAspects,
+    ) -> Arc<RwLock<SwapchainImage>> {
+        let image = Arc::new(RwLock::new(SwapchainImage::new_gbuffer(
+            rhi, self.extent, format, usage, aspects,
+        )));
+        self.resources.lock().unwrap().register_image(&image);
+        image
+    }
+
+    pub fn create_depth_buffer(
+        &self,
+        rhi: &VKRHI,
+    ) -> Arc<RwLock<SwapchainImage>> {
+        let image = Arc::new(RwLock::new(SwapchainImage::new_depth_buffer(rhi, self.extent)));
+        self.resources.lock().unwrap().register_image(&image);
+        image
+    }
+
+    pub fn create_framebuffer(
+        &self,
+        render_pass: Arc<RenderPass>,
+        create_info: SwapchainFramebufferCreateInfo
+    ) -> Arc<RwLock<SwapchainFramebuffer>> {
+        let framebuffer = Arc::new(RwLock::new(SwapchainFramebuffer::new(render_pass, self.extent, create_info)));
+        self.resources.lock().unwrap().register_framebuffer(&framebuffer);
+        framebuffer
+    }
+
     pub fn raw(&self) -> &Arc<VKSwapchain> {
         &self.swapchain
+    }
+}
+
+impl SwapchainResourceCollection {
+    fn new() -> Self {
+        Self {
+            images: Vec::new(),
+            framebuffers: Vec::new(),
+        }
+    }
+
+    fn register_image(&mut self, image: &Arc<RwLock<SwapchainImage>>) {
+        self.images.push(Arc::downgrade(image));
+    }
+
+    fn register_framebuffer(&mut self, framebuffer: &Arc<RwLock<SwapchainFramebuffer>>) {
+        self.framebuffers.push(Arc::downgrade(framebuffer));
+    }
+
+    fn recreate_all(&mut self, new_extent: [u32; 2]) {
+        self.images = self
+            .images
+            .iter()
+            .cloned()
+            .filter(|image| image.upgrade().is_some())
+            .collect();
+
+        self.framebuffers = self
+            .framebuffers
+            .iter()
+            .cloned()
+            .filter(|framebuffer| framebuffer.upgrade().is_some())
+            .collect();
+
+        self.images.iter().for_each(|weak_image| {
+            if let Some(image) = weak_image.upgrade() {
+                image.write().unwrap().recreate(new_extent);
+            }
+        });
+
+        self.framebuffers.iter().for_each(|framebuffer| {
+            if let Some(framebuffer) = framebuffer.upgrade() {
+                framebuffer.write().unwrap().recreate(new_extent);
+            }
+        })
     }
 }
 
