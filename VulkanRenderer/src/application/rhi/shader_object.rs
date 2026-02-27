@@ -1,33 +1,31 @@
+use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
+use std::sync::{Mutex, RwLock};
 use std::{collections::BTreeMap, sync::Arc};
-
-use shader_slang::{reflection::TypeLayout, BindingType, ComponentType, ParameterCategory};
 use vulkano::{
+    DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     descriptor_set::{
-        allocator::DescriptorSetAllocator, layout::{
+        DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
+        allocator::DescriptorSetAllocator,
+        layout::{
             DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
             DescriptorType,
-        }, DescriptorImageViewInfo,
-        DescriptorSet,
-        WriteDescriptorSet,
+        },
     },
     device::{Device, DeviceOwned},
-    image::{
-        sampler::Sampler,
-        view::ImageView,
-        ImageLayout,
-    },
+    image::{ImageLayout, sampler::Sampler, view::ImageView},
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
-    pipeline::{layout::PipelineLayoutCreateInfo, PipelineLayout},
+    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
     shader::ShaderStages,
     sync::Sharing,
-    DeviceSize,
 };
 
+use crate::application::rhi::swapchain_resources::SwapchainImage;
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture,
     shader_cursor::{ShaderOffset, ShaderSize},
 };
+use crate::application::rhi::shader_object::BoundImageType::ImageSampler;
 
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
@@ -43,6 +41,16 @@ pub struct ShaderObject {
     descriptor_sets: Vec<Arc<DescriptorSet>>,
     uniform_buffer: Option<Subbuffer<[u8]>>,
     type_layout: *const TypeLayout,
+    swapchain_resources: Mutex<BoundSwapchainResources>,
+}
+
+enum BoundImageType {
+    Image(Arc<RwLock<SwapchainImage>>),
+    ImageSampler(Arc<RwLock<SwapchainImage>>, Arc<Sampler>),
+}
+
+struct BoundSwapchainResources {
+    bound_images: BTreeMap<(u32, u32), BoundImageType>,
 }
 
 impl ShaderObjectLayout {
@@ -345,7 +353,7 @@ impl ShaderObject {
         descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
         buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: u32,
-    ) -> Self {
+    ) -> Arc<Self> {
         let type_layout = layout
             .type_layout()
             .element_var_layout()
@@ -401,7 +409,9 @@ impl ShaderObject {
             uniform_buffer,
             type_layout,
             layout,
+            swapchain_resources: Mutex::new(BoundSwapchainResources::default()),
         }
+        .into()
     }
 
     fn device(&self) -> &Arc<Device> {
@@ -467,6 +477,25 @@ impl ShaderObject {
         self.perform_descriptor_write([write].iter().cloned());
     }
 
+    pub fn write_swapchain_image(
+        self: &Arc<Self>,
+        offset: ShaderOffset,
+        image: Arc<RwLock<SwapchainImage>>,
+    ) {
+        self.write_image_view(offset, image.read().unwrap().image_view().clone());
+        self.register_swapchain_image(offset, BoundImageType::Image(image));
+    }
+
+    pub fn write_swapchain_image_sampler(
+        self: &Arc<Self>,
+        offset: ShaderOffset,
+        image: Arc<RwLock<SwapchainImage>>,
+        sampler: Arc<Sampler>,
+    ) {
+        self.write_image_view_sampler(offset, image.read().unwrap().image_view().clone(), sampler.clone());
+        self.register_swapchain_image(offset, BoundImageType::ImageSampler(image, sampler));
+    }
+
     fn perform_descriptor_write<T>(&self, writes: T)
     where
         T: Iterator<Item = WriteDescriptorSet>,
@@ -475,10 +504,84 @@ impl ShaderObject {
         self.descriptor_sets
             .iter()
             // TODO: This should use the safe checked version but this requires manual layout transitions
-            .for_each(|set| unsafe { set.update_by_ref_unchecked(writes.clone(), []) });
+            .for_each(|set| {
+                if let Err(error) = unsafe {set.update_by_ref(writes.clone(), [])} {
+                    println!("Warning: Descriptor write error occurred: {}\nNote that this might just be a bug in Vulkano!", error);
+                    unsafe { set.update_by_ref_unchecked(writes.clone(), []) }
+                }
+                });
+    }
+
+    fn register_swapchain_image(
+        self: &Arc<Self>,
+        offset: ShaderOffset,
+        image: BoundImageType,
+    ) {
+        let mut resources = self.swapchain_resources.lock().unwrap();
+        let position = (0u32, offset.binding_offset);
+
+        image
+            .image()
+            .write()
+            .unwrap()
+            .register_shader_object(position, self.clone());
+
+        let bound = resources.bound_images.insert(position, image);
+        if let Some(bound) = bound {
+            bound
+                .image()
+                .write()
+                .unwrap()
+                .unregister_shader_object(position, self);
+        }
+    }
+
+    pub fn reload_swapchain_image(self: &Arc<Self>, position: &(u32, u32)) {
+        // TODO: Non swapchain images should unbind swapchain images as well when they are written
+        let resources = self.swapchain_resources.lock().unwrap();
+        let image = resources.bound_images.get(position).unwrap();
+        match image {
+            BoundImageType::Image(image) => {
+                self.write_image_view(
+                    ShaderOffset {
+                        binding_offset: position.1,
+                        ..ShaderOffset::default()
+                    },
+                    image.read().unwrap().image_view().clone(),
+                );
+            }
+            ImageSampler(image, sampler) => {
+                self.write_image_view_sampler(
+                    ShaderOffset {
+                        binding_offset: position.1,
+                        ..ShaderOffset::default()
+                    },
+                    image.read().unwrap().image_view().clone(),
+                    sampler.clone(),
+                );
+            }
+        }
     }
 
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
         self.descriptor_sets.as_slice()
+    }
+}
+
+
+impl BoundImageType {
+    fn image(&self) -> &Arc<RwLock<SwapchainImage>> {
+        match self {
+            BoundImageType::Image(image) => image,
+            BoundImageType::ImageSampler(image, _) => image
+        }
+    }
+}
+
+impl Default for BoundSwapchainResources {
+    fn default() -> Self {
+        Self {
+            bound_images: Default::default(),
+        }
     }
 }

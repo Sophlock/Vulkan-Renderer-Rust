@@ -17,7 +17,7 @@ use crate::application::{
 };
 
 pub struct VKMaterialInstance {
-    shader_object: ShaderObject,
+    shader_object: Arc<ShaderObject>,
     material: RHIHandle<VKMaterial>,
     uuid: usize,
 }
@@ -52,7 +52,7 @@ impl VKMaterialInstance {
     }
 
     pub fn shader_cursor(&self) -> ShaderCursor {
-        ShaderCursor::new(&self.shader_object)
+        ShaderCursor::new(self.shader_object.clone())
     }
 
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {

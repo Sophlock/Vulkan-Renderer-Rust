@@ -71,7 +71,7 @@ pub struct MutableRenderState {
     swapchain: Swapchain,
     depth_image_view: Arc<RwLock<SwapchainImage>>,
     color_render_target: Arc<RwLock<SwapchainImage>>,
-    pp_render_target: Arc<ImageView>,
+    pp_render_target: Arc<RwLock<SwapchainImage>>,
     rt_framebuffer: Arc<RwLock<SwapchainFramebuffer>>,
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
@@ -98,7 +98,7 @@ struct CompiledMaterial {
 
 struct PostProcessPass {
     shader_object_layout: Arc<ShaderObjectLayout>,
-    shader_object: ShaderObject,
+    shader_object: Arc<ShaderObject>,
     pipeline: Arc<ComputePipeline>,
     sampler: Arc<Sampler>,
 }
@@ -117,8 +117,8 @@ impl VKRenderer {
             ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
         );
-        let pp_render_target = rhi.create_gbuffer(
-            swapchain.extent,
+        let pp_render_target = swapchain.create_gbuffer(
+            rhi.as_ref(),
             Format::R32G32B32A32_SFLOAT,
             ImageUsage::STORAGE | ImageUsage::SAMPLED,
             ImageAspects::COLOR,
@@ -144,8 +144,7 @@ impl VKRenderer {
             ImageLayout::ShaderReadOnlyOptimal,
             None,
             pp_render_target.clone(),
-            swapchain.image_view_iter().cloned(),
-            swapchain.extent,
+            &swapchain,
         );
 
         let vis_buffer_rasterizer = VisibilityBufferRasterizer::new(rhi.clone(), swapchain.extent);
@@ -302,7 +301,7 @@ impl VKRenderer {
             final_output_finished_future,
             self.mutable_state_const()
                 .swapchain
-                .image_view(swapchain_image_index as usize)
+                .image_view(swapchain_image_index as usize).read().unwrap().image_view()
                 .clone(),
         );
 
@@ -465,7 +464,7 @@ impl VKRenderer {
     }
 
     fn write_framebuffer_descriptors(&self) {
-        let global_cursor = ShaderCursor::new(&self.post_process.shader_object);
+        let global_cursor = ShaderCursor::new(self.post_process.shader_object.clone());
         let cursor = global_cursor.field("gComputeInput").unwrap();
         cursor.field("input").unwrap().write_image_view_sampler(
             self.mutable_state_const().color_render_target.read().unwrap().image_view().clone(),
@@ -482,7 +481,7 @@ impl VKRenderer {
         cursor
             .field("result")
             .unwrap()
-            .write_image_view(self.mutable_state_const().pp_render_target.clone());
+            .write_image_view(self.mutable_state_const().pp_render_target.read().unwrap().image_view().clone());
     }
 }
 impl RendererInterface for VKRenderer {
@@ -508,39 +507,7 @@ impl MutableRenderState {
             &rhi.window(),
             &rhi.queue_family_indices(),
         );
-        /*self.depth_image_view = rhi.create_depth_buffer(self.swapchain.extent);
 
-        self.color_render_target = rhi.create_gbuffer(
-            self.swapchain.extent,
-            Format::R32G32B32A32_SFLOAT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-            ImageAspects::COLOR,
-        );*/
-        self.pp_render_target = rhi.create_gbuffer(
-            self.swapchain.extent,
-            Format::R32G32B32A32_SFLOAT,
-            ImageUsage::STORAGE | ImageUsage::SAMPLED,
-            ImageAspects::COLOR,
-        );
-        /*self.rt_framebuffer = Framebuffer::new(
-            render_pass.clone(),
-            FramebufferCreateInfo {
-                attachments: vec![
-                    self.color_render_target.clone(),
-                    self.depth_image_view.clone(),
-                ],
-                extent: self.swapchain.extent,
-                layers: 1,
-                ..FramebufferCreateInfo::default()
-            },
-        )
-        .unwrap();*/
-
-        self.fullscreen_pass.recreate_framebuffers(
-            self.swapchain.image_view_iter().cloned(),
-            self.pp_render_target.clone(),
-            self.swapchain.extent,
-        );
         self.should_recreate_swapchain = false;
     }
 }

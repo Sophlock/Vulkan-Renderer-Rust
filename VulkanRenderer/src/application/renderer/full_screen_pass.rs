@@ -1,5 +1,5 @@
 use std::{ops::Deref, sync::Arc};
-
+use std::sync::RwLock;
 use shader_slang::{Blob, ComponentType};
 use smallvec::smallvec;
 use vulkano::{
@@ -43,15 +43,17 @@ use crate::application::rhi::{
     shaders::SlangCompiler,
     VKRHI,
 };
+use crate::application::rhi::swapchain::Swapchain;
+use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
 
 pub struct FullScreenPass {
     render_pass: Arc<RenderPass>,
     vertex_buffer: Subbuffer<[FullScreenPassVertex]>,
     index_buffer: Subbuffer<[u32]>,
     shader_object_layout: Arc<ShaderObjectLayout>,
-    shader_object: ShaderObject,
+    shader_object: Arc<ShaderObject>,
     pipeline: Arc<GraphicsPipeline>,
-    framebuffers: Vec<Arc<Framebuffer>>,
+    framebuffers: Vec<Arc<RwLock<SwapchainFramebuffer>>>,
     sampler: Arc<Sampler>,
 }
 
@@ -76,9 +78,8 @@ impl FullScreenPass {
         previous_access: AccessFlags,
         input_initial_layout: ImageLayout,
         output_initial_layout: Option<ImageLayout>,
-        source_image: Arc<ImageView>,
-        target_images: impl Iterator<Item = Arc<ImageView>>,
-        image_extent: [u32; 2],
+        source_image: Arc<RwLock<SwapchainImage>>,
+        swapchain: &Swapchain,
     ) -> Self {
         let render_pass = Self::create_render_pass(
             rhi.device().clone(),
@@ -91,18 +92,18 @@ impl FullScreenPass {
             output_initial_layout,
         );
 
-        let framebuffers = target_images
+        let framebuffers = swapchain
+            .image_view_iter()
+            .cloned()
             .map(|target| {
-                Framebuffer::new(
+                swapchain.create_framebuffer(
                     render_pass.clone(),
-                    FramebufferCreateInfo {
+                    SwapchainFramebufferCreateInfo {
                         attachments: vec![target /*, source_image.clone()*/],
-                        extent: image_extent,
                         layers: 1,
-                        ..FramebufferCreateInfo::default()
+                        ..SwapchainFramebufferCreateInfo::default()
                     },
                 )
-                .unwrap()
             })
             .collect::<Vec<_>>();
 
@@ -143,7 +144,7 @@ impl FullScreenPass {
         )
         .unwrap();
 
-        Self::write_descriptor_sets(&shader_object, source_image, sampler.clone());
+        Self::write_descriptor_sets(shader_object.clone(), source_image, sampler.clone());
 
         Self {
             render_pass,
@@ -170,7 +171,7 @@ impl FullScreenPass {
                     render_area_extent: extent,
                     clear_values: vec![Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0]))],
                     render_pass: self.render_pass.clone(),
-                    ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].clone())
+                    ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].read().unwrap().framebuffer().clone())
                 },
                 SubpassBeginInfo {
                     contents: SubpassContents::Inline,
@@ -374,33 +375,9 @@ impl FullScreenPass {
         )
     }
 
-    pub fn recreate_framebuffers(
-        &mut self,
-        target_images: impl Iterator<Item = Arc<ImageView>>,
-        source_image: Arc<ImageView>,
-        image_extent: [u32; 2],
-    ) {
-        self.framebuffers = target_images
-            .map(|target| {
-                Framebuffer::new(
-                    self.render_pass.clone(),
-                    FramebufferCreateInfo {
-                        attachments: vec![target /*, source_image.clone()*/],
-                        extent: image_extent,
-                        layers: 1,
-                        ..FramebufferCreateInfo::default()
-                    },
-                )
-                .unwrap()
-            })
-            .collect::<Vec<_>>();
-
-        Self::write_descriptor_sets(&self.shader_object, source_image, self.sampler.clone());
-    }
-
     fn write_descriptor_sets(
-        shader_object: &ShaderObject,
-        source_image: Arc<ImageView>,
+        shader_object: Arc<ShaderObject>,
+        source_image: Arc<RwLock<SwapchainImage>>,
         sampler: Arc<Sampler>,
     ) {
         let pin = ShaderCursor::new(shader_object);
@@ -408,6 +385,6 @@ impl FullScreenPass {
         cursor
             .field("colorInput")
             .unwrap()
-            .write_image_view_sampler(source_image, sampler);
+            .write_swapchain_image_sampler(source_image, sampler);
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
 use vulkano::{
@@ -7,9 +7,10 @@ use vulkano::{
 };
 
 use crate::application::rhi::{rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject};
+use crate::application::rhi::swapchain_resources::SwapchainImage;
 
-pub struct ShaderCursor<'a> {
-    shader_object: &'a ShaderObject,
+pub struct ShaderCursor{
+    shader_object: Arc<ShaderObject>,
     offset: ShaderOffset,
     type_layout: *const TypeLayout,
 }
@@ -26,12 +27,12 @@ pub struct ShaderOffset {
     pub binding_array_element: u32,
 }
 
-impl<'a> ShaderCursor<'a> {
-    pub fn new(source: &'a ShaderObject) -> Self {
+impl ShaderCursor {
+    pub fn new(source: Arc<ShaderObject>) -> Self {
         Self {
+            type_layout: source.type_layout(),
             shader_object: source,
             offset: ShaderOffset::default(),
-            type_layout: source.type_layout(),
         }
     }
 
@@ -47,13 +48,13 @@ impl<'a> ShaderCursor<'a> {
                 .shader_object
                 .existential_to_offset(field.offset(ParameterCategory::ExistentialObjectParam));
             Some(ShaderCursor {
-                shader_object: self.shader_object,
+                shader_object: self.shader_object.clone(),
                 offset,
                 type_layout: field.type_layout()?.pending_data_type_layout()?,
             })
         } else {
             Some(ShaderCursor {
-                shader_object: self.shader_object,
+                shader_object: self.shader_object.clone(),
                 offset: ShaderOffset {
                     byte_offset: self.offset.byte_offset + field.offset(ParameterCategory::Uniform),
                     binding_offset: self.offset.binding_offset
@@ -68,7 +69,7 @@ impl<'a> ShaderCursor<'a> {
     pub fn at(&self, index: u32) -> Option<ShaderCursor> {
         let element = self.type_layout().element_type_layout()?;
         Some(ShaderCursor {
-            shader_object: self.shader_object,
+            shader_object: self.shader_object.clone(),
             offset: ShaderOffset {
                 byte_offset: self.offset.byte_offset
                     + (index as usize) * element.stride(ParameterCategory::Uniform),
@@ -108,6 +109,16 @@ impl<'a> ShaderCursor<'a> {
     pub fn write_image_view_sampler(&mut self, view: Arc<ImageView>, sampler: Arc<Sampler>) {
         self.shader_object
             .write_image_view_sampler(self.offset, view, sampler);
+    }
+
+    pub fn write_swapchain_image(&mut self, image: Arc<RwLock<SwapchainImage>>) {
+        self.shader_object
+            .write_swapchain_image(self.offset, image);
+    }
+
+    pub fn write_swapchain_image_sampler(&mut self, image: Arc<RwLock<SwapchainImage>>, sampler: Arc<Sampler>) {
+        self.shader_object
+            .write_swapchain_image_sampler(self.offset, image, sampler);
     }
 }
 

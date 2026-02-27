@@ -1,5 +1,7 @@
 use crate::application::rhi::VKRHI;
-use std::sync::{Arc, RwLock};
+use crate::application::rhi::shader_object::ShaderObject;
+use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex, RwLock};
 use vulkano::format::Format;
 use vulkano::image::view::{ImageView, ImageViewCreateInfo};
 use vulkano::image::{Image, ImageAspects, ImageCreateInfo, ImageUsage};
@@ -10,8 +12,9 @@ use vulkano::render_pass::{
 
 pub struct SwapchainImage {
     image_view: Arc<ImageView>,
-    buffer_allocator: Arc<dyn MemoryAllocator>,
+    buffer_allocator: Option<Arc<dyn MemoryAllocator>>,
     allocation_info: AllocationCreateInfo,
+    bindings: Mutex<BoundShaderObjectCollection>,
 }
 
 pub struct SwapchainFramebuffer {
@@ -26,8 +29,12 @@ pub struct SwapchainFramebufferCreateInfo {
 }
 
 /*pub struct SwapchainBuffer {
-    buffer: 
+    buffer:
 }*/
+
+struct BoundShaderObjectCollection {
+    shader_objects: Vec<((u32, u32), Arc<ShaderObject>)>,
+}
 
 impl SwapchainImage {
     pub fn new(
@@ -45,8 +52,9 @@ impl SwapchainImage {
         let image_view = ImageView::new(image, image_view_create_info).unwrap();
         Self {
             image_view,
-            buffer_allocator,
+            buffer_allocator: Some(buffer_allocator),
             allocation_info,
+            bindings: Default::default(),
         }
     }
 
@@ -59,21 +67,25 @@ impl SwapchainImage {
     ) -> Self {
         Self {
             image_view: rhi.create_gbuffer(extent, format, usage, aspects),
-            buffer_allocator: rhi.buffer_allocator().clone(),
+            buffer_allocator: Some(rhi.buffer_allocator().clone()),
             allocation_info: AllocationCreateInfo::default(),
+            bindings: Default::default(),
         }
     }
 
     pub fn new_depth_buffer(rhi: &VKRHI, extent: [u32; 2]) -> Self {
         Self {
             image_view: rhi.create_depth_buffer(extent),
-            buffer_allocator: rhi.buffer_allocator().clone(),
+            buffer_allocator: Some(rhi.buffer_allocator().clone()),
             allocation_info: AllocationCreateInfo::default(),
+            bindings: Default::default(),
         }
     }
 
-    pub fn recreate(&mut self, new_extent: [u32; 2]) {
-        let image = self.image_view.image();
+    pub fn recreate(this: &RwLock<Self>, new_extent: [u32; 2]) {
+        let read = this.read().unwrap();
+        let image_view = &read.image_view;
+        let image = image_view.image();
 
         let image_create_info = ImageCreateInfo {
             flags: image.flags(),
@@ -93,26 +105,92 @@ impl SwapchainImage {
             ..ImageCreateInfo::default()
         };
         let image_view_create_info = ImageViewCreateInfo {
-            view_type: self.image_view.view_type(),
-            format: self.image_view.format(),
-            component_mapping: self.image_view.component_mapping(),
-            subresource_range: self.image_view.subresource_range().clone(),
-            usage: self.image_view.usage(),
-            sampler_ycbcr_conversion: self.image_view.sampler_ycbcr_conversion().cloned(),
+            view_type: image_view.view_type(),
+            format: image_view.format(),
+            component_mapping: image_view.component_mapping(),
+            subresource_range: image_view.subresource_range().clone(),
+            usage: image_view.usage(),
+            sampler_ycbcr_conversion: image_view.sampler_ycbcr_conversion().cloned(),
             ..ImageViewCreateInfo::default()
         };
 
         let image = Image::new(
-            self.buffer_allocator.clone(),
+            this.read()
+                .unwrap()
+                .buffer_allocator
+                .clone()
+                .expect("Cannot recreate external image!"),
             image_create_info,
-            self.allocation_info.clone(),
+            this.read().unwrap().allocation_info.clone(),
         )
         .unwrap();
-        self.image_view = ImageView::new(image, image_view_create_info).unwrap();
+        let image_view = ImageView::new(image, image_view_create_info).unwrap();
+        drop(read);
+        this.write().unwrap().image_view = image_view;
+        this.read().unwrap().updated();
     }
-    
+
+    pub fn from_external(image_view: Arc<ImageView>) -> Self {
+        Self {
+            image_view,
+            buffer_allocator: None,
+            allocation_info: AllocationCreateInfo::default(),
+            bindings: Default::default(),
+        }
+    }
+
+    pub fn update_external(this: &RwLock<Self>, image_view: Arc<ImageView>) {
+        if this.read().unwrap().buffer_allocator.is_some() {
+            panic!("Cannot external update a swapchain image that is internally managed!");
+        }
+        this.write().unwrap().image_view = image_view;
+        this.read().unwrap().updated();
+    }
+
     pub fn image_view(&self) -> &Arc<ImageView> {
         &self.image_view
+    }
+
+    pub fn register_shader_object(
+        &mut self,
+        position: (u32, u32),
+        shader_object: Arc<ShaderObject>,
+    ) {
+        self.bindings
+            .lock()
+            .unwrap()
+            .shader_objects
+            .push((position, shader_object));
+    }
+
+    pub fn unregister_shader_object(
+        &mut self,
+        position: (u32, u32),
+        shader_object: &Arc<ShaderObject>,
+    ) {
+        let mut bindings = self.bindings.lock().unwrap();
+        if let Some(index) = bindings
+            .shader_objects
+            .iter()
+            .position(|x| x.0 == position && Arc::ptr_eq(&x.1, shader_object))
+        {
+            bindings.shader_objects.swap_remove(index);
+        }
+    }
+
+    fn updated(&self) {
+        self.reload_shader_objects();
+    }
+
+    fn reload_shader_objects(&self) {
+        self.bindings
+            .lock()
+            .unwrap()
+            .shader_objects
+            .iter()
+            .for_each(|(position, shader_object)| {
+                shader_object.reload_swapchain_image(position);
+            })
     }
 }
 
@@ -141,7 +219,7 @@ impl SwapchainFramebuffer {
             attachments: create_info.attachments,
         }
     }
-    
+
     pub fn recreate(&mut self, new_extent: [u32; 2]) {
         self.framebuffer = Framebuffer::new(
             self.framebuffer.render_pass().clone(),
@@ -157,9 +235,9 @@ impl SwapchainFramebuffer {
                 ..FramebufferCreateInfo::default()
             },
         )
-            .unwrap();
+        .unwrap();
     }
-    
+
     pub fn framebuffer(&self) -> &Arc<Framebuffer> {
         &self.framebuffer
     }
@@ -171,6 +249,14 @@ impl Default for SwapchainFramebufferCreateInfo {
             flags: FramebufferCreateFlags::empty(),
             attachments: vec![],
             layers: 0,
+        }
+    }
+}
+
+impl Default for BoundShaderObjectCollection {
+    fn default() -> Self {
+        Self {
+            shader_objects: Vec::new(),
         }
     }
 }

@@ -39,13 +39,13 @@ pub struct VisibilityBufferProcessingPass {
 }
 
 struct VisBufferStep {
-    shader_object: ShaderObject,
+    shader_object: Arc<ShaderObject>,
     pipeline: Arc<ComputePipeline>,
     dispatch: [u32; 3],
 }
 
 pub struct VisibilityBufferRasterizer {
-    shader_object: ShaderObject,
+    shader_object: Arc<ShaderObject>,
     pipeline: Arc<GraphicsPipeline>,
     render_pass: Arc<RenderPass>,
     rhi: Rc<VKRHI>,
@@ -313,7 +313,7 @@ impl VisibilityBufferRasterizer {
                 extent,
             }])?;
 
-        let cursor = ShaderCursor::new(&self.shader_object);
+        let cursor = ShaderCursor::new(self.shader_object.clone());
 
         let view_cursor = cursor.field("gViewData").unwrap();
         view_cursor

@@ -26,8 +26,7 @@ pub struct Swapchain {
     pub color_space: ColorSpace,
     pub extent: [u32; 2],
     pub image_count: u32,
-    images: Vec<Arc<Image>>,
-    image_views: Vec<Arc<ImageView>>,
+    image_views: Vec<Arc<RwLock<SwapchainImage>>>,
     resources: Mutex<SwapchainResourceCollection>,
 }
 
@@ -50,7 +49,9 @@ impl Swapchain {
             create_info.clone(),
         )
         .unwrap();
-        Self::from_raw(swapchain, images, create_info)
+        let mut result = Self::from_raw(swapchain, images, create_info);
+        //result.persistent_image_views = result.image_views.iter().map(|view| Arc::new(RwLock::new()))
+        result
     }
 
     pub fn acquire_next_image(
@@ -59,11 +60,11 @@ impl Swapchain {
         acquire_next_image(self.swapchain.clone(), None)
     }
 
-    pub fn image_view(&self, index: usize) -> &Arc<ImageView> {
+    pub fn image_view(&self, index: usize) -> &Arc<RwLock<SwapchainImage>> {
         &self.image_views[index]
     }
 
-    pub fn image_view_iter(&self) -> impl Iterator<Item = &Arc<ImageView>> {
+    pub fn image_view_iter(&self) -> impl Iterator<Item = &Arc<RwLock<SwapchainImage>>> {
         self.image_views.iter()
     }
 
@@ -81,9 +82,13 @@ impl Swapchain {
         self.format = new_swapchain.format;
         self.color_space = new_swapchain.color_space;
         self.extent = new_swapchain.extent;
-        self.images = new_swapchain.images;
-        self.image_views = new_swapchain.image_views;
-        self.image_count = new_swapchain.image_count;
+
+        assert_eq!(self.image_count, new_swapchain.image_count);
+
+        self.image_views.iter().zip(new_swapchain.image_views).for_each(|(persistent, new)| {
+            SwapchainImage::update_external(persistent, new.read().unwrap().image_view().clone());
+        });
+
         self.resources
             .lock()
             .unwrap()
@@ -144,7 +149,7 @@ impl Swapchain {
                     sampler_ycbcr_conversion: None,
                     ..ImageViewCreateInfo::default()
                 };
-                ImageView::new(image.clone(), image_view_create_info).unwrap()
+                Arc::new(RwLock::new(SwapchainImage::from_external(ImageView::new(image.clone(), image_view_create_info).unwrap())))
             })
             .collect();
         let resources = Mutex::new(SwapchainResourceCollection::new());
@@ -153,7 +158,6 @@ impl Swapchain {
             format: create_info.image_format,
             color_space: create_info.image_color_space,
             extent: create_info.image_extent,
-            images,
             image_views,
             image_count: create_info.min_image_count,
             resources,
@@ -195,24 +199,6 @@ impl Swapchain {
             .map_or(desired_image_count, |max_image_count| {
                 max(max_image_count, desired_image_count)
             })
-    }
-
-    // TODO: This function should probably be removed
-    pub fn create_framebuffers(
-        &self,
-        render_pass: &Arc<RenderPass>,
-        depth_image_view: &Arc<ImageView>,
-    ) -> Vec<Arc<Framebuffer>> {
-        let frame_buffers = self.image_views.iter().map(|image_view| {
-            let create_info = FramebufferCreateInfo {
-                attachments: vec![image_view.clone(), depth_image_view.clone()],
-                extent: self.extent,
-                layers: 1,
-                ..FramebufferCreateInfo::default()
-            };
-            Framebuffer::new(render_pass.clone(), create_info).unwrap()
-        });
-        frame_buffers.collect()
     }
 
     pub fn create_gbuffer(
@@ -286,7 +272,7 @@ impl SwapchainResourceCollection {
 
         self.images.iter().for_each(|weak_image| {
             if let Some(image) = weak_image.upgrade() {
-                image.write().unwrap().recreate(new_extent);
+                SwapchainImage::recreate(image.as_ref(), new_extent);
             }
         });
 
