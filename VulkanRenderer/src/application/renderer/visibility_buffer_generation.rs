@@ -1,37 +1,42 @@
-use crate::application::assets::asset_traits::{
-    Instance, RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, Vertex,
-};
-use crate::application::rhi::VKRHI;
-use crate::application::rhi::buffer::buffer_from_slice;
-use crate::application::rhi::pipeline::{compute_pipeline, graphics_pipeline};
-use crate::application::rhi::render_pass::RenderPassBuilder;
-use crate::application::rhi::rhi_assets::vulkan_scene::VKScene;
-use crate::application::rhi::shader_cursor::ShaderCursor;
-use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
+use std::{mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
+
 use smallvec::smallvec;
-use std::mem::offset_of;
-use std::ops::Deref;
-use std::rc::Rc;
-use std::sync::Arc;
-use vulkano::ValidationError;
-use vulkano::buffer::{BufferUsage, Subbuffer};
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents, SubpassEndInfo,
+use vulkano::{
+    ValidationError,
+    buffer::{BufferUsage, Subbuffer},
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    },
+    format::{ClearValue, Format},
+    image::{ImageAspects, ImageUsage, view::ImageView},
+    memory::allocator::MemoryTypeFilter,
+    pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+            viewport::{Scissor, Viewport},
+        },
+    },
+    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    shader::{ShaderStages, spirv::bytes_to_words},
 };
-use vulkano::format::{ClearValue, Format};
-use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAspects, ImageUsage};
-use vulkano::memory::allocator::MemoryTypeFilter;
-use vulkano::pipeline::graphics::subpass::PipelineSubpassType;
-use vulkano::pipeline::graphics::vertex_input::{
-    VertexBufferDescription, VertexInputRate, VertexMemberInfo,
+
+use crate::application::{
+    assets::asset_traits::{
+        Instance, RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, Vertex,
+    },
+    rhi::{
+        VKRHI,
+        buffer::buffer_from_slice,
+        pipeline::{compute_pipeline, graphics_pipeline},
+        render_pass::RenderPassBuilder,
+        rhi_assets::vulkan_scene::VKScene,
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+    },
 };
-use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
-use vulkano::pipeline::{ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
-use vulkano::shader::ShaderStages;
-use vulkano::shader::spirv::bytes_to_words;
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
@@ -265,7 +270,8 @@ impl VisibilityBufferRasterizer {
             }],
             BufferUsage::VERTEX_BUFFER,
             MemoryTypeFilter::PREFER_DEVICE,
-        ).unwrap();
+        )
+        .unwrap();
 
         Self {
             shader_object,
@@ -275,7 +281,7 @@ impl VisibilityBufferRasterizer {
             visibility_buffer,
             depth_buffer,
             rt_framebuffer,
-            instance_buffer
+            instance_buffer,
         }
     }
 

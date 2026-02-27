@@ -6,10 +6,12 @@ use vulkano::{
     image::{sampler::Sampler, view::ImageView},
 };
 
-use crate::application::rhi::{rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject};
-use crate::application::rhi::swapchain_resources::SwapchainImage;
+use crate::application::rhi::{
+    rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
+    swapchain_resources::SwapchainImage,
+};
 
-pub struct ShaderCursor{
+pub struct ShaderCursor {
     shader_object: Arc<ShaderObject>,
     offset: ShaderOffset,
     type_layout: *const TypeLayout,
@@ -112,11 +114,14 @@ impl ShaderCursor {
     }
 
     pub fn write_swapchain_image(&mut self, image: Arc<RwLock<SwapchainImage>>) {
-        self.shader_object
-            .write_swapchain_image(self.offset, image);
+        self.shader_object.write_swapchain_image(self.offset, image);
     }
 
-    pub fn write_swapchain_image_sampler(&mut self, image: Arc<RwLock<SwapchainImage>>, sampler: Arc<Sampler>) {
+    pub fn write_swapchain_image_sampler(
+        &mut self,
+        image: Arc<RwLock<SwapchainImage>>,
+        sampler: Arc<Sampler>,
+    ) {
         self.shader_object
             .write_swapchain_image_sampler(self.offset, image, sampler);
     }

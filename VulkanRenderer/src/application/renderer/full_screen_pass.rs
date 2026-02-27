@@ -1,8 +1,12 @@
-use std::{ops::Deref, sync::Arc};
-use std::sync::RwLock;
+use std::{
+    ops::Deref,
+    sync::{Arc, RwLock},
+};
+
 use shader_slang::{Blob, ComponentType};
 use smallvec::smallvec;
 use vulkano::{
+    ValidationError,
     buffer::{BufferContents, BufferUsage, Subbuffer},
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
@@ -11,40 +15,37 @@ use vulkano::{
     device::{Device, Queue},
     format::{ClearValue, Format},
     image::{
-        sampler::{Sampler, SamplerCreateInfo},
-        view::ImageView,
         ImageLayout,
+        sampler::{Sampler, SamplerCreateInfo},
     },
     memory::allocator::{MemoryAllocator, MemoryTypeFilter},
     pipeline::{
+        DynamicState, GraphicsPipeline, PipelineBindPoint,
         graphics::{
             subpass::PipelineSubpassType,
             vertex_input,
             viewport::{Scissor, Viewport},
-        }, DynamicState, GraphicsPipeline,
-        PipelineBindPoint,
+        },
     },
     render_pass::{
         AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp,
-        Framebuffer, FramebufferCreateInfo, RenderPass, RenderPassCreateInfo, SubpassDependency,
-        SubpassDescription,
+        RenderPass, RenderPassCreateInfo, SubpassDependency, SubpassDescription,
     },
-    shader::{spirv::bytes_to_words, ShaderStages},
+    shader::{ShaderStages, spirv::bytes_to_words},
     sync::{AccessFlags, PipelineStages},
-    ValidationError,
 };
 
 use crate::application::rhi::{
+    VKRHI,
     buffer::buffer_from_slice,
     command_buffer::CommandBufferInterface,
     pipeline::graphics_pipeline,
     shader_cursor::ShaderCursor,
     shader_object::{ShaderObject, ShaderObjectLayout},
     shaders::SlangCompiler,
-    VKRHI,
+    swapchain::Swapchain,
+    swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage},
 };
-use crate::application::rhi::swapchain::Swapchain;
-use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
 
 pub struct FullScreenPass {
     render_pass: Arc<RenderPass>,
@@ -171,7 +172,13 @@ impl FullScreenPass {
                     render_area_extent: extent,
                     clear_values: vec![Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0]))],
                     render_pass: self.render_pass.clone(),
-                    ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_index].read().unwrap().framebuffer().clone())
+                    ..RenderPassBeginInfo::framebuffer(
+                        self.framebuffers[image_index]
+                            .read()
+                            .unwrap()
+                            .framebuffer()
+                            .clone(),
+                    )
                 },
                 SubpassBeginInfo {
                     contents: SubpassContents::Inline,

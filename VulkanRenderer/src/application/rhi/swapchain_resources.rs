@@ -1,14 +1,16 @@
-use crate::application::rhi::VKRHI;
-use crate::application::rhi::shader_object::ShaderObject;
-use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, RwLock};
-use vulkano::format::Format;
-use vulkano::image::view::{ImageView, ImageViewCreateInfo};
-use vulkano::image::{Image, ImageAspects, ImageCreateInfo, ImageUsage};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator};
-use vulkano::render_pass::{
-    Framebuffer, FramebufferCreateFlags, FramebufferCreateInfo, RenderPass,
+
+use vulkano::{
+    format::Format,
+    image::{
+        Image, ImageAspects, ImageCreateInfo, ImageUsage,
+        view::{ImageView, ImageViewCreateInfo},
+    },
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator},
+    render_pass::{Framebuffer, FramebufferCreateFlags, FramebufferCreateInfo, RenderPass},
 };
+
+use crate::application::rhi::{VKRHI, shader_object::ShaderObject};
 
 pub struct SwapchainImage {
     image_view: Arc<ImageView>,

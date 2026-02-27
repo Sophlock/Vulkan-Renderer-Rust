@@ -9,8 +9,9 @@ use vulkano::{
     device::{
         Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
     },
+    instance::Instance,
 };
-use vulkano::instance::Instance;
+
 use crate::application::rhi::queue::{QueueCollection, QueueFamilyIndices};
 
 pub fn create_logical_device(

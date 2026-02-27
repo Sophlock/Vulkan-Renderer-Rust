@@ -1,5 +1,8 @@
-use std::sync::{Mutex, RwLock, Weak};
-use std::{cmp::max, sync::Arc};
+use std::{
+    cmp::max,
+    sync::{Arc, Mutex, RwLock, Weak},
+};
+
 use vulkano::{
     Validated, VulkanError,
     device::physical::PhysicalDevice,
@@ -8,7 +11,7 @@ use vulkano::{
         Image, ImageAspects, ImageSubresourceRange, ImageUsage,
         view::{ImageView, ImageViewCreateInfo, ImageViewType},
     },
-    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    render_pass::RenderPass,
     swapchain::{
         ColorSpace, CompositeAlpha, PresentMode, Surface, SurfaceCapabilities, SurfaceInfo,
         Swapchain as VKSwapchain, SwapchainAcquireFuture, SwapchainCreateInfo, acquire_next_image,
@@ -17,8 +20,11 @@ use vulkano::{
 };
 use winit::window::Window;
 
-use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
-use crate::application::rhi::{VKRHI, queue::QueueFamilyIndices};
+use crate::application::rhi::{
+    VKRHI,
+    queue::QueueFamilyIndices,
+    swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage},
+};
 
 pub struct Swapchain {
     swapchain: Arc<VKSwapchain>,
@@ -85,9 +91,15 @@ impl Swapchain {
 
         assert_eq!(self.image_count, new_swapchain.image_count);
 
-        self.image_views.iter().zip(new_swapchain.image_views).for_each(|(persistent, new)| {
-            SwapchainImage::update_external(persistent, new.read().unwrap().image_view().clone());
-        });
+        self.image_views
+            .iter()
+            .zip(new_swapchain.image_views)
+            .for_each(|(persistent, new)| {
+                SwapchainImage::update_external(
+                    persistent,
+                    new.read().unwrap().image_view().clone(),
+                );
+            });
 
         self.resources
             .lock()
@@ -149,7 +161,9 @@ impl Swapchain {
                     sampler_ycbcr_conversion: None,
                     ..ImageViewCreateInfo::default()
                 };
-                Arc::new(RwLock::new(SwapchainImage::from_external(ImageView::new(image.clone(), image_view_create_info).unwrap())))
+                Arc::new(RwLock::new(SwapchainImage::from_external(
+                    ImageView::new(image.clone(), image_view_create_info).unwrap(),
+                )))
             })
             .collect();
         let resources = Mutex::new(SwapchainResourceCollection::new());
@@ -209,17 +223,21 @@ impl Swapchain {
         aspects: ImageAspects,
     ) -> Arc<RwLock<SwapchainImage>> {
         let image = Arc::new(RwLock::new(SwapchainImage::new_gbuffer(
-            rhi, self.extent, format, usage, aspects,
+            rhi,
+            self.extent,
+            format,
+            usage,
+            aspects,
         )));
         self.resources.lock().unwrap().register_image(&image);
         image
     }
 
-    pub fn create_depth_buffer(
-        &self,
-        rhi: &VKRHI,
-    ) -> Arc<RwLock<SwapchainImage>> {
-        let image = Arc::new(RwLock::new(SwapchainImage::new_depth_buffer(rhi, self.extent)));
+    pub fn create_depth_buffer(&self, rhi: &VKRHI) -> Arc<RwLock<SwapchainImage>> {
+        let image = Arc::new(RwLock::new(SwapchainImage::new_depth_buffer(
+            rhi,
+            self.extent,
+        )));
         self.resources.lock().unwrap().register_image(&image);
         image
     }
@@ -227,10 +245,17 @@ impl Swapchain {
     pub fn create_framebuffer(
         &self,
         render_pass: Arc<RenderPass>,
-        create_info: SwapchainFramebufferCreateInfo
+        create_info: SwapchainFramebufferCreateInfo,
     ) -> Arc<RwLock<SwapchainFramebuffer>> {
-        let framebuffer = Arc::new(RwLock::new(SwapchainFramebuffer::new(render_pass, self.extent, create_info)));
-        self.resources.lock().unwrap().register_framebuffer(&framebuffer);
+        let framebuffer = Arc::new(RwLock::new(SwapchainFramebuffer::new(
+            render_pass,
+            self.extent,
+            create_info,
+        )));
+        self.resources
+            .lock()
+            .unwrap()
+            .register_framebuffer(&framebuffer);
         framebuffer
     }
 

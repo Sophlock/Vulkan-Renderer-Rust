@@ -1,24 +1,30 @@
-use crate::application::renderer::device_generated_commands::{
-    execute_generated_commands, map_pipeline_bind_point, GeneratedCommandsInfo,
-    IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
-};
-use crate::application::rhi::device_helper::{ash_device, ash_instance};
-use crate::application::rhi::VKRHI;
+use std::{rc::Rc, sync::Arc};
+
 use ash::vk::{
-    DeviceAddress,
-    IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV
-    , PipelineIndirectDeviceAddressInfoNV,
+    DeviceAddress, IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV,
+    PipelineIndirectDeviceAddressInfoNV,
 };
-use std::rc::Rc;
-use std::sync::Arc;
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::command_buffer::PrimaryAutoCommandBuffer;
-use vulkano::device::DeviceOwned;
-use vulkano::instance::InstanceOwned;
-use vulkano::memory::allocator::AllocationCreateInfo;
-use vulkano::pipeline::{Pipeline, PipelineBindPoint};
-use vulkano::sync::{now, GpuFuture};
-use vulkano::VulkanObject;
+use vulkano::{
+    VulkanObject,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::PrimaryAutoCommandBuffer,
+    device::DeviceOwned,
+    instance::InstanceOwned,
+    memory::allocator::AllocationCreateInfo,
+    pipeline::{Pipeline, PipelineBindPoint},
+    sync::{GpuFuture, now},
+};
+
+use crate::application::{
+    renderer::device_generated_commands::{
+        GeneratedCommandsInfo, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
+        execute_generated_commands, map_pipeline_bind_point,
+    },
+    rhi::{
+        VKRHI,
+        device_helper::{ash_device, ash_instance},
+    },
+};
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -87,7 +93,8 @@ impl VisibilityBufferShadePass {
                 ..BufferCreateInfo::default()
             },
             AllocationCreateInfo::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let pipeline_bind_commands = Buffer::new_slice(
             rhi.buffer_allocator().clone(),
@@ -117,7 +124,7 @@ impl VisibilityBufferShadePass {
             preprocess_buffer,
             sequence_count_buffer,
             pipeline_bind_commands,
-            compute_dispatch_commands
+            compute_dispatch_commands,
         }
     }
 

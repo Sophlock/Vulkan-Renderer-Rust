@@ -1,17 +1,23 @@
-use crate::application::rhi::device_helper::{ash_device, ash_instance};
-use ash::nv;
-use ash::vk;
-use ash::vk::{GeneratedCommandsInfoNV, GeneratedCommandsMemoryRequirementsInfoNV, IndirectCommandsLayoutTokenNV, IndirectCommandsLayoutUsageFlagsNV, IndirectCommandsStreamNV, MemoryRequirements2, PFN_vkCmdExecuteGeneratedCommandsNV};
+use std::{ptr::null, sync::Arc};
+
+use ash::{
+    nv, vk,
+    vk::{
+        GeneratedCommandsInfoNV, GeneratedCommandsMemoryRequirementsInfoNV,
+        IndirectCommandsLayoutTokenNV, IndirectCommandsLayoutUsageFlagsNV,
+        IndirectCommandsStreamNV, MemoryRequirements2,
+    },
+};
 use nv::device_generated_commands as dgc;
-use std::ptr::null;
-use std::sync::Arc;
-use vulkano::VulkanObject;
-use vulkano::buffer::Subbuffer;
-use vulkano::command_buffer::RecordingCommandBuffer;
-use vulkano::device::{Device, DeviceOwned};
-use vulkano::memory::allocator::DeviceLayout;
-use vulkano::memory::MemoryRequirements;
-use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
+use vulkano::{
+    VulkanObject,
+    buffer::Subbuffer,
+    device::{Device, DeviceOwned},
+    memory::{MemoryRequirements, allocator::DeviceLayout},
+    pipeline::{ComputePipeline, Pipeline, PipelineBindPoint},
+};
+
+use crate::application::rhi::device_helper::{ash_device, ash_instance};
 
 pub struct IndirectCommandsLayout {
     handle: vk::IndirectCommandsLayoutNV,
@@ -36,7 +42,7 @@ pub struct GeneratedCommandsInfo<PipelineType: Pipeline> {
 
 struct GeneratedCommandsInfoStorage<'a> {
     inner: GeneratedCommandsInfoNV<'a>,
-    streams: Vec<IndirectCommandsStreamNV>
+    streams: Vec<IndirectCommandsStreamNV>,
 }
 
 impl IndirectCommandsLayout {
@@ -68,13 +74,20 @@ impl IndirectCommandsLayout {
             .indirect_commands_layout(self.handle)
             .max_sequences_count(max_sequence_count);
         let device = Self::make_dgc_device(&self.device);
-        let mut requirements_raw= MemoryRequirements2::default();
-        unsafe {(device.fp().get_generated_commands_memory_requirements_nv)(device.device(), &info as *const _, (&mut requirements_raw) as *mut _)};
+        let mut requirements_raw = MemoryRequirements2::default();
+        unsafe {
+            (device.fp().get_generated_commands_memory_requirements_nv)(
+                device.device(),
+                &info as *const _,
+                (&mut requirements_raw) as *mut _,
+            )
+        };
         MemoryRequirements {
             layout: DeviceLayout::from_size_alignment(
                 requirements_raw.memory_requirements.size,
-                requirements_raw.memory_requirements.alignment
-            ).unwrap(),
+                requirements_raw.memory_requirements.alignment,
+            )
+            .unwrap(),
             memory_type_bits: requirements_raw.memory_requirements.memory_type_bits,
             prefers_dedicated_allocation: false,
             requires_dedicated_allocation: false,
@@ -133,7 +146,10 @@ pub fn map_pipeline_bind_point(pipeline_bind_point: PipelineBindPoint) -> vk::Pi
 }
 
 impl GeneratedCommandsInfo<ComputePipeline> {
-    pub fn layout(indirect_commands_layout: Arc<IndirectCommandsLayout>, preprocess_buffer: Subbuffer<[u8]>) -> Self {
+    pub fn layout(
+        indirect_commands_layout: Arc<IndirectCommandsLayout>,
+        preprocess_buffer: Subbuffer<[u8]>,
+    ) -> Self {
         Self {
             pipeline: None,
             indirect_commands_layout,
@@ -148,7 +164,11 @@ impl GeneratedCommandsInfo<ComputePipeline> {
 impl<PipelineType: Pipeline + VulkanObject<Handle = vk::Pipeline>>
     GeneratedCommandsInfo<PipelineType>
 {
-    pub fn pipeline(pipeline: Arc<PipelineType>, indirect_commands_layout: Arc<IndirectCommandsLayout>, preprocess_buffer: Subbuffer<[u8]>) -> Self {
+    pub fn pipeline(
+        pipeline: Arc<PipelineType>,
+        indirect_commands_layout: Arc<IndirectCommandsLayout>,
+        preprocess_buffer: Subbuffer<[u8]>,
+    ) -> Self {
         Self {
             pipeline: Some(pipeline),
             indirect_commands_layout,
@@ -160,7 +180,8 @@ impl<PipelineType: Pipeline + VulkanObject<Handle = vk::Pipeline>>
     }
 
     fn to_vk(&self) -> GeneratedCommandsInfoStorage {
-        let stream_vec = self.streams
+        let stream_vec = self
+            .streams
             .iter()
             .map(|b| {
                 IndirectCommandsStreamNV::default()
@@ -168,31 +189,46 @@ impl<PipelineType: Pipeline + VulkanObject<Handle = vk::Pipeline>>
                     .offset(b.offset())
             })
             .collect::<Vec<_>>();
-        GeneratedCommandsInfoStorage::new(stream_vec,
-        vk::GeneratedCommandsInfoNV::default()
-            .pipeline(self.pipeline.as_ref().map(|p| p.handle()).unwrap_or(vk::Pipeline::null()))
-            .pipeline_bind_point(map_pipeline_bind_point(self.pipeline.as_ref().map(|p| p.bind_point()).unwrap_or(PipelineBindPoint::Compute)))
-            .indirect_commands_layout(self.indirect_commands_layout.handle)
-            //.streams(stream_vec.as_slice())
-            .sequences_count(self.max_sequences)
-            .preprocess_buffer(self.preprocess_buffer.buffer().handle())
-            .preprocess_offset(self.preprocess_buffer.offset())
-            .preprocess_size(self.preprocess_buffer.size())
-            .sequences_count_buffer(
-                self.sequence_count_buffer.as_ref()
-                    .map(|b| b.buffer().handle())
-                    .unwrap_or(vk::Buffer::null()),
-            )
-            .sequences_count_offset(self.sequence_count_buffer.as_ref().map(|b| b.offset()).unwrap_or(0)))
+        GeneratedCommandsInfoStorage::new(
+            stream_vec,
+            vk::GeneratedCommandsInfoNV::default()
+                .pipeline(
+                    self.pipeline
+                        .as_ref()
+                        .map(|p| p.handle())
+                        .unwrap_or(vk::Pipeline::null()),
+                )
+                .pipeline_bind_point(map_pipeline_bind_point(
+                    self.pipeline
+                        .as_ref()
+                        .map(|p| p.bind_point())
+                        .unwrap_or(PipelineBindPoint::Compute),
+                ))
+                .indirect_commands_layout(self.indirect_commands_layout.handle)
+                //.streams(stream_vec.as_slice())
+                .sequences_count(self.max_sequences)
+                .preprocess_buffer(self.preprocess_buffer.buffer().handle())
+                .preprocess_offset(self.preprocess_buffer.offset())
+                .preprocess_size(self.preprocess_buffer.size())
+                .sequences_count_buffer(
+                    self.sequence_count_buffer
+                        .as_ref()
+                        .map(|b| b.buffer().handle())
+                        .unwrap_or(vk::Buffer::null()),
+                )
+                .sequences_count_offset(
+                    self.sequence_count_buffer
+                        .as_ref()
+                        .map(|b| b.offset())
+                        .unwrap_or(0),
+                ),
+        )
     }
 }
 
 impl<'a> GeneratedCommandsInfoStorage<'a> {
     fn new(streams: Vec<IndirectCommandsStreamNV>, inner: GeneratedCommandsInfoNV<'a>) -> Self {
-        Self {
-            inner,
-            streams,
-        }
+        Self { inner, streams }
     }
 
     fn get(&self) -> GeneratedCommandsInfoNV {
@@ -209,8 +245,9 @@ pub unsafe fn execute_generated_commands<
     generated_commands_info: GeneratedCommandsInfo<PipelineType>,
 ) {
     let raw_commands_info = generated_commands_info.to_vk();
-    let dgc_device =
-        IndirectCommandsLayout::make_dgc_device(&generated_commands_info.indirect_commands_layout.device);
+    let dgc_device = IndirectCommandsLayout::make_dgc_device(
+        &generated_commands_info.indirect_commands_layout.device,
+    );
     unsafe {
         (dgc_device.fp().cmd_execute_generated_commands_nv)(
             command_buffer.handle(),

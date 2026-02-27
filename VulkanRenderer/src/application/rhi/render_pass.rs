@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use vulkano::{
-    device::{physical::PhysicalDevice, Device},
+    device::{Device, physical::PhysicalDevice},
     format::Format,
     image::{ImageLayout, SampleCount},
     render_pass::{

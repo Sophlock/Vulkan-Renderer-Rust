@@ -8,9 +8,9 @@ use std::{
     collections::HashMap,
     ops::Deref,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
-use std::sync::RwLock;
+
 use egui_winit_vulkano::{
     egui,
     egui::{Color32, Frame},
@@ -28,7 +28,6 @@ use vulkano::{
     image::{
         ImageAspects, ImageLayout, ImageUsage,
         sampler::{Sampler, SamplerCreateInfo},
-        view::ImageView,
     },
     pipeline::{
         ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
@@ -37,22 +36,24 @@ use vulkano::{
             viewport::{Scissor, Viewport},
         },
     },
-    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    render_pass::RenderPass,
     shader::{ShaderStages, spirv::bytes_to_words},
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
 use winit::dpi::PhysicalSize;
 
-use crate::application::renderer::visibility_buffer_generation::{
-    VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
-};
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
         RendererInterface, Vertex,
     },
-    renderer::full_screen_pass::FullScreenPass,
+    renderer::{
+        full_screen_pass::FullScreenPass,
+        visibility_buffer_generation::{
+            VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
+        },
+    },
     rhi::{
         VKRHI,
         pipeline::{compute_pipeline, graphics_pipeline},
@@ -62,10 +63,11 @@ use crate::application::{
         shader_object::{ShaderObject, ShaderObjectLayout},
         shaders::SlangCompiler,
         swapchain::Swapchain,
+        swapchain_resources::{
+            SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
+        },
     },
 };
-use crate::application::rhi::swapchain;
-use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -228,14 +230,14 @@ impl VKRenderer {
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
         /*self.mutable_state_const()
-            .vis_buffer_rasterizer
-            .record_command_buffer(
-                &mut command_buffer,
-                swapchain_image_index as usize,
-                self.mutable_state_const().swapchain.extent,
-                scene,
-            )
-            .unwrap();*/
+        .vis_buffer_rasterizer
+        .record_command_buffer(
+            &mut command_buffer,
+            swapchain_image_index as usize,
+            self.mutable_state_const().swapchain.extent,
+            scene,
+        )
+        .unwrap();*/
 
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
@@ -301,7 +303,10 @@ impl VKRenderer {
             final_output_finished_future,
             self.mutable_state_const()
                 .swapchain
-                .image_view(swapchain_image_index as usize).read().unwrap().image_view()
+                .image_view(swapchain_image_index as usize)
+                .read()
+                .unwrap()
+                .image_view()
                 .clone(),
         );
 
@@ -347,7 +352,12 @@ impl VKRenderer {
                     ],
                     render_pass: self.render_pass.clone(),
                     ..RenderPassBeginInfo::framebuffer(
-                        self.mutable_state_const().rt_framebuffer.read().unwrap().framebuffer().clone(),
+                        self.mutable_state_const()
+                            .rt_framebuffer
+                            .read()
+                            .unwrap()
+                            .framebuffer()
+                            .clone(),
                     )
                 },
                 SubpassBeginInfo {
@@ -467,7 +477,12 @@ impl VKRenderer {
         let global_cursor = ShaderCursor::new(self.post_process.shader_object.clone());
         let cursor = global_cursor.field("gComputeInput").unwrap();
         cursor.field("input").unwrap().write_image_view_sampler(
-            self.mutable_state_const().color_render_target.read().unwrap().image_view().clone(),
+            self.mutable_state_const()
+                .color_render_target
+                .read()
+                .unwrap()
+                .image_view()
+                .clone(),
             self.post_process.sampler.clone(),
         );
         cursor.field("screenSize").unwrap().write(
@@ -478,10 +493,14 @@ impl VKRenderer {
                 .map(|i| i as f32),
         );
         cursor.field("exposureValue").unwrap().write(&1.0f32);
-        cursor
-            .field("result")
-            .unwrap()
-            .write_image_view(self.mutable_state_const().pp_render_target.read().unwrap().image_view().clone());
+        cursor.field("result").unwrap().write_image_view(
+            self.mutable_state_const()
+                .pp_render_target
+                .read()
+                .unwrap()
+                .image_view()
+                .clone(),
+        );
     }
 }
 impl RendererInterface for VKRenderer {

@@ -1,6 +1,9 @@
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex, RwLock},
+};
+
 use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
-use std::sync::{Mutex, RwLock};
-use std::{collections::BTreeMap, sync::Arc};
 use vulkano::{
     DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
@@ -20,12 +23,12 @@ use vulkano::{
     sync::Sharing,
 };
 
-use crate::application::rhi::swapchain_resources::SwapchainImage;
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture,
     shader_cursor::{ShaderOffset, ShaderSize},
+    shader_object::BoundImageType::ImageSampler,
+    swapchain_resources::SwapchainImage,
 };
-use crate::application::rhi::shader_object::BoundImageType::ImageSampler;
 
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
@@ -492,7 +495,11 @@ impl ShaderObject {
         image: Arc<RwLock<SwapchainImage>>,
         sampler: Arc<Sampler>,
     ) {
-        self.write_image_view_sampler(offset, image.read().unwrap().image_view().clone(), sampler.clone());
+        self.write_image_view_sampler(
+            offset,
+            image.read().unwrap().image_view().clone(),
+            sampler.clone(),
+        );
         self.register_swapchain_image(offset, BoundImageType::ImageSampler(image, sampler));
     }
 
@@ -512,11 +519,7 @@ impl ShaderObject {
                 });
     }
 
-    fn register_swapchain_image(
-        self: &Arc<Self>,
-        offset: ShaderOffset,
-        image: BoundImageType,
-    ) {
+    fn register_swapchain_image(self: &Arc<Self>, offset: ShaderOffset, image: BoundImageType) {
         let mut resources = self.swapchain_resources.lock().unwrap();
         let position = (0u32, offset.binding_offset);
 
@@ -568,12 +571,11 @@ impl ShaderObject {
     }
 }
 
-
 impl BoundImageType {
     fn image(&self) -> &Arc<RwLock<SwapchainImage>> {
         match self {
             BoundImageType::Image(image) => image,
-            BoundImageType::ImageSampler(image, _) => image
+            BoundImageType::ImageSampler(image, _) => image,
         }
     }
 }
