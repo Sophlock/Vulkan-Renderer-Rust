@@ -24,6 +24,7 @@ use vulkano::{
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, spirv::ExecutionModel},
 };
+use vulkano::pipeline::graphics::vertex_input::VertexBufferDescription;
 
 pub struct EmptyGraphicsPipeline {}
 
@@ -125,7 +126,11 @@ impl InputAssemblyStateGraphicsPipeline {
 
 impl VertexShaderGraphicsPipeline {
     pub fn vertex_input<V: Vertex>(self) -> VertexInputStateGraphicsPipeline {
-        let vertex_input = V::per_vertex()
+        self.vertex_buffer_description(&[V::per_vertex()])
+    }
+
+    pub fn vertex_buffer_description(self, descriptions: &[VertexBufferDescription]) -> VertexInputStateGraphicsPipeline {
+        let vertex_input = descriptions
             .definition(&self.vertex_shader.entry_point)
             .unwrap();
         VertexInputStateGraphicsPipeline {
@@ -345,6 +350,21 @@ impl DepthStencilGraphicsPipeline {
             self.build_create_info(layout, subpass, dynamic_state),
         )
         .unwrap()
+    }
+    
+    pub unsafe fn build_pipeline_unchecked(
+        self,
+        device: Arc<Device>,
+        layout: Arc<PipelineLayout>,
+        subpass: PipelineSubpassType,
+        dynamic_state: HashSet<DynamicState>,
+    ) -> Arc<GraphicsPipeline> {
+        unsafe {GraphicsPipeline::new_unchecked(
+            device,
+            None,
+            self.build_create_info(layout, subpass, dynamic_state),
+        )}
+            .unwrap()
     }
 
     fn find_viewport_state(dynamic_state: &HashSet<DynamicState>) -> ViewportState {

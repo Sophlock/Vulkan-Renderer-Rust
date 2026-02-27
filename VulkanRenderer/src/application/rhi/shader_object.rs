@@ -213,6 +213,8 @@ impl ShaderObjectLayout {
             BindingType::RayTracingAccelerationStructure => DescriptorType::AccelerationStructure,
             BindingType::MutableTeture => DescriptorType::StorageImage,
             BindingType::InputRenderTarget => DescriptorType::InputAttachment,
+            BindingType::RawBuffer => DescriptorType::StorageBuffer,
+            BindingType::MutableRawBuffer => DescriptorType::StorageBuffer,
             _ => DescriptorType::UniformBuffer, //panic!("Unknown slang binding type {:?}", binding_type),
                                                 /*BindingType::TypedBuffer => {}
                                                 BindingType::RawBuffer => {}
@@ -223,7 +225,6 @@ impl ShaderObjectLayout {
                                                 BindingType::PushConstant => {}
                                                 BindingType::MutableFlag => {}
                                                 BindingType::MutableTypedBuffer => {}
-                                                BindingType::MutableRawBuffer => {}
                                                 BindingType::BaseMask => {}
                                                 BindingType::ExtMask => {}
                                                 BindingType::Unknown => {}*/

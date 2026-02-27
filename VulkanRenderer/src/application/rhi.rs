@@ -182,9 +182,9 @@ impl VKRHI {
             })
         };
         let create_info = DebugUtilsMessengerCreateInfo {
-            message_severity: DebugUtilsMessageSeverity::ERROR | DebugUtilsMessageSeverity::WARNING,
-            //| DebugUtilsMessageSeverity::INFO
-            //| DebugUtilsMessageSeverity::VERBOSE,
+            message_severity: DebugUtilsMessageSeverity::ERROR | DebugUtilsMessageSeverity::WARNING
+            | DebugUtilsMessageSeverity::INFO
+            | DebugUtilsMessageSeverity::VERBOSE,
             ..DebugUtilsMessengerCreateInfo::user_callback(callback)
         };
         DebugUtilsMessenger::new(instance, create_info).unwrap()

@@ -29,6 +29,14 @@ pub struct Vertex {
     pub texture_coordinates: [f32; 2],
 }
 
+#[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
+#[repr(C)]
+pub struct Instance {
+    #[name("input.modelMatrix")]
+    #[format(R32G32B32A32_SFLOAT)]
+    pub model_matrix: [[f32; 4]; 4],
+}
+
 #[derive(BufferContents, Copy, Clone)]
 #[repr(C)]
 pub struct Index {

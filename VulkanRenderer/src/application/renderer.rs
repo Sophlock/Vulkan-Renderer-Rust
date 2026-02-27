@@ -1,7 +1,7 @@
-mod full_screen_pass;
 mod device_generated_commands;
-mod visibility_buffer_shading;
+mod full_screen_pass;
 mod visibility_buffer_generation;
+mod visibility_buffer_shading;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -18,32 +18,35 @@ use egui_winit_vulkano::{
 use shader_slang::ComponentType;
 use smallvec::smallvec;
 use vulkano::{
+    Validated, ValidationError, VulkanError, VulkanObject,
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
-    }, device::Device, format::{ClearValue, Format}, image::{
-        sampler::{Sampler, SamplerCreateInfo}, view::ImageView, ImageAspects,
-        ImageLayout,
-        ImageUsage,
+    },
+    device::Device,
+    format::{ClearValue, Format},
+    image::{
+        ImageAspects, ImageLayout, ImageUsage,
+        sampler::{Sampler, SamplerCreateInfo},
+        view::ImageView,
     },
     pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
         graphics::{
             subpass::PipelineSubpassType,
             viewport::{Scissor, Viewport},
-        }, ComputePipeline, DynamicState, GraphicsPipeline,
-        PipelineBindPoint,
+        },
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
-    shader::{spirv::bytes_to_words, ShaderStages},
-    swapchain::{present, SwapchainPresentInfo},
-    sync::{future::FenceSignalFuture, AccessFlags, GpuFuture, PipelineStages},
-    Validated,
-    ValidationError,
-    VulkanError,
-    VulkanObject,
+    shader::{ShaderStages, spirv::bytes_to_words},
+    swapchain::{SwapchainPresentInfo, present},
+    sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
 use winit::dpi::PhysicalSize;
 
+use crate::application::renderer::visibility_buffer_generation::{
+    VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
+};
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
@@ -51,6 +54,7 @@ use crate::application::{
     },
     renderer::full_screen_pass::FullScreenPass,
     rhi::{
+        VKRHI,
         pipeline::{compute_pipeline, graphics_pipeline},
         render_pass::RenderPassBuilder,
         rhi_assets::{vulkan_material::VKMaterial, vulkan_scene::VKScene},
@@ -58,7 +62,6 @@ use crate::application::{
         shader_object::{ShaderObject, ShaderObjectLayout},
         shaders::SlangCompiler,
         swapchain::Swapchain,
-        VKRHI,
     },
 };
 
@@ -71,6 +74,8 @@ pub struct MutableRenderState {
     should_recreate_swapchain: bool,
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
     fullscreen_pass: FullScreenPass,
+    vis_buffer_rasterizer: VisibilityBufferRasterizer,
+    vis_buffer_processing: VisibilityBufferProcessingPass,
 }
 
 pub struct VKRenderer {
@@ -143,6 +148,10 @@ impl VKRenderer {
             swapchain.extent,
         );
 
+        let vis_buffer_rasterizer = VisibilityBufferRasterizer::new(rhi.clone(), swapchain.extent);
+        let vis_buffer_processing =
+            VisibilityBufferProcessingPass::new(rhi.as_ref(), swapchain.extent, 1);
+
         let result = Self {
             rhi,
             mutable_state: RefCell::new(MutableRenderState {
@@ -154,6 +163,8 @@ impl VKRenderer {
                 should_recreate_swapchain: false,
                 in_flight_future: None,
                 fullscreen_pass,
+                vis_buffer_rasterizer,
+                vis_buffer_processing,
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
@@ -217,7 +228,27 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
+        self.mutable_state_const()
+            .vis_buffer_rasterizer
+            .record_command_buffer(
+                &mut command_buffer,
+                swapchain_image_index as usize,
+                self.mutable_state_const().swapchain.extent,
+                scene,
+            )
+            .unwrap();
+
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
+            .unwrap();
+
+        let mut compute_command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
+
+        self.mutable_state_const()
+            .vis_buffer_processing
+            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
             .unwrap();
 
         let draw_finished_future = image_available_future

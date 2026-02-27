@@ -20,6 +20,7 @@ pub fn create_logical_device(
     let queue_create_infos = queue_indices.generate_create_infos();
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
+        khr_fragment_shader_barycentric: true,
         nv_device_generated_commands: true,
         nv_device_generated_commands_compute: true,
         //nv_compute_shader_derivatives: true,
@@ -30,6 +31,9 @@ pub fn create_logical_device(
         //compute_derivative_group_quads: true,
         synchronization2: true,
         device_generated_commands: true,
+        geometry_shader: true,
+        fragment_shader_barycentric: true,
+        shader_int64: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {
