@@ -5,7 +5,7 @@ use vulkano::{
     buffer::BufferContents,
     image::{sampler::Sampler, view::ImageView},
 };
-
+use vulkano::buffer::Subbuffer;
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
     swapchain_resources::SwapchainImage,
@@ -111,6 +111,10 @@ impl ShaderCursor {
     pub fn write_image_view_sampler(&mut self, view: Arc<ImageView>, sampler: Arc<Sampler>) {
         self.shader_object
             .write_image_view_sampler(self.offset, view, sampler);
+    }
+    
+    pub fn write_buffer<T>(&mut self, buffer: Subbuffer<T>) {
+        self.shader_object.write_buffer(self.offset, buffer);
     }
 
     pub fn write_swapchain_image(&mut self, image: Arc<RwLock<SwapchainImage>>) {

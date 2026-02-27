@@ -480,6 +480,11 @@ impl ShaderObject {
         self.perform_descriptor_write([write].iter().cloned());
     }
 
+    pub fn write_buffer<T>(&self, offset: ShaderOffset, buffer: Subbuffer<T>) {
+        let write = WriteDescriptorSet::buffer(offset.binding_offset, buffer);
+        self.perform_descriptor_write([write].iter().cloned());
+    }
+
     pub fn write_swapchain_image(
         self: &Arc<Self>,
         offset: ShaderOffset,
