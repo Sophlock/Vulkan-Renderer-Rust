@@ -113,7 +113,7 @@ impl ShaderCursor {
             .write_image_view_sampler(self.offset, view, sampler);
     }
     
-    pub fn write_buffer<T>(&mut self, buffer: Subbuffer<T>) {
+    pub fn write_buffer<T: ?Sized>(&mut self, buffer: Subbuffer<T>) {
         self.shader_object.write_buffer(self.offset, buffer);
     }
 

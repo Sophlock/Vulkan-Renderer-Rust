@@ -25,31 +25,18 @@ use crate::application::{
         device_helper::{ash_device, ash_instance},
     },
 };
+use crate::application::renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter, VisibilityBufferData};
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
     commands_layout: Arc<IndirectCommandsLayout>,
     preprocess_buffer: Subbuffer<[u8]>,
-    sequence_count_buffer: Subbuffer<u32>,
-    pipeline_bind_commands: Subbuffer<[PipelineBindParameter]>,
-    compute_dispatch_commands: Subbuffer<[ComputeDispatchParameter]>,
-}
-
-#[derive(Copy, Clone, BufferContents)]
-#[repr(C)]
-struct PipelineBindParameter {
-    pub pipeline_address: DeviceAddress,
-}
-
-#[derive(Copy, Clone, BufferContents)]
-#[repr(C)]
-struct ComputeDispatchParameter {
-    pub dispatch: [u32; 3],
+    data: VisibilityBufferData,
 }
 
 impl VisibilityBufferShadePass {
-    const MAX_SEQUENCE_COUNT: u32 = 1000u32;
-    pub fn new(rhi: Rc<VKRHI>) -> Self {
+    pub const MAX_SEQUENCE_COUNT: u32 = 1000u32;
+    pub fn new(rhi: Rc<VKRHI>, data: VisibilityBufferData) -> Self {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
@@ -86,56 +73,22 @@ impl VisibilityBufferShadePass {
             .unwrap(),
         );
 
-        let sequence_count_buffer = Buffer::new_sized(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::INDIRECT_BUFFER,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-        )
-        .unwrap();
-
-        let pipeline_bind_commands = Buffer::new_slice(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::INDIRECT_BUFFER,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-            Self::MAX_SEQUENCE_COUNT.into(),
-        )
-        .unwrap();
-
-        let compute_dispatch_commands = Buffer::new_slice(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::INDIRECT_BUFFER,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-            Self::MAX_SEQUENCE_COUNT.into(),
-        )
-        .unwrap();
-
         Self {
             rhi,
             commands_layout,
             preprocess_buffer,
-            sequence_count_buffer,
-            pipeline_bind_commands,
-            compute_dispatch_commands,
+            data
         }
     }
 
     pub fn run(&self, command_buffer: &Arc<PrimaryAutoCommandBuffer>) {
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
-                self.pipeline_bind_commands.clone().reinterpret(),
-                self.compute_dispatch_commands.clone().reinterpret(),
+                self.data.pipeline_bind_commands.clone().reinterpret(),
+                self.data.compute_dispatch_commands.clone().reinterpret(),
             ],
             max_sequences: Self::MAX_SEQUENCE_COUNT,
-            sequence_count_buffer: Some(self.sequence_count_buffer.clone()),
+            sequence_count_buffer: Some(self.data.index_counter_buffer.clone()),
             ..GeneratedCommandsInfo::layout(
                 self.commands_layout.clone(),
                 self.preprocess_buffer.clone(),

@@ -1,6 +1,28 @@
-use std::{mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
-use std::sync::RwLock;
+use crate::application::rhi::swapchain::Swapchain;
+use crate::application::rhi::swapchain_resources::{
+    SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
+};
+use crate::application::{
+    assets::asset_traits::{
+        Instance, RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, Vertex,
+    },
+    rhi::{
+        VKRHI,
+        buffer::buffer_from_slice,
+        pipeline::{compute_pipeline, graphics_pipeline},
+        render_pass::RenderPassBuilder,
+        rhi_assets::vulkan_scene::VKScene,
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+    },
+};
+use ash::vk::DeviceAddress;
 use smallvec::smallvec;
+use std::sync::RwLock;
+use std::{mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo};
+use vulkano::command_buffer::CopyBufferInfo;
+use vulkano::memory::allocator::AllocationCreateInfo;
 use vulkano::{
     ValidationError,
     buffer::{BufferUsage, Subbuffer},
@@ -23,28 +45,10 @@ use vulkano::{
     shader::{ShaderStages, spirv::bytes_to_words},
 };
 
-use crate::application::{
-    assets::asset_traits::{
-        Instance, RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, Vertex,
-    },
-    rhi::{
-        VKRHI,
-        buffer::buffer_from_slice,
-        pipeline::{compute_pipeline, graphics_pipeline},
-        render_pass::RenderPassBuilder,
-        rhi_assets::vulkan_scene::VKScene,
-        shader_cursor::ShaderCursor,
-        shader_object::{ShaderObject, ShaderObjectLayout},
-    },
-};
-use crate::application::rhi::swapchain;
-use crate::application::rhi::swapchain::Swapchain;
-use crate::application::rhi::swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage};
-
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
     shader_cull: VisBufferStep,
-    num_materials: u32
+    num_materials: u32,
 }
 
 struct VisBufferStep {
@@ -57,7 +61,6 @@ pub struct VisibilityBufferRasterizer {
     pipeline: Arc<GraphicsPipeline>,
     render_pass: Arc<RenderPass>,
     rhi: Rc<VKRHI>,
-    visibility_buffer: Arc<RwLock<SwapchainImage>>,
     depth_buffer: Arc<RwLock<SwapchainImage>>,
     rt_framebuffer: Arc<RwLock<SwapchainFramebuffer>>,
 
@@ -65,22 +68,73 @@ pub struct VisibilityBufferRasterizer {
     instance_buffer: Subbuffer<[Instance]>,
 }
 
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct PipelineBindParameter {
+    pub pipeline_address: DeviceAddress,
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct ComputeDispatchParameter {
+    pub dispatch: [u32; 3],
+}
+
+#[derive(Clone)]
+pub struct VisibilityBufferData {
+    // The packed visibility buffer
+    pub visibility_buffer: Arc<RwLock<SwapchainImage>>,
+
+    // Stores the number of texels for each material
+    pub material_fragment_count_buffer: Subbuffer<[u32]>,
+
+    // Used to atomically increment an index counter. After the culling step, this will hold the number of materials to be shaded
+    pub index_counter_buffer: Subbuffer<u32>,
+
+    // Stores for each shading step the index of the material to be used
+    pub material_indices_buffer: Subbuffer<[u32]>,
+
+    // Holds the pipeline bind data
+    pub pipeline_bind_commands: Subbuffer<[PipelineBindParameter]>,
+
+    // Holds the compute dispatch data
+    pub compute_dispatch_commands: Subbuffer<[ComputeDispatchParameter]>,
+
+    // Used to clear data before writing
+    clear_buffer: Subbuffer<[u32]>,
+}
+
 impl VisibilityBufferProcessingPass {
-    pub fn new(rhi: &VKRHI, num_materials: u32) -> Self {
-        let vis_buffer_scan = VisBufferStep::new(
-            rhi,
-            "Engine/VisibilityBuffer/visBufferScan",
-            "countTexels",
-        );
+    pub fn new(rhi: &VKRHI, num_materials: u32, data: &VisibilityBufferData) -> Self {
+        let vis_buffer_scan =
+            VisBufferStep::new(rhi, "Engine/VisibilityBuffer/visBufferScan", "countTexels");
         let shader_cull = VisBufferStep::new(
             rhi,
             "Engine/VisibilityBuffer/visBufferShaderCull",
             "cullShaders",
         );
+
+        let cursor = ShaderCursor::new(vis_buffer_scan.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor.field("visBuffer").unwrap().write_swapchain_image(data.visibility_buffer.clone());
+        input_cursor.field("materialFragmentCounts").unwrap().write_buffer(data.material_fragment_count_buffer.clone());
+        // TODO
+        let global_cursor = cursor.field("gGlobalData").unwrap();
+
+        let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor.field("texelCounts").unwrap().write_buffer(data.material_fragment_count_buffer.clone());
+        input_cursor.field("index").unwrap().write_buffer(data.index_counter_buffer.clone());
+        input_cursor.field("materialIndices").unwrap().write_buffer(data.material_indices_buffer.clone());
+        input_cursor.field("pipelineBindParameters").unwrap().write_buffer(data.pipeline_bind_commands.clone());
+        input_cursor.field("computeDispatchParameters").unwrap().write_buffer(data.compute_dispatch_commands.clone());
+        // TODO
+        let global_cursor = cursor.field("gGlobalData").unwrap();
+
         Self {
             vis_buffer_scan,
             shader_cull,
-            num_materials
+            num_materials,
         }
     }
 
@@ -88,12 +142,18 @@ impl VisibilityBufferProcessingPass {
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
-        swapchain_extent: [u32; 2]
+        swapchain_extent: [u32; 2],
     ) -> Result<(), Box<ValidationError>> {
-        self.vis_buffer_scan
-            .record_command_buffer(command_buffer, image_index, [swapchain_extent[0] / 16, swapchain_extent[1] / 16, 1])?;
-        self.shader_cull
-            .record_command_buffer(command_buffer, image_index, [self.num_materials / 16, 1, 1])?;
+        self.vis_buffer_scan.record_command_buffer(
+            command_buffer,
+            image_index,
+            [swapchain_extent[0] / 16, swapchain_extent[1] / 16, 1],
+        )?;
+        self.shader_cull.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16, 1, 1],
+        )?;
         Ok(())
     }
 }
@@ -151,7 +211,7 @@ impl VisBufferStep {
 }
 
 impl VisibilityBufferRasterizer {
-    pub fn new(rhi: Rc<VKRHI>, swapchain: &Swapchain) -> Self {
+    pub fn new(rhi: Rc<VKRHI>, swapchain: &Swapchain, data: &VisibilityBufferData) -> Self {
         let render_pass =
             RenderPassBuilder::build_default_render_pass(rhi.as_ref(), Format::R32G32B32A32_UINT)
                 .build();
@@ -246,18 +306,12 @@ impl VisibilityBufferRasterizer {
                 )
         };
 
-        let visibility_buffer = swapchain.create_gbuffer(
-            rhi.as_ref(),
-            Format::R32G32B32A32_UINT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-            ImageAspects::COLOR,
-        );
         let depth_buffer = swapchain.create_depth_buffer(rhi.as_ref());
 
         let rt_framebuffer = swapchain.create_framebuffer(
             render_pass.clone(),
             SwapchainFramebufferCreateInfo {
-                attachments: vec![visibility_buffer.clone(), depth_buffer.clone()],
+                attachments: vec![data.visibility_buffer.clone(), depth_buffer.clone()],
                 ..SwapchainFramebufferCreateInfo::default()
             },
         );
@@ -279,7 +333,6 @@ impl VisibilityBufferRasterizer {
             pipeline,
             render_pass,
             rhi,
-            visibility_buffer,
             depth_buffer,
             rt_framebuffer,
             instance_buffer,
@@ -303,7 +356,9 @@ impl VisibilityBufferRasterizer {
                         Some(ClearValue::DepthStencil((1.0, 0))),
                     ],
                     render_pass: self.render_pass.clone(),
-                    ..RenderPassBeginInfo::framebuffer(self.rt_framebuffer.read().unwrap().framebuffer().clone())
+                    ..RenderPassBeginInfo::framebuffer(
+                        self.rt_framebuffer.read().unwrap().framebuffer().clone(),
+                    )
                 },
                 SubpassBeginInfo {
                     contents: SubpassContents::Inline,
@@ -358,5 +413,100 @@ impl VisibilityBufferRasterizer {
         command_buffer
             .end_render_pass(SubpassEndInfo::default())
             .map(|_| ())
+    }
+}
+
+impl VisibilityBufferData {
+    pub fn new(
+        rhi: &VKRHI,
+        swapchain: &Swapchain,
+        max_sequence_count: u32,
+        num_materials: u32,
+    ) -> Self {
+        let visibility_buffer = swapchain.create_gbuffer(
+            rhi,
+            Format::R32G32B32A32_UINT,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+
+        let material_fragment_count_buffer = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
+            num_materials,
+        );
+
+        let index_counter_buffer = Buffer::new_sized(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+        )
+        .unwrap();
+
+        let material_indices_buffer =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
+
+        let pipeline_bind_commands =
+            Self::create_slice_buffer(rhi, BufferUsage::INDIRECT_BUFFER, max_sequence_count);
+
+        let compute_dispatch_commands =
+            Self::create_slice_buffer(rhi, BufferUsage::INDIRECT_BUFFER, max_sequence_count);
+
+        let clear_buffer = buffer_from_slice(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            rhi.queues().compute_queue.clone(),
+            (0..max_sequence_count)
+                .map(|_| 0u32)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            BufferUsage::TRANSFER_SRC,
+            MemoryTypeFilter::PREFER_DEVICE,
+        ).unwrap();
+
+        Self {
+            visibility_buffer,
+            material_fragment_count_buffer,
+            index_counter_buffer,
+            material_indices_buffer,
+            pipeline_bind_commands,
+            compute_dispatch_commands,
+            clear_buffer,
+        }
+    }
+
+    fn create_slice_buffer<T: BufferContents>(
+        rhi: &VKRHI,
+        usage: BufferUsage,
+        length: u32,
+    ) -> Subbuffer<[T]> {
+        Buffer::new_slice(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+            length.into(),
+        )
+        .unwrap()
+    }
+
+    pub fn clear(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) -> Result<(), Box<ValidationError>> {
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.material_fragment_count_buffer.clone(),
+        ))?;
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.index_counter_buffer.clone(),
+        ))?;
+        Ok(())
     }
 }

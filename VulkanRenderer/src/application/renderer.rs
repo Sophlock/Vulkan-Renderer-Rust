@@ -43,6 +43,8 @@ use vulkano::{
 };
 use winit::dpi::PhysicalSize;
 
+use crate::application::renderer::visibility_buffer_generation::VisibilityBufferData;
+use crate::application::renderer::visibility_buffer_shading::VisibilityBufferShadePass;
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
@@ -80,6 +82,8 @@ pub struct MutableRenderState {
     fullscreen_pass: FullScreenPass,
     vis_buffer_rasterizer: VisibilityBufferRasterizer,
     vis_buffer_processing: VisibilityBufferProcessingPass,
+    vis_buffer_data: VisibilityBufferData,
+    vis_buffer_shade: VisibilityBufferShadePass,
 }
 
 pub struct VKRenderer {
@@ -149,10 +153,19 @@ impl VKRenderer {
             &swapchain,
         );
 
-        let vis_buffer_rasterizer = VisibilityBufferRasterizer::new(rhi.clone(), &swapchain);
         // TODO: Correct num materials
+        let num_materials = 1u32;
+        let vis_buffer_data = VisibilityBufferData::new(
+            rhi.as_ref(),
+            &swapchain,
+            VisibilityBufferShadePass::MAX_SEQUENCE_COUNT,
+            num_materials,
+        );
+        let vis_buffer_rasterizer =
+            VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, &vis_buffer_data);
         let vis_buffer_processing =
-            VisibilityBufferProcessingPass::new(rhi.as_ref(), 1);
+            VisibilityBufferProcessingPass::new(rhi.as_ref(), num_materials, &vis_buffer_data);
+        let vis_buffer_shade = VisibilityBufferShadePass::new(rhi.clone(), vis_buffer_data.clone());
 
         let result = Self {
             rhi,
@@ -167,6 +180,8 @@ impl VKRenderer {
                 fullscreen_pass,
                 vis_buffer_rasterizer,
                 vis_buffer_processing,
+                vis_buffer_data,
+                vis_buffer_shade,
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
@@ -231,14 +246,14 @@ impl VKRenderer {
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
         self.mutable_state_const()
-        .vis_buffer_rasterizer
-        .record_command_buffer(
-            &mut command_buffer,
-            swapchain_image_index as usize,
-            self.mutable_state_const().swapchain.extent,
-            scene,
-        )
-        .unwrap();
+            .vis_buffer_rasterizer
+            .record_command_buffer(
+                &mut command_buffer,
+                swapchain_image_index as usize,
+                self.mutable_state_const().swapchain.extent,
+                scene,
+            )
+            .unwrap();
 
         self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
             .unwrap();
@@ -249,8 +264,17 @@ impl VKRenderer {
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
         self.mutable_state_const()
+            .vis_buffer_data
+            .clear(&mut compute_command_buffer)
+            .unwrap();
+
+        self.mutable_state_const()
             .vis_buffer_processing
-            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize, self.mutable_state_const().swapchain.extent)
+            .record_command_buffer(
+                &mut compute_command_buffer,
+                swapchain_image_index as usize,
+                self.mutable_state_const().swapchain.extent,
+            )
             .unwrap();
 
         let draw_finished_future = image_available_future
