@@ -1,32 +1,25 @@
 use std::{rc::Rc, sync::Arc};
 
-use ash::vk::{
-    DeviceAddress, IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV,
-    PipelineIndirectDeviceAddressInfoNV,
-};
+use ash::vk::{IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV};
 use vulkano::{
-    VulkanObject,
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::PrimaryAutoCommandBuffer,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     device::DeviceOwned,
-    instance::InstanceOwned,
     memory::allocator::AllocationCreateInfo,
     pipeline::{Pipeline, PipelineBindPoint},
-    sync::{GpuFuture, now},
 };
-use vulkano::command_buffer::AutoCommandBufferBuilder;
+
 use crate::application::{
-    renderer::device_generated_commands::{
-        GeneratedCommandsInfo, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
-        execute_generated_commands, map_pipeline_bind_point,
+    renderer::{
+        device_generated_commands::{
+            GeneratedCommandsInfo, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
+            execute_generated_commands,
+        },
+        visibility_buffer_data::VisibilityBufferData,
+        visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter},
     },
-    rhi::{
-        VKRHI,
-        device_helper::{ash_device, ash_instance},
-    },
+    rhi::VKRHI,
 };
-use crate::application::renderer::visibility_buffer_data::VisibilityBufferData;
-use crate::application::renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter};
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -78,11 +71,14 @@ impl VisibilityBufferShadePass {
             rhi,
             commands_layout,
             preprocess_buffer,
-            data
+            data,
         }
     }
 
-    pub fn run(&self, command_buffer: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) -> Arc<PrimaryAutoCommandBuffer> {
+    pub fn run(
+        &self,
+        command_buffer: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) -> Arc<PrimaryAutoCommandBuffer> {
         let built_command_buffer = command_buffer.build().unwrap();
         let commands_info = GeneratedCommandsInfo {
             streams: vec![

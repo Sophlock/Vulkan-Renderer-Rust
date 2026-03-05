@@ -1,6 +1,7 @@
 use std::ops::Deref;
-use egui_winit_vulkano::egui::Ui;
+
 use asset_system::assets::AssetHandle;
+use egui_winit_vulkano::egui::Ui;
 use model::Model;
 
 use super::assets::asset_traits::SceneInterface;
@@ -24,7 +25,7 @@ impl Scene {
     }
 
     pub fn draw_gui(&mut self, gui: &mut Ui) {
-/*        self.models.iter_mut().for_each(|model| {
+        /*        self.models.iter_mut().for_each(|model| {
             model.draw_gui(gui);
         })*/
     }

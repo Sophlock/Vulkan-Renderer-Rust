@@ -135,7 +135,7 @@ impl ResourceManager {
         );
         id
     }
-    
+
     pub fn index(&self, uuid: usize) -> Option<usize> {
         Some(self.id_pos_map.get(&uuid)?.index)
     }

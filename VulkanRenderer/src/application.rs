@@ -19,12 +19,11 @@ use winit::{
 };
 use winit_input_map::{InputCode, InputMap, input_map};
 
-use crate::application::assets::asset_traits::{Index, Vertex};
 use crate::{
     AppEvent,
     application::{
         assets::{
-            asset_traits::{RHIInterface, RHISceneInterface, RendererInterface},
+            asset_traits::{Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex},
             material::Material,
             material_instance::MaterialInstance,
             mesh::Mesh,

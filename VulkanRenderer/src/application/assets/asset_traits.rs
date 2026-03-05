@@ -173,7 +173,8 @@ pub trait RHISceneInterface {
         rhi: &Self::RHI,
         resource_manager: &mut RHIResourceManager,
     ) -> Self;
-    fn models(&self) -> &[RHIHandle<<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType>];
+    fn models(&self)
+    -> &[RHIHandle<<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType>];
     fn camera(&self) -> &<<Self as RHISceneInterface>::RHI as RHIInterface>::CameraType;
 }
 

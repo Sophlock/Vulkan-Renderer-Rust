@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
-use asset_system::resource_management::{Resource, ResourceManager};
+use asset_system::resource_management::Resource;
 use vulkano::{
     buffer::{BufferUsage, Subbuffer},
     device::Queue,
     memory::allocator::{MemoryAllocator, MemoryTypeFilter},
 };
 
-use crate::application::rhi::buffer::copy_slice_to_buffer_staged;
 use crate::application::{
     assets::asset_traits::{Index, MeshInterface, RHIMeshInterface, RHIResource, Vertex},
     rhi::{
-        VKRHI, buffer::buffer_from_slice, command_buffer::CommandBufferInterface,
+        VKRHI,
+        buffer::{buffer_from_slice, copy_slice_to_buffer_staged},
+        command_buffer::CommandBufferInterface,
         rhi_assets::RHIResourceManager,
     },
 };

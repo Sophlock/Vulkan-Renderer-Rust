@@ -1,45 +1,55 @@
-use crate::application::rhi::swapchain::Swapchain;
-use crate::application::rhi::swapchain_resources::{
-    SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
+use std::{
+    mem::offset_of,
+    ops::Deref,
+    rc::Rc,
+    sync::{Arc, RwLock},
 };
+
+use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
+use smallvec::smallvec;
+use vulkano::{
+    ValidationError, VulkanObject,
+    buffer::BufferContents,
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    },
+    device::DeviceOwned,
+    format::{ClearValue, Format},
+    pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+            viewport::{Scissor, Viewport},
+        },
+    },
+    render_pass::RenderPass,
+    shader::{ShaderStages, spirv::bytes_to_words},
+};
+
 use crate::application::{
     assets::asset_traits::{
-        Instance, RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface, Vertex,
+        RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, Vertex,
+    },
+    renderer::{
+        device_generated_commands::map_pipeline_bind_point,
+        visibility_buffer_data::{InstanceData, VisibilityBufferData},
     },
     rhi::{
         VKRHI,
-        buffer::buffer_from_slice,
+        device_helper::{ash_device, ash_instance},
         pipeline::{compute_pipeline, graphics_pipeline},
         render_pass::RenderPassBuilder,
         rhi_assets::vulkan_scene::VKScene,
         shader_cursor::ShaderCursor,
         shader_object::{ShaderObject, ShaderObjectLayout},
+        swapchain::Swapchain,
+        swapchain_resources::{
+            SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
+        },
     },
 };
-use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
-use smallvec::smallvec;
-use std::sync::RwLock;
-use std::{mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo};
-use vulkano::command_buffer::{CopyBufferInfo, DrawIndexedIndirectCommand};
-use vulkano::memory::allocator::AllocationCreateInfo;
-use vulkano::{ValidationError, buffer::{BufferUsage, Subbuffer}, command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents, SubpassEndInfo,
-}, format::{ClearValue, Format}, image::{ImageAspects, ImageUsage, view::ImageView}, memory::allocator::MemoryTypeFilter, pipeline::{
-    ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
-    graphics::{
-        subpass::PipelineSubpassType,
-        vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-        viewport::{Scissor, Viewport},
-    },
-}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, shader::{ShaderStages, spirv::bytes_to_words}, VulkanObject};
-use vulkano::device::DeviceOwned;
-use vulkano::pipeline::Pipeline;
-use crate::application::assets::asset_traits::RHIResource;
-use crate::application::renderer::device_generated_commands::map_pipeline_bind_point;
-use crate::application::renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData};
-use crate::application::rhi::device_helper::{ash_device, ash_instance};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
@@ -85,20 +95,43 @@ impl VisibilityBufferProcessingPass {
 
         let cursor = ShaderCursor::new(vis_buffer_scan.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
-        input_cursor.field("visBuffer").unwrap().write_swapchain_image(data.visibility_buffer.clone());
-        input_cursor.field("materialFragmentCounts").unwrap().write_buffer(data.material_fragment_count_buffer.clone());
+        input_cursor
+            .field("visBuffer")
+            .unwrap()
+            .write_swapchain_image(data.visibility_buffer.clone());
+        input_cursor
+            .field("materialFragmentCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
 
-        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
-        input_cursor.field("texelCounts").unwrap().write_buffer(data.material_fragment_count_buffer.clone());
-        input_cursor.field("index").unwrap().write_buffer(data.index_counter_buffer.clone());
-        input_cursor.field("materialIndices").unwrap().write_buffer(data.material_indices_buffer.clone());
-        input_cursor.field("pipelineBindParameters").unwrap().write_buffer(data.pipeline_bind_commands.clone());
-        input_cursor.field("computeDispatchParameters").unwrap().write_buffer(data.compute_dispatch_commands.clone());
-        
-        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        input_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+        input_cursor
+            .field("index")
+            .unwrap()
+            .write_buffer(data.index_counter_buffer.clone());
+        input_cursor
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.material_indices_buffer.clone());
+        input_cursor
+            .field("pipelineBindParameters")
+            .unwrap()
+            .write_buffer(data.pipeline_bind_commands.clone());
+        input_cursor
+            .field("computeDispatchParameters")
+            .unwrap()
+            .write_buffer(data.compute_dispatch_commands.clone());
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             vis_buffer_scan,
@@ -301,7 +334,7 @@ impl VisibilityBufferRasterizer {
         image_index: usize,
         extent: [u32; 2],
         scene: &VKScene,
-        data: &VisibilityBufferData
+        data: &VisibilityBufferData,
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(
@@ -351,8 +384,9 @@ impl VisibilityBufferRasterizer {
 
         let resources = self.rhi.resource_manager();
         let rcs = resources.deref();
-        
-        command_buffer.bind_vertex_buffers(0, data.global_data.vertices.clone())?
+
+        command_buffer
+            .bind_vertex_buffers(0, data.global_data.vertices.clone())?
             .bind_vertex_buffers(1, data.global_data.instances.clone())?
             .bind_index_buffer(data.global_data.indices.clone())?;
 
@@ -362,8 +396,16 @@ impl VisibilityBufferRasterizer {
             .map(|model_handle| {
                 let model = model_handle.get(rcs).unwrap();
                 let mesh = model.mesh().get(rcs).unwrap();
-                unsafe { command_buffer.draw_indexed(mesh.index_size() as u32, 1, mesh.index_offset() as u32, mesh.vertex_offset() as i32, rcs.index(model.uuid()).unwrap() as u32) }
-                    .map(|_| ())
+                unsafe {
+                    command_buffer.draw_indexed(
+                        mesh.index_size() as u32,
+                        1,
+                        mesh.index_offset() as u32,
+                        mesh.vertex_offset() as i32,
+                        rcs.index(model.uuid()).unwrap() as u32,
+                    )
+                }
+                .map(|_| ())
             })
             .reduce(Result::or)
             .unwrap_or(Ok(()))?;

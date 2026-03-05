@@ -70,10 +70,13 @@ pub fn copy_buffer_to_buffer<T: BufferContents>(
         .wait(None)
 }
 
-pub fn copy_slice_to_buffer_staged<T: BufferContents + Copy>(src_slice: &[T], dst_buffer: Subbuffer<[T]>,
-                                                      allocator: Arc<dyn MemoryAllocator>,
-                                                      command_buffer_interface: &CommandBufferInterface,
-                                                      queue: Arc<Queue>,) -> Result<(), Validated<VulkanError>> {
+pub fn copy_slice_to_buffer_staged<T: BufferContents + Copy>(
+    src_slice: &[T],
+    dst_buffer: Subbuffer<[T]>,
+    allocator: Arc<dyn MemoryAllocator>,
+    command_buffer_interface: &CommandBufferInterface,
+    queue: Arc<Queue>,
+) -> Result<(), Validated<VulkanError>> {
     let staging_buffer = Buffer::from_iter(
         allocator.clone(),
         BufferCreateInfo {
@@ -86,6 +89,7 @@ pub fn copy_slice_to_buffer_staged<T: BufferContents + Copy>(src_slice: &[T], ds
             ..AllocationCreateInfo::default()
         },
         src_slice.iter().copied(),
-    ).unwrap();
+    )
+    .unwrap();
     copy_buffer_to_buffer(staging_buffer, dst_buffer, command_buffer_interface, queue)
 }

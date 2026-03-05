@@ -2,10 +2,10 @@ use std::sync::{Arc, RwLock};
 
 use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
 use vulkano::{
-    buffer::BufferContents,
+    buffer::{BufferContents, Subbuffer},
     image::{sampler::Sampler, view::ImageView},
 };
-use vulkano::buffer::Subbuffer;
+
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
     swapchain_resources::SwapchainImage,
@@ -112,7 +112,7 @@ impl ShaderCursor {
         self.shader_object
             .write_image_view_sampler(self.offset, view, sampler);
     }
-    
+
     pub fn write_buffer<T: ?Sized>(&mut self, buffer: Subbuffer<T>) {
         self.shader_object.write_buffer(self.offset, buffer);
     }

@@ -2,11 +2,11 @@ use crate::application::{
     assets::asset_traits::{CameraInterface, RHIModelInterface, RHISceneInterface, SceneInterface},
     rhi::{
         VKRHI,
-        rhi_assets::{RHIResourceManager, vulkan_camera::VKCamera, vulkan_model::VKModel},
+        rhi_assets::{
+            RHIHandle, RHIResourceManager, vulkan_camera::VKCamera, vulkan_model::VKModel,
+        },
     },
 };
-use crate::application::rhi::rhi_assets::RHIHandle;
-use crate::application::scene::model::Model;
 
 pub struct VKScene {
     models: Vec<RHIHandle<VKModel>>,

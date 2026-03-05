@@ -1,18 +1,19 @@
-use ash::vk::DeviceSize;
-use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
-use egui_winit_vulkano::egui::load::Bytes::Shared;
-use std::any::{Any, TypeId};
 use std::{
+    any::{Any, TypeId},
     cell::{Ref, RefCell},
     collections::HashMap,
     marker::PhantomData,
-    mem,
     ops::Deref,
     rc::{Rc, Weak},
     sync::Arc,
 };
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::memory::allocator::{AllocationCreateInfo, DeviceLayout, MemoryAllocator};
+
+use ash::vk::DeviceSize;
+use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+use vulkano::{
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator},
+};
 
 use crate::application::{
     assets::asset_traits::{
@@ -156,7 +157,12 @@ impl RHIResourceManager {
     }
 
     pub fn shared_buffer<T: BufferContents>(&self) -> Option<&Subbuffer<[T]>> {
-        Some(self.shared_buffers.get(&TypeId::of::<T>())?.buffer.reinterpret_ref::<[T]>())
+        Some(
+            self.shared_buffers
+                .get(&TypeId::of::<T>())?
+                .buffer
+                .reinterpret_ref::<[T]>(),
+        )
     }
 }
 

@@ -42,13 +42,8 @@ use vulkano::{
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
-use vulkano::buffer::BufferUsage;
 use winit::dpi::PhysicalSize;
 
-use crate::application::renderer::visibility_buffer_data::{
-    VisibilityBufferData, VisibilityBufferGlobalData,
-};
-use crate::application::renderer::visibility_buffer_shading::VisibilityBufferShadePass;
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
@@ -56,9 +51,11 @@ use crate::application::{
     },
     renderer::{
         full_screen_pass::FullScreenPass,
+        visibility_buffer_data::{VisibilityBufferData, VisibilityBufferGlobalData},
         visibility_buffer_generation::{
             VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
         },
+        visibility_buffer_shading::VisibilityBufferShadePass,
     },
     rhi::{
         VKRHI,
@@ -74,7 +71,6 @@ use crate::application::{
         },
     },
 };
-use crate::application::assets::asset_traits::Index;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -160,7 +156,8 @@ impl VKRenderer {
 
         // TODO: Correct num materials
         let num_materials = 1u32;
-        let vis_buffer_global_data = VisibilityBufferGlobalData::new(rhi.as_ref(), swapchain.extent);
+        let vis_buffer_global_data =
+            VisibilityBufferGlobalData::new(rhi.as_ref(), swapchain.extent);
         let vis_buffer_data = VisibilityBufferData::new(
             rhi.as_ref(),
             &swapchain,
@@ -259,7 +256,7 @@ impl VKRenderer {
                 swapchain_image_index as usize,
                 self.mutable_state_const().swapchain.extent,
                 scene,
-                &self.mutable_state_const().vis_buffer_data
+                &self.mutable_state_const().vis_buffer_data,
             )
             .unwrap();
 

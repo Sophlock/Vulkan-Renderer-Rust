@@ -102,11 +102,11 @@ impl VKMaterial {
     pub fn frag_spirv(&self) -> &Blob {
         &self.frag_spirv
     }
-    
+
     pub fn module_name(&self) -> &str {
         &self.module_name
     }
-    
+
     pub fn material_name(&self) -> &str {
         &self.material_name
     }
