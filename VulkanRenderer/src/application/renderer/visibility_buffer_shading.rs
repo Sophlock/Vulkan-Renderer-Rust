@@ -14,7 +14,7 @@ use vulkano::{
     pipeline::{Pipeline, PipelineBindPoint},
     sync::{GpuFuture, now},
 };
-
+use vulkano::command_buffer::AutoCommandBufferBuilder;
 use crate::application::{
     renderer::device_generated_commands::{
         GeneratedCommandsInfo, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
@@ -25,7 +25,8 @@ use crate::application::{
         device_helper::{ash_device, ash_instance},
     },
 };
-use crate::application::renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter, VisibilityBufferData};
+use crate::application::renderer::visibility_buffer_data::VisibilityBufferData;
+use crate::application::renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter};
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -81,7 +82,8 @@ impl VisibilityBufferShadePass {
         }
     }
 
-    pub fn run(&self, command_buffer: &Arc<PrimaryAutoCommandBuffer>) {
+    pub fn run(&self, command_buffer: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) -> Arc<PrimaryAutoCommandBuffer> {
+        let built_command_buffer = command_buffer.build().unwrap();
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
                 self.data.pipeline_bind_commands.clone().reinterpret(),
@@ -94,31 +96,7 @@ impl VisibilityBufferShadePass {
                 self.preprocess_buffer.clone(),
             )
         };
-        unsafe { execute_generated_commands(command_buffer, false, commands_info) };
-        let _ = now(self.rhi.device().clone())
-            .then_execute(
-                self.rhi.queues().compute_queue.clone(),
-                command_buffer.clone(),
-            )
-            .unwrap();
-    }
-}
-
-impl PipelineBindParameter {
-    pub fn pipeline(
-        pipeline: &Arc<impl Pipeline + VulkanObject<Handle = ash::vk::Pipeline>>,
-    ) -> Self {
-        let address_info = PipelineIndirectDeviceAddressInfoNV::default()
-            .pipeline(pipeline.handle())
-            .pipeline_bind_point(map_pipeline_bind_point(pipeline.bind_point()));
-
-        let instance = unsafe { ash_instance(pipeline.device().instance()) };
-        let device = unsafe { ash_device(pipeline.device()) };
-        let dgc_device =
-            ash::nv::device_generated_commands_compute::Device::new(&instance, &device);
-        let address = unsafe { dgc_device.get_pipeline_indirect_device_address(&address_info) };
-        Self {
-            pipeline_address: address,
-        }
+        unsafe { execute_generated_commands(&built_command_buffer, true, commands_info) };
+        built_command_buffer
     }
 }

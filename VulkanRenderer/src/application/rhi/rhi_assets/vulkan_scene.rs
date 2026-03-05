@@ -5,9 +5,11 @@ use crate::application::{
         rhi_assets::{RHIResourceManager, vulkan_camera::VKCamera, vulkan_model::VKModel},
     },
 };
+use crate::application::rhi::rhi_assets::RHIHandle;
+use crate::application::scene::model::Model;
 
 pub struct VKScene {
-    models: Vec<VKModel>,
+    models: Vec<RHIHandle<VKModel>>,
     camera: VKCamera,
 }
 
@@ -22,7 +24,7 @@ impl RHISceneInterface for VKScene {
         let models = source
             .models()
             .iter()
-            .map(|model| VKModel::create(model, rhi, resource_manager))
+            .map(|model| resource_manager.create_model(model.clone()))
             .collect();
         Self {
             models,
@@ -30,7 +32,7 @@ impl RHISceneInterface for VKScene {
         }
     }
 
-    fn models(&self) -> &[VKModel] {
+    fn models(&self) -> &[RHIHandle<VKModel>] {
         self.models.as_slice()
     }
 

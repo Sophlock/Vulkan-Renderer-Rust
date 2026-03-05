@@ -17,6 +17,7 @@ func writeMaterialData(uint2 dispatch: SV_DispatchThreadID)->void {
     let instanceID = packedVisBuffer.y;
 
     let instance = gGlobalData.instances[instanceID];
-    let material = gGlobalData.materials[instance.materialIndex];
+    let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
+    let material = gGlobalData.materials[materialInstance.materialIndex];
     gInput.materialDataBuffer[dispatch.xy] = material.pipelineAddress;
 }

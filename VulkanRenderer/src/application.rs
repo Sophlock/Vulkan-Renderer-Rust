@@ -10,6 +10,7 @@ use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
+use vulkano::buffer::BufferUsage;
 use winit::{
     application::ApplicationHandler,
     event::{DeviceEvent, DeviceId, WindowEvent},
@@ -18,6 +19,7 @@ use winit::{
 };
 use winit_input_map::{InputCode, InputMap, input_map};
 
+use crate::application::assets::asset_traits::{Index, Vertex};
 use crate::{
     AppEvent,
     application::{
@@ -66,22 +68,27 @@ impl Application {
             )),
             _phantom: PhantomData,
         };
+        let mesh = AssetHandle::<Mesh> {
+            uuid: asset_manager.add(Mesh::new(
+                "TestMesh".into(),
+                "resources/assets/meshes/sphere.glb",
+            )),
+            _phantom: PhantomData,
+        };
+        let material_instance = AssetHandle::<MaterialInstance> {
+            uuid: asset_manager.add(MaterialInstance::new("TestMatInst".into(), material)),
+            _phantom: PhantomData,
+        };
         let mut scene = Scene::new();
-        scene.models.push(Model::new(
-            "TestModel".into(),
-            Transform::default(),
-            AssetHandle::<Mesh> {
-                uuid: asset_manager.add(Mesh::new(
-                    "TestMesh".into(),
-                    "resources/assets/meshes/sphere.glb",
-                )),
-                _phantom: PhantomData,
-            },
-            AssetHandle::<MaterialInstance> {
-                uuid: asset_manager.add(MaterialInstance::new("TestMatInst".into(), material)),
-                _phantom: PhantomData,
-            },
-        ));
+        scene.models.push(AssetHandle::<Model> {
+            uuid: asset_manager.add(Model::new(
+                "TestModel".into(),
+                Transform::default(),
+                mesh,
+                material_instance,
+            )),
+            _phantom: PhantomData,
+        });
         scene.camera.transform.location = Vec3::new(0., 0., 2.);
         scene
     }
@@ -111,9 +118,8 @@ impl Application {
         }
     }
 
-    fn update_scene_proxy(&mut self) {
+    fn update_scene_proxy(&mut self, rhi: &VKRHI) {
         // TODO: This should be more lazy
-        let rhi = self.renderer.as_ref().unwrap().rhi();
         self.rhi_scene_proxy = Some(VKScene::create(
             &self.scene,
             rhi,
@@ -182,8 +188,18 @@ impl Application {
 impl ApplicationHandler<AppEvent> for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let rhi = VKRHI::new(event_loop, self.asset_manager.clone());
+
+        rhi.resource_manager_mut().allocate_shared_buffer::<Vertex>(
+            1000000,
+            BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
+        );
+        rhi.resource_manager_mut().allocate_shared_buffer::<Index>(
+            1000000,
+            BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
+        );
+        self.update_scene_proxy(rhi.as_ref());
+
         self.renderer = Some(Rc::new(VKRenderer::new(rhi)));
-        self.update_scene_proxy();
         // TODO: This should be called on demand as well
         self.renderer.as_ref().unwrap().compile_materials();
     }
@@ -225,7 +241,7 @@ impl ApplicationHandler<AppEvent> for Application {
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                self.update_scene_proxy();
+                self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
                 self.renderer
                     .as_ref()
                     .unwrap()

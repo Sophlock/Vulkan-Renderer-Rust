@@ -1,13 +1,18 @@
+use ash::vk::DeviceSize;
+use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+use egui_winit_vulkano::egui::load::Bytes::Shared;
+use std::any::{Any, TypeId};
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
     marker::PhantomData,
+    mem,
     ops::Deref,
     rc::{Rc, Weak},
     sync::Arc,
 };
-
-use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::memory::allocator::{AllocationCreateInfo, DeviceLayout, MemoryAllocator};
 
 use crate::application::{
     assets::asset_traits::{
@@ -37,6 +42,12 @@ pub struct RHIResourceManager {
     asset_to_rhi: HashMap<usize, usize>,
     asset_manager: Arc<RefCell<ResourceManager>>,
     rhi: Option<Weak<VKRHI>>,
+    shared_buffers: HashMap<TypeId, SharedBuffer>,
+}
+
+struct SharedBuffer {
+    buffer: Subbuffer<[u8]>,
+    next_index: DeviceSize,
 }
 
 pub struct RHIHandle<T: RHIResource + 'static> {
@@ -73,6 +84,7 @@ impl RHIResourceManager {
             asset_to_rhi: HashMap::new(),
             asset_manager,
             rhi: None,
+            shared_buffers: HashMap::new(),
         }
     }
 
@@ -101,6 +113,51 @@ impl RHIResourceManager {
     pub fn resource_iterator<T: RHIResource + 'static>(&self) -> Option<impl Iterator<Item = &T>> {
         self.resources.get_iter()
     }
+
+    pub fn index(&self, uuid: usize) -> Option<usize> {
+        self.resources.index(uuid)
+    }
+
+    pub fn request_from_shared_buffer<T: BufferContents>(
+        &mut self,
+        num: usize,
+    ) -> Option<Subbuffer<[T]>> {
+        let buffer = self.shared_buffers.get_mut(&TypeId::of::<T>())?;
+        let bytes_required = (num * size_of::<T>()) as DeviceSize;
+        let new_index = buffer.next_index + bytes_required;
+        if buffer.buffer.size() < new_index {
+            None
+        } else {
+            let result = buffer
+                .buffer
+                .clone()
+                .slice(buffer.next_index..new_index)
+                .reinterpret::<[T]>();
+            buffer.next_index = new_index;
+            Some(result)
+        }
+    }
+
+    pub fn allocate_shared_buffer<T: BufferContents>(&mut self, num: usize, usage: BufferUsage) {
+        self.shared_buffers.insert(
+            TypeId::of::<T>(),
+            SharedBuffer::new(
+                (size_of::<T>() * num) as DeviceSize,
+                self.rhi
+                    .as_ref()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .buffer_allocator
+                    .clone(),
+                usage,
+            ),
+        );
+    }
+
+    pub fn shared_buffer<T: BufferContents>(&self) -> Option<&Subbuffer<[T]>> {
+        Some(self.shared_buffers.get(&TypeId::of::<T>())?.buffer.reinterpret_ref::<[T]>())
+    }
 }
 
 impl<T: RHIResource + 'static> RHIHandle<T> {
@@ -125,6 +182,25 @@ impl<T: RHIResource> Clone for RHIHandle<T> {
         Self {
             uuid: self.uuid,
             _phantom: PhantomData,
+        }
+    }
+}
+
+impl SharedBuffer {
+    fn new(size: DeviceSize, allocator: Arc<dyn MemoryAllocator>, usage: BufferUsage) -> Self {
+        let buffer = Buffer::new_slice(
+            allocator,
+            BufferCreateInfo {
+                usage,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+            size,
+        )
+        .unwrap();
+        Self {
+            buffer,
+            next_index: 0,
         }
     }
 }

@@ -2,13 +2,17 @@ module visBufferData;
 
 public struct InstanceData {
     public uint meshIndex;
-    public uint materialIndex;
+    public uint materialInstanceIndex;
     public float4x4 modelTransform;
     public float4x4 inverseTransposeModelTransform;
 }
 
 public struct MaterialData {
     public uint64_t pipelineAddress;
+}
+
+public struct MaterialInstanceData {
+    public uint materialIndex;
 }
 
 public struct MeshData {
@@ -32,6 +36,7 @@ public struct Vertex {
 public struct GlobalData {
     public StructuredBuffer<InstanceData> instances;
     public StructuredBuffer<MaterialData> materials;
+    public StructuredBuffer<MaterialInstanceData> materialInstances;
     public StructuredBuffer<MeshData> meshes;
     public StructuredBuffer<Triangle> indexBuffer;
     public StructuredBuffer<Vertex> vertexBuffer;

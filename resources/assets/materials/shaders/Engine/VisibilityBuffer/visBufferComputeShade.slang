@@ -11,19 +11,19 @@ struct VisBufferShadeInput {
     uint64_t thisPipelineAddress;
 }
 
-uniform VisBufferShadeInput gInput;
+/*uniform VisBufferShadeInput gInput;
 uniform GlobalData gGlobalData;
-uniform IMaterial gMaterial;
-uniform ViewData gViewData;
+uniform ViewData gViewData;*/
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-func shadeVisBuffer(uint2 dispatch: SV_DispatchThreadID)->void {
-    let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
+func shadeVisBuffer<MaterialType: IMaterial>(uint2 dispatch: SV_DispatchThreadID)->void {
+    /*let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
     let instanceID = packedVisBuffer.y;
 
     let instance = gGlobalData.instances[instanceID];
-    let material = gGlobalData.materials[instance.materialIndex];
+    let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
+    let material = gGlobalData.materials[materialInstance.materialIndex];
 
     if (gInput.thisPipelineAddress != material.pipelineAddress) {
         return;
@@ -60,8 +60,8 @@ func shadeVisBuffer(uint2 dispatch: SV_DispatchThreadID)->void {
     float3 viewDirection = normalize(gViewData.viewPosition - geometry.worldPosition);
 
     // Evaluates the material into a BRDF
-    let materialResult = gMaterial.evaluate(geometry);
+    // let materialResult = gMaterial.evaluate(geometry);
     // Shades the BRDF using the light environment
-    float3 color = max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*/ materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
-    gInput.outputRT[dispatch] = float4(color, 1.);
+    float3 color = float3(1, 1, 1);//max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*//* materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
+    gInput.outputRT[dispatch] = float4(color, 1.);*/
 }

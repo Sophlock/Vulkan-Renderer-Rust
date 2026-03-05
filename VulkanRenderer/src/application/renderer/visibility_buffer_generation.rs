@@ -16,34 +16,30 @@ use crate::application::{
         shader_object::{ShaderObject, ShaderObjectLayout},
     },
 };
-use ash::vk::DeviceAddress;
+use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
 use smallvec::smallvec;
 use std::sync::RwLock;
 use std::{mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo};
-use vulkano::command_buffer::CopyBufferInfo;
+use vulkano::command_buffer::{CopyBufferInfo, DrawIndexedIndirectCommand};
 use vulkano::memory::allocator::AllocationCreateInfo;
-use vulkano::{
-    ValidationError,
-    buffer::{BufferUsage, Subbuffer},
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
+use vulkano::{ValidationError, buffer::{BufferUsage, Subbuffer}, command_buffer::{
+    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+    SubpassContents, SubpassEndInfo,
+}, format::{ClearValue, Format}, image::{ImageAspects, ImageUsage, view::ImageView}, memory::allocator::MemoryTypeFilter, pipeline::{
+    ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
+    graphics::{
+        subpass::PipelineSubpassType,
+        vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+        viewport::{Scissor, Viewport},
     },
-    format::{ClearValue, Format},
-    image::{ImageAspects, ImageUsage, view::ImageView},
-    memory::allocator::MemoryTypeFilter,
-    pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
-        graphics::{
-            subpass::PipelineSubpassType,
-            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-            viewport::{Scissor, Viewport},
-        },
-    },
-    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
-    shader::{ShaderStages, spirv::bytes_to_words},
-};
+}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, shader::{ShaderStages, spirv::bytes_to_words}, VulkanObject};
+use vulkano::device::DeviceOwned;
+use vulkano::pipeline::Pipeline;
+use crate::application::assets::asset_traits::RHIResource;
+use crate::application::renderer::device_generated_commands::map_pipeline_bind_point;
+use crate::application::renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData};
+use crate::application::rhi::device_helper::{ash_device, ash_instance};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
@@ -63,9 +59,6 @@ pub struct VisibilityBufferRasterizer {
     rhi: Rc<VKRHI>,
     depth_buffer: Arc<RwLock<SwapchainImage>>,
     rt_framebuffer: Arc<RwLock<SwapchainFramebuffer>>,
-
-    // TODO: Remove
-    instance_buffer: Subbuffer<[Instance]>,
 }
 
 #[derive(Copy, Clone, BufferContents)]
@@ -78,30 +71,6 @@ pub struct PipelineBindParameter {
 #[repr(C)]
 pub struct ComputeDispatchParameter {
     pub dispatch: [u32; 3],
-}
-
-#[derive(Clone)]
-pub struct VisibilityBufferData {
-    // The packed visibility buffer
-    pub visibility_buffer: Arc<RwLock<SwapchainImage>>,
-
-    // Stores the number of texels for each material
-    pub material_fragment_count_buffer: Subbuffer<[u32]>,
-
-    // Used to atomically increment an index counter. After the culling step, this will hold the number of materials to be shaded
-    pub index_counter_buffer: Subbuffer<u32>,
-
-    // Stores for each shading step the index of the material to be used
-    pub material_indices_buffer: Subbuffer<[u32]>,
-
-    // Holds the pipeline bind data
-    pub pipeline_bind_commands: Subbuffer<[PipelineBindParameter]>,
-
-    // Holds the compute dispatch data
-    pub compute_dispatch_commands: Subbuffer<[ComputeDispatchParameter]>,
-
-    // Used to clear data before writing
-    clear_buffer: Subbuffer<[u32]>,
 }
 
 impl VisibilityBufferProcessingPass {
@@ -118,8 +87,8 @@ impl VisibilityBufferProcessingPass {
         let input_cursor = cursor.field("gInput").unwrap();
         input_cursor.field("visBuffer").unwrap().write_swapchain_image(data.visibility_buffer.clone());
         input_cursor.field("materialFragmentCounts").unwrap().write_buffer(data.material_fragment_count_buffer.clone());
-        // TODO
-        let global_cursor = cursor.field("gGlobalData").unwrap();
+
+        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
@@ -128,8 +97,8 @@ impl VisibilityBufferProcessingPass {
         input_cursor.field("materialIndices").unwrap().write_buffer(data.material_indices_buffer.clone());
         input_cursor.field("pipelineBindParameters").unwrap().write_buffer(data.pipeline_bind_commands.clone());
         input_cursor.field("computeDispatchParameters").unwrap().write_buffer(data.compute_dispatch_commands.clone());
-        // TODO
-        let global_cursor = cursor.field("gGlobalData").unwrap();
+        
+        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             vis_buffer_scan,
@@ -270,7 +239,7 @@ impl VisibilityBufferRasterizer {
                         members: [(
                             String::from("instanceInput.transform"),
                             VertexMemberInfo {
-                                offset: offset_of!(Instance, model_matrix) as u32,
+                                offset: offset_of!(InstanceData, model_transform) as u32,
                                 format: Format::R32G32B32A32_SFLOAT,
                                 num_elements: 4,
                                 stride: size_of::<[f32; 4]>() as u32,
@@ -279,7 +248,7 @@ impl VisibilityBufferRasterizer {
                         .iter()
                         .cloned()
                         .collect(),
-                        stride: size_of::<Instance>() as u32,
+                        stride: size_of::<InstanceData>() as u32,
                         input_rate: VertexInputRate::Instance { divisor: 1 },
                     },
                 ])
@@ -316,18 +285,6 @@ impl VisibilityBufferRasterizer {
             },
         );
 
-        let instance_buffer = buffer_from_slice(
-            rhi.buffer_allocator().clone(),
-            rhi.command_buffer_interface(),
-            rhi.queues().graphics_queue.clone(),
-            &[Instance {
-                model_matrix: glam::Mat4::default().to_cols_array_2d(),
-            }],
-            BufferUsage::VERTEX_BUFFER,
-            MemoryTypeFilter::PREFER_DEVICE,
-        )
-        .unwrap();
-
         Self {
             shader_object,
             pipeline,
@@ -335,7 +292,6 @@ impl VisibilityBufferRasterizer {
             rhi,
             depth_buffer,
             rt_framebuffer,
-            instance_buffer,
         }
     }
 
@@ -345,6 +301,7 @@ impl VisibilityBufferRasterizer {
         image_index: usize,
         extent: [u32; 2],
         scene: &VKScene,
+        data: &VisibilityBufferData
     ) -> Result<(), Box<ValidationError>> {
         command_buffer
             .begin_render_pass(
@@ -394,17 +351,18 @@ impl VisibilityBufferRasterizer {
 
         let resources = self.rhi.resource_manager();
         let rcs = resources.deref();
+        
+        command_buffer.bind_vertex_buffers(0, data.global_data.vertices.clone())?
+            .bind_vertex_buffers(1, data.global_data.instances.clone())?
+            .bind_index_buffer(data.global_data.indices.clone())?;
 
         scene
             .models()
             .iter()
-            .map(|model| {
+            .map(|model_handle| {
+                let model = model_handle.get(rcs).unwrap();
                 let mesh = model.mesh().get(rcs).unwrap();
-                command_buffer
-                    .bind_vertex_buffers(0, mesh.vertex().clone())?
-                    .bind_vertex_buffers(1, self.instance_buffer.clone())?
-                    .bind_index_buffer(mesh.index().reinterpret_ref::<[u32]>().clone())?;
-                unsafe { command_buffer.draw_indexed(mesh.index().len() as u32, 1, 0, 0, 0) }
+                unsafe { command_buffer.draw_indexed(mesh.index_size() as u32, 1, mesh.index_offset() as u32, mesh.vertex_offset() as i32, rcs.index(model.uuid()).unwrap() as u32) }
                     .map(|_| ())
             })
             .reduce(Result::or)
@@ -416,97 +374,21 @@ impl VisibilityBufferRasterizer {
     }
 }
 
-impl VisibilityBufferData {
-    pub fn new(
-        rhi: &VKRHI,
-        swapchain: &Swapchain,
-        max_sequence_count: u32,
-        num_materials: u32,
+impl PipelineBindParameter {
+    pub fn pipeline(
+        pipeline: &Arc<impl Pipeline + VulkanObject<Handle = ash::vk::Pipeline>>,
     ) -> Self {
-        let visibility_buffer = swapchain.create_gbuffer(
-            rhi,
-            Format::R32G32B32A32_UINT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-            ImageAspects::COLOR,
-        );
+        let address_info = PipelineIndirectDeviceAddressInfoNV::default()
+            .pipeline(pipeline.handle())
+            .pipeline_bind_point(map_pipeline_bind_point(pipeline.bind_point()));
 
-        let material_fragment_count_buffer = Self::create_slice_buffer(
-            rhi,
-            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
-            num_materials,
-        );
-
-        let index_counter_buffer = Buffer::new_sized(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-        )
-        .unwrap();
-
-        let material_indices_buffer =
-            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
-
-        let pipeline_bind_commands =
-            Self::create_slice_buffer(rhi, BufferUsage::INDIRECT_BUFFER, max_sequence_count);
-
-        let compute_dispatch_commands =
-            Self::create_slice_buffer(rhi, BufferUsage::INDIRECT_BUFFER, max_sequence_count);
-
-        let clear_buffer = buffer_from_slice(
-            rhi.buffer_allocator().clone(),
-            rhi.command_buffer_interface(),
-            rhi.queues().compute_queue.clone(),
-            (0..max_sequence_count)
-                .map(|_| 0u32)
-                .collect::<Vec<_>>()
-                .as_slice(),
-            BufferUsage::TRANSFER_SRC,
-            MemoryTypeFilter::PREFER_DEVICE,
-        ).unwrap();
-
+        let instance = unsafe { ash_instance(pipeline.device().instance()) };
+        let device = unsafe { ash_device(pipeline.device()) };
+        let dgc_device =
+            ash::nv::device_generated_commands_compute::Device::new(&instance, &device);
+        let address = unsafe { dgc_device.get_pipeline_indirect_device_address(&address_info) };
         Self {
-            visibility_buffer,
-            material_fragment_count_buffer,
-            index_counter_buffer,
-            material_indices_buffer,
-            pipeline_bind_commands,
-            compute_dispatch_commands,
-            clear_buffer,
+            pipeline_address: address,
         }
-    }
-
-    fn create_slice_buffer<T: BufferContents>(
-        rhi: &VKRHI,
-        usage: BufferUsage,
-        length: u32,
-    ) -> Subbuffer<[T]> {
-        Buffer::new_slice(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-            length.into(),
-        )
-        .unwrap()
-    }
-
-    pub fn clear(
-        &self,
-        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    ) -> Result<(), Box<ValidationError>> {
-        command_buffer.copy_buffer(CopyBufferInfo::buffers(
-            self.clear_buffer.clone(),
-            self.material_fragment_count_buffer.clone(),
-        ))?;
-        command_buffer.copy_buffer(CopyBufferInfo::buffers(
-            self.clear_buffer.clone(),
-            self.index_counter_buffer.clone(),
-        ))?;
-        Ok(())
     }
 }

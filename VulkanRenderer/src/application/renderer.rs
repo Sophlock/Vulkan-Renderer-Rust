@@ -1,5 +1,6 @@
 mod device_generated_commands;
 mod full_screen_pass;
+mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
 
@@ -41,9 +42,12 @@ use vulkano::{
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
+use vulkano::buffer::BufferUsage;
 use winit::dpi::PhysicalSize;
 
-use crate::application::renderer::visibility_buffer_generation::VisibilityBufferData;
+use crate::application::renderer::visibility_buffer_data::{
+    VisibilityBufferData, VisibilityBufferGlobalData,
+};
 use crate::application::renderer::visibility_buffer_shading::VisibilityBufferShadePass;
 use crate::application::{
     assets::asset_traits::{
@@ -70,6 +74,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::assets::asset_traits::Index;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -155,11 +160,13 @@ impl VKRenderer {
 
         // TODO: Correct num materials
         let num_materials = 1u32;
+        let vis_buffer_global_data = VisibilityBufferGlobalData::new(rhi.as_ref(), swapchain.extent);
         let vis_buffer_data = VisibilityBufferData::new(
             rhi.as_ref(),
             &swapchain,
             VisibilityBufferShadePass::MAX_SEQUENCE_COUNT,
             num_materials,
+            vis_buffer_global_data,
         );
         let vis_buffer_rasterizer =
             VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, &vis_buffer_data);
@@ -252,10 +259,18 @@ impl VKRenderer {
                 swapchain_image_index as usize,
                 self.mutable_state_const().swapchain.extent,
                 scene,
+                &self.mutable_state_const().vis_buffer_data
             )
             .unwrap();
 
-        self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
+        //self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
+        //    .unwrap();
+
+        let vis_buffer_generated_future = image_available_future
+            .then_execute(
+                self.rhi.queues().graphics_queue.clone(),
+                command_buffer.build().unwrap(),
+            )
             .unwrap();
 
         let mut compute_command_buffer = self
@@ -277,12 +292,25 @@ impl VKRenderer {
             )
             .unwrap();
 
-        let draw_finished_future = image_available_future
+        let compute_command_buffer = self
+            .mutable_state_const()
+            .vis_buffer_shade
+            .run(compute_command_buffer);
+        //let compute_command_buffer = compute_command_buffer.build().unwrap();
+
+        let draw_finished_future = vis_buffer_generated_future
             .then_execute(
-                self.rhi.queues().graphics_queue.clone(),
-                command_buffer.build().unwrap(),
+                self.rhi.queues().compute_queue.clone(),
+                compute_command_buffer,
             )
             .unwrap();
+
+        /*let draw_finished_future = image_available_future
+        .then_execute(
+            self.rhi.queues().graphics_queue.clone(),
+            command_buffer.build().unwrap(),
+        )
+        .unwrap();*/
 
         let mut compute_command_buffer = self
             .rhi
@@ -296,6 +324,7 @@ impl VKRenderer {
         .unwrap();
 
         let post_process_finished_future = draw_finished_future
+            .then_signal_semaphore()
             .then_execute(
                 self.rhi.queues().compute_queue.clone(),
                 compute_command_buffer.build().unwrap(),
@@ -411,7 +440,8 @@ impl VKRenderer {
         scene
             .models()
             .iter()
-            .map(|model| {
+            .map(|model_handle| {
+                let model = model_handle.get(rcs).unwrap();
                 let material_instance = model.material().get(rcs).unwrap();
                 let material = material_instance.material().get(rcs).unwrap();
                 let compiled_material = compiler.find_compiled_material(material).unwrap();

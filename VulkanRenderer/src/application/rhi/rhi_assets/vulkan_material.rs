@@ -21,6 +21,8 @@ pub struct VKMaterial {
     frag_spirv: Blob,
     shader_object_layout: Arc<ShaderObjectLayout>,
     uuid: usize,
+    module_name: String,
+    material_name: String,
 }
 
 impl VKMaterial {
@@ -60,6 +62,8 @@ impl VKMaterial {
             vert_spirv,
             frag_spirv,
             uuid: 0,
+            module_name: String::from(module_name),
+            material_name: String::from(material_name),
         })
     }
 
@@ -97,6 +101,14 @@ impl VKMaterial {
 
     pub fn frag_spirv(&self) -> &Blob {
         &self.frag_spirv
+    }
+    
+    pub fn module_name(&self) -> &str {
+        &self.module_name
+    }
+    
+    pub fn material_name(&self) -> &str {
+        &self.material_name
     }
 }
 

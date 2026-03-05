@@ -1,0 +1,340 @@
+use std::ops::Deref;
+use crate::application::assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex};
+use crate::application::renderer::visibility_buffer_generation::{
+    ComputeDispatchParameter, PipelineBindParameter,
+};
+use crate::application::rhi::VKRHI;
+use crate::application::rhi::buffer::buffer_from_slice;
+use crate::application::rhi::rhi_assets::vulkan_material::VKMaterial;
+use crate::application::rhi::rhi_assets::vulkan_material_instance::VKMaterialInstance;
+use crate::application::rhi::rhi_assets::vulkan_mesh::VKMesh;
+use crate::application::rhi::rhi_assets::vulkan_model::VKModel;
+use crate::application::rhi::shader_cursor::ShaderCursor;
+use crate::application::rhi::swapchain::Swapchain;
+use crate::application::rhi::swapchain_resources::SwapchainImage;
+use std::sync::{Arc, RwLock};
+use egui_winit_vulkano::egui::epaint::text::layout;
+use shader_slang::ComponentType;
+use shader_slang::structs::specialization_arg::SpecializationArg;
+use vulkano::ValidationError;
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer};
+use vulkano::format::Format;
+use vulkano::image::{ImageAspects, ImageUsage};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
+use vulkano::pipeline::compute::ComputePipelineCreateInfo;
+use vulkano::pipeline::{ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::pipeline::layout::{PipelineLayoutCreateInfo, PushConstantRange};
+use vulkano::shader::{EntryPoint, ShaderModule, ShaderStages};
+use vulkano::shader::spirv::{bytes_to_words, ExecutionModel};
+use crate::application::rhi::pipeline::compute_pipeline;
+
+#[derive(Clone)]
+pub struct VisibilityBufferData {
+    // The packed visibility buffer
+    pub visibility_buffer: Arc<RwLock<SwapchainImage>>,
+
+    // Stores the number of texels for each material
+    pub material_fragment_count_buffer: Subbuffer<[u32]>,
+
+    // Used to atomically increment an index counter. After the culling step, this will hold the number of materials to be shaded
+    pub index_counter_buffer: Subbuffer<u32>,
+
+    // Stores for each shading step the index of the material to be used
+    pub material_indices_buffer: Subbuffer<[u32]>,
+
+    // Holds the pipeline bind data
+    pub pipeline_bind_commands: Subbuffer<[PipelineBindParameter]>,
+
+    // Holds the compute dispatch data
+    pub compute_dispatch_commands: Subbuffer<[ComputeDispatchParameter]>,
+
+    // Used to clear data before writing
+    clear_buffer: Subbuffer<[u32]>,
+
+    // Global data (buffers etc.)
+    pub global_data: VisibilityBufferGlobalData,
+}
+
+#[derive(Clone)]
+pub struct VisibilityBufferGlobalData {
+    pub instances: Subbuffer<[InstanceData]>,
+    pub materials: Subbuffer<[MaterialData]>,
+    pub material_instances: Subbuffer<[MaterialInstanceData]>,
+    pub meshes: Subbuffer<[MeshData]>,
+    pub indices: Subbuffer<[u32]>,
+    pub vertices: Subbuffer<[Vertex]>,
+    pub screen_size: [u32; 2],
+    pipelines: Vec<Arc<ComputePipeline>>
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct InstanceData {
+    pub mesh_index: u32,
+    pub material_index: u32,
+    pub model_transform: [[f32; 4]; 4],
+    pub inverse_transpose_model_transform: [[f32; 4]; 4],
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct MaterialData {
+    pub pipeline_address: u64,
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct MaterialInstanceData {
+    pub material_index: u32,
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct MeshData {
+    pub first_primitive: u32,
+    pub primitive_count: u32,
+    pub first_vertex: u32,
+    pub vertex_count: u32,
+}
+
+impl VisibilityBufferData {
+    pub fn new(
+        rhi: &VKRHI,
+        swapchain: &Swapchain,
+        max_sequence_count: u32,
+        num_materials: u32,
+        global_data: VisibilityBufferGlobalData,
+    ) -> Self {
+        let visibility_buffer = swapchain.create_gbuffer(
+            rhi,
+            Format::R32G32B32A32_UINT,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+
+        let material_fragment_count_buffer = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
+            num_materials,
+        );
+
+        let index_counter_buffer = Buffer::new_sized(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+        )
+        .unwrap();
+
+        let material_indices_buffer =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
+
+        let pipeline_bind_commands =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER | BufferUsage::INDIRECT_BUFFER, max_sequence_count);
+
+        let compute_dispatch_commands =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER | BufferUsage::INDIRECT_BUFFER, max_sequence_count);
+
+        let clear_buffer = buffer_from_slice(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            rhi.queues().compute_queue.clone(),
+            (0..max_sequence_count)
+                .map(|_| 0u32)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            BufferUsage::TRANSFER_SRC,
+            MemoryTypeFilter::PREFER_DEVICE,
+        )
+        .unwrap();
+
+        Self {
+            visibility_buffer,
+            material_fragment_count_buffer,
+            index_counter_buffer,
+            material_indices_buffer,
+            pipeline_bind_commands,
+            compute_dispatch_commands,
+            clear_buffer,
+            global_data,
+        }
+    }
+
+    fn create_slice_buffer<T: BufferContents>(
+        rhi: &VKRHI,
+        usage: BufferUsage,
+        length: u32,
+    ) -> Subbuffer<[T]> {
+        Buffer::new_slice(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+            length.into(),
+        )
+        .unwrap()
+    }
+
+    pub fn clear(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) -> Result<(), Box<ValidationError>> {
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.material_fragment_count_buffer.clone(),
+        ))?;
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.index_counter_buffer.clone(),
+        ))?;
+        Ok(())
+    }
+}
+
+impl VisibilityBufferGlobalData {
+    pub fn new(rhi: &VKRHI, screen_size: [u32; 2]) -> Self {
+        let resources = rhi.resource_manager();
+
+        let instances = resources
+            .resource_iterator::<VKModel>()
+            .unwrap()
+            .map(|instance| InstanceData {
+                mesh_index: resources.index(instance.mesh().id()).unwrap() as u32,
+                material_index: resources.index(instance.material().id()).unwrap() as u32,
+                model_transform: instance.transform().to_cols_array_2d(),
+                inverse_transpose_model_transform: instance
+                    .transform()
+                    .inverse()
+                    .transpose()
+                    .to_cols_array_2d(),
+            })
+            .collect::<Vec<_>>();
+
+        let pipelines = resources
+            .resource_iterator::<VKMaterial>()
+            .unwrap()
+            .map(|material| Self::compile_pipeline(rhi, material))
+            .collect::<Vec<_>>();
+
+        let materials = pipelines
+            .iter()
+            .map(|pipeline| MaterialData {
+                pipeline_address: PipelineBindParameter::pipeline(pipeline).pipeline_address,
+            })
+            .collect::<Vec<_>>();
+
+        let material_instances = resources
+            .resource_iterator::<VKMaterialInstance>()
+            .unwrap()
+            .map(|instance| MaterialInstanceData {
+                material_index: resources.index(instance.material().id()).unwrap() as u32,
+            })
+            .collect::<Vec<_>>();
+
+        let meshes = resources
+            .resource_iterator::<VKMesh>()
+            .unwrap()
+            .map(|mesh| MeshData {
+                first_primitive: mesh.index_offset() as u32 / 3,
+                primitive_count: mesh.index_size() as u32 / 3,
+                first_vertex: mesh.vertex_offset() as u32,
+                vertex_count: mesh.vertex_size() as u32,
+            })
+            .collect::<Vec<_>>();
+
+        Self {
+            instances: Self::make_buffer(rhi, instances.as_slice(), BufferUsage::VERTEX_BUFFER),
+            materials: Self::make_buffer(rhi, materials.as_slice(), BufferUsage::empty()),
+            meshes: Self::make_buffer(rhi, meshes.as_slice(), BufferUsage::empty()),
+            material_instances: Self::make_buffer(rhi, material_instances.as_slice(), BufferUsage::empty()),
+            indices: resources.shared_buffer::<Index>().unwrap().clone().reinterpret(),
+            vertices: resources.shared_buffer().unwrap().clone(),
+            screen_size,
+            pipelines
+        }
+    }
+
+    pub fn write_to_shader_cursor(&self, shader_cursor: &mut ShaderCursor) {
+        shader_cursor
+            .field("instances")
+            .unwrap()
+            .write_buffer(self.instances.clone());
+        shader_cursor
+            .field("materials")
+            .unwrap()
+            .write_buffer(self.materials.clone());
+        shader_cursor
+            .field("materialInstances")
+            .unwrap()
+            .write_buffer(self.material_instances.clone());
+        shader_cursor
+            .field("meshes")
+            .unwrap()
+            .write_buffer(self.meshes.clone());
+        shader_cursor
+            .field("indexBuffer")
+            .unwrap()
+            .write_buffer(self.indices.clone());
+        shader_cursor
+            .field("vertexBuffer")
+            .unwrap()
+            .write_buffer(self.vertices.clone());
+        shader_cursor
+            .field("screenSize")
+            .unwrap()
+            .write(&self.screen_size);
+    }
+
+    fn make_buffer<T: BufferContents + Copy>(rhi: &VKRHI, data: &[T], usage: BufferUsage) -> Subbuffer<[T]> {
+        buffer_from_slice(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            rhi.queues().compute_queue.clone(),
+            data,
+            BufferUsage::STORAGE_BUFFER | usage,
+            MemoryTypeFilter::PREFER_DEVICE,
+        )
+        .unwrap()
+    }
+
+    fn compile_pipeline(rhi: &VKRHI, material: &VKMaterial) -> Arc<ComputePipeline> {
+        let compiler = rhi.slang_compiler();
+        let module = compiler
+            .session()
+            .load_module("Engine/VisibilityBuffer/visBufferComputeShade")
+            .unwrap();
+        let entry = module.find_entry_point_by_name("shadeVisBuffer").unwrap();
+        let module_component: ComponentType = module.into();
+        let material_module = compiler.session().load_module(material.module_name()).unwrap();
+        let material_module_component: ComponentType = material_module.into();
+        let material_reflection = material_module_component
+            .layout(0).unwrap()
+            .find_type_by_name(material.material_name())
+            .unwrap();
+        let composed = compiler
+            .session()
+            .create_composite_component_type(&[module_component, entry.into()])
+            .unwrap();
+        let specialized = composed.specialize(&[SpecializationArg::new(material_reflection)]).unwrap();
+        let linked = specialized.link().unwrap();
+        let spirv = linked.entry_point_code(0, 0).unwrap();
+
+        let push = PushConstantRange {
+            stages: ShaderStages::COMPUTE,
+            offset: 0,
+            size: 0,
+        };
+        let create_info = PipelineLayoutCreateInfo {
+            set_layouts: vec![],
+            push_constant_ranges: vec![/*push*/],
+            ..PipelineLayoutCreateInfo::default()
+        };
+        let layout = PipelineLayout::new(rhi.device().clone(), create_info).unwrap();
+        compute_pipeline().shader(rhi.device().clone(), bytes_to_words(spirv.as_slice()).unwrap().deref()).build_pipeline(rhi.device().clone(), layout)
+    }
+}

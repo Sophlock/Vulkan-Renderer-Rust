@@ -157,9 +157,9 @@ pub trait RHICameraInterface {
 }
 
 pub trait SceneInterface: Sized {
-    type ModelType: ModelInterface;
+    type ModelType: ModelInterface + 'static;
     type CameraType: CameraInterface;
-    fn models(&self) -> &Vec<Self::ModelType>;
+    fn models(&self) -> &Vec<AssetHandle<Self::ModelType>>;
     fn camera(&self) -> &Self::CameraType;
     /*fn rhi<RHIType: RHISceneInterface>(&self, rhi: &RHIType::RHI) -> RHIType {
         RHIType::create(self, rhi)
@@ -173,7 +173,7 @@ pub trait RHISceneInterface {
         rhi: &Self::RHI,
         resource_manager: &mut RHIResourceManager,
     ) -> Self;
-    fn models(&self) -> &[<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType];
+    fn models(&self) -> &[RHIHandle<<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType>];
     fn camera(&self) -> &<<Self as RHISceneInterface>::RHI as RHIInterface>::CameraType;
 }
 
