@@ -420,7 +420,11 @@ impl VisibilityBufferGlobalData {
 
     fn create_shader_object(rhi: &VKRHI, linked: ComponentType) -> Arc<ShaderObject> {
         // We are assuming that all dynamically bound pipelines have the same layout and no (relevant) existential objects
-        let layout = ShaderObjectLayout::new(linked, &[], rhi.device(), ShaderStages::COMPUTE);
+        let layout = ShaderObjectLayout::new_with_push_constants(linked, &[], rhi.device(), ShaderStages::COMPUTE, vec![PushConstantRange {
+            stages: ShaderStages::COMPUTE,
+            offset: 0,
+            size: 16,
+        }]);
         ShaderObject::new(layout, rhi.descriptor_allocator(), rhi.buffer_allocator(), rhi.in_flight_frames() as u32)
     }
 

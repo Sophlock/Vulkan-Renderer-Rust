@@ -21,6 +21,7 @@ use vulkano::{
     memory::allocator::AllocationCreateInfo,
     pipeline::{Pipeline, PipelineBindPoint},
 };
+use vulkano::sync::ImageMemoryBarrier;
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -101,6 +102,7 @@ impl VisibilityBufferShadePass {
             )
             .unwrap();
         let built_command_buffer = command_buffer.build().unwrap();
+        
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
                 self.data.pipeline_bind_commands.clone().reinterpret(),

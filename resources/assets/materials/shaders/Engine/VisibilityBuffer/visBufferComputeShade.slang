@@ -4,21 +4,23 @@ import Core.geometry;
 import Core.material;
 import Core.globalData;
 import visBufferData;
+import Core.largeBlock;
 
 struct VisBufferShadeInput {
-    Texture2D<uint4>* visBuffer;
-    RWTexture2D<float4>* outputRT;
     GlobalData* globalData;
     uint64_t thisPipelineAddress;
 }
 
-[vk::push_constant] VisBufferShadeInput gInput;
 /*uniform GlobalData gGlobalData;
 uniform ViewData gViewData;*/
 
+Texture2D<uint4> visBuffer;
+RWTexture2D<float4> outputRT;
+LargeBlock _;
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
-func shadeVisBuffer<MaterialType: IMaterial>(uint2 dispatch: SV_DispatchThreadID)->void {
+func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadID, uniform VisBufferShadeInput gInput)->void {
     /*let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
     let instanceID = packedVisBuffer.y;
 

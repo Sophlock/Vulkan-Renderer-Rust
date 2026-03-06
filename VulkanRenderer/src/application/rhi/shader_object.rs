@@ -22,7 +22,7 @@ use vulkano::{
     shader::ShaderStages,
     sync::Sharing,
 };
-
+use vulkano::pipeline::layout::PushConstantRange;
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture,
     shader_cursor::{ShaderOffset, ShaderSize},
@@ -61,7 +61,16 @@ impl ShaderObjectLayout {
         linked_program: ComponentType,
         existential_objects: &[&TypeLayout],
         device: &Arc<Device>,
+        shader_stages: ShaderStages
+    ) -> Arc<Self> {
+        Self::new_with_push_constants(linked_program, existential_objects, device, shader_stages, vec![])
+    }
+    pub fn new_with_push_constants(
+        linked_program: ComponentType,
+        existential_objects: &[&TypeLayout],
+        device: &Arc<Device>,
         shader_stages: ShaderStages,
+        push_constant_ranges: Vec<PushConstantRange> 
     ) -> Arc<Self> {
         // TODO: This currently does not handle ParameterBlocks!
 
@@ -196,6 +205,7 @@ impl ShaderObjectLayout {
             device.clone(),
             PipelineLayoutCreateInfo {
                 set_layouts: vec![descriptor_set_layout.clone()],
+                push_constant_ranges,
                 ..PipelineLayoutCreateInfo::default()
             },
         )
@@ -226,6 +236,7 @@ impl ShaderObjectLayout {
             BindingType::InputRenderTarget => DescriptorType::InputAttachment,
             BindingType::RawBuffer => DescriptorType::StorageBuffer,
             BindingType::MutableRawBuffer => DescriptorType::StorageBuffer,
+            BindingType::PushConstant => panic!("Push constants cannot be mapped to a descriptor type!"),
             _ => DescriptorType::UniformBuffer, //panic!("Unknown slang binding type {:?}", binding_type),
                                                 /*BindingType::TypedBuffer => {}
                                                 BindingType::RawBuffer => {}
@@ -233,7 +244,6 @@ impl ShaderObjectLayout {
                                                 BindingType::VaryingInput => {}
                                                 BindingType::VaryingOutput => {}
                                                 BindingType::ExistentialValue => {}
-                                                BindingType::PushConstant => {}
                                                 BindingType::MutableFlag => {}
                                                 BindingType::MutableTypedBuffer => {}
                                                 BindingType::BaseMask => {}
@@ -248,7 +258,9 @@ impl ShaderObjectLayout {
         size: i64,
         shader_stages: ShaderStages,
     ) -> impl Iterator<Item = DescriptorSetLayoutBinding> + Clone {
-        (0..size).map(move |i| {
+        (0..size)
+            .filter(|i| layout.binding_range_type(*i) != BindingType::PushConstant)
+            .map(move |i| {
             let descriptor_type = Self::map_descriptor_type(layout.binding_range_type(i));
             DescriptorSetLayoutBinding {
                 descriptor_count: layout.binding_range_binding_count(i) as u32,
