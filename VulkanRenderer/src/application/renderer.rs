@@ -121,7 +121,7 @@ impl VKRenderer {
         let color_render_target = swapchain.create_gbuffer(
             rhi.as_ref(),
             Format::R32G32B32A32_SFLOAT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE,
             ImageAspects::COLOR,
         );
         let pp_render_target = swapchain.create_gbuffer(
@@ -164,6 +164,7 @@ impl VKRenderer {
             VisibilityBufferShadePass::MAX_SEQUENCE_COUNT,
             num_materials,
             vis_buffer_global_data,
+            color_render_target.clone()
         );
         let vis_buffer_rasterizer =
             VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, &vis_buffer_data);
@@ -292,7 +293,7 @@ impl VKRenderer {
         let compute_command_buffer = self
             .mutable_state_const()
             .vis_buffer_shade
-            .run(compute_command_buffer);
+            .run(compute_command_buffer, swapchain_image_index as usize);
         //let compute_command_buffer = compute_command_buffer.build().unwrap();
 
         let draw_finished_future = vis_buffer_generated_future
