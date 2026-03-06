@@ -32,9 +32,13 @@ pub fn create_logical_device(
         //compute_derivative_group_quads: true,
         synchronization2: true,
         device_generated_commands: true,
+        device_generated_compute: true,
+        device_generated_compute_pipelines: true,
         geometry_shader: true,
         fragment_shader_barycentric: true,
         shader_int64: true,
+        buffer_device_address: true,
+        variable_pointers_storage_buffer: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {

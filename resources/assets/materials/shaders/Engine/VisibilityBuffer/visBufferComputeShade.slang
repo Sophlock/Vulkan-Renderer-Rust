@@ -6,13 +6,14 @@ import Core.globalData;
 import visBufferData;
 
 struct VisBufferShadeInput {
-    Texture2D<uint4> visBuffer;
-    RWTexture2D<float4> outputRT;
+    Texture2D<uint4>* visBuffer;
+    RWTexture2D<float4>* outputRT;
+    GlobalData* globalData;
     uint64_t thisPipelineAddress;
 }
 
-/*uniform VisBufferShadeInput gInput;
-uniform GlobalData gGlobalData;
+[vk::push_constant] VisBufferShadeInput gInput;
+/*uniform GlobalData gGlobalData;
 uniform ViewData gViewData;*/
 
 [shader("compute")]

@@ -190,11 +190,11 @@ impl ApplicationHandler<AppEvent> for Application {
 
         rhi.resource_manager_mut().allocate_shared_buffer::<Vertex>(
             1000000,
-            BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
+            BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
         );
         rhi.resource_manager_mut().allocate_shared_buffer::<Index>(
             1000000,
-            BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER,
+            BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
         );
         self.update_scene_proxy(rhi.as_ref());
 

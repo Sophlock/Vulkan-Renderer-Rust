@@ -32,7 +32,7 @@ func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
         gInput.materialIndices.GetDimensions(maxSequence, _);
         if (myIndex >= maxSequence) return;
         gInput.materialIndices[myIndex] = materialIndex;
-        gInput.pipelineBindParameters[myIndex] = {gGlobalData.materials[materialIndex].pipelineAddress};
+        gInput.pipelineBindParameters[myIndex] = {gGlobalData.materials.Load(materialIndex).pipelineAddress};
         gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.screenSize / 16, 1) };
     }
 }

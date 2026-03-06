@@ -16,7 +16,7 @@ func countTexels(uint2 dispatch: SV_DispatchThreadID)->void {
     let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
     let instanceID = packedVisBuffer.y;
 
-    let instance = gGlobalData.instances[instanceID];
-    let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
+    let instance = gGlobalData.instances.Load(instanceID);
+    let materialInstance = gGlobalData.materialInstances.Load(instance.materialInstanceIndex);
     gInput.materialFragmentCounts[materialInstance.materialIndex].add(1);
 }

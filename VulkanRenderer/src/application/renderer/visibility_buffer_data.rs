@@ -260,13 +260,13 @@ impl VisibilityBufferGlobalData {
             .collect::<Vec<_>>();
 
         Self {
-            instances: Self::make_buffer(rhi, instances.as_slice(), BufferUsage::VERTEX_BUFFER),
-            materials: Self::make_buffer(rhi, materials.as_slice(), BufferUsage::empty()),
-            meshes: Self::make_buffer(rhi, meshes.as_slice(), BufferUsage::empty()),
+            instances: Self::make_buffer(rhi, instances.as_slice(), BufferUsage::VERTEX_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS),
+            materials: Self::make_buffer(rhi, materials.as_slice(), BufferUsage::SHADER_DEVICE_ADDRESS),
+            meshes: Self::make_buffer(rhi, meshes.as_slice(), BufferUsage::SHADER_DEVICE_ADDRESS),
             material_instances: Self::make_buffer(
                 rhi,
                 material_instances.as_slice(),
-                BufferUsage::empty(),
+                BufferUsage::SHADER_DEVICE_ADDRESS,
             ),
             indices: resources
                 .shared_buffer::<Index>()
@@ -283,27 +283,33 @@ impl VisibilityBufferGlobalData {
         shader_cursor
             .field("instances")
             .unwrap()
-            .write_buffer(self.instances.clone());
+            .write_address(self.instances.device_address().unwrap());
+            //.write_buffer(self.instances.clone());
         shader_cursor
             .field("materials")
             .unwrap()
-            .write_buffer(self.materials.clone());
+            .write_address(self.materials.device_address().unwrap());
+            //.write_buffer(self.materials.clone());
         shader_cursor
             .field("materialInstances")
             .unwrap()
-            .write_buffer(self.material_instances.clone());
+            .write_address(self.material_instances.device_address().unwrap());
+            //.write_buffer(self.material_instances.clone());
         shader_cursor
             .field("meshes")
             .unwrap()
-            .write_buffer(self.meshes.clone());
+            .write_address(self.meshes.device_address().unwrap());
+            //.write_buffer(self.meshes.clone());
         shader_cursor
             .field("indexBuffer")
             .unwrap()
-            .write_buffer(self.indices.clone());
+            .write_address(self.indices.device_address().unwrap());
+            //.write_buffer(self.indices.clone());
         shader_cursor
             .field("vertexBuffer")
             .unwrap()
-            .write_buffer(self.vertices.clone());
+            .write_address(self.vertices.device_address().unwrap());
+            //.write_buffer(self.vertices.clone());
         shader_cursor
             .field("screenSize")
             .unwrap()
@@ -357,11 +363,11 @@ impl VisibilityBufferGlobalData {
         let push = PushConstantRange {
             stages: ShaderStages::COMPUTE,
             offset: 0,
-            size: 0,
+            size: 32,
         };
         let create_info = PipelineLayoutCreateInfo {
             set_layouts: vec![],
-            push_constant_ranges: vec![/*push*/],
+            push_constant_ranges: vec![push],
             ..PipelineLayoutCreateInfo::default()
         };
         let layout = PipelineLayout::new(rhi.device().clone(), create_info).unwrap();

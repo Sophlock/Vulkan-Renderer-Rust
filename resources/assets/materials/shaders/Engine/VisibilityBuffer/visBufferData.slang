@@ -34,12 +34,12 @@ public struct Vertex {
 }
 
 public struct GlobalData {
-    public StructuredBuffer<InstanceData> instances;
-    public StructuredBuffer<MaterialData> materials;
-    public StructuredBuffer<MaterialInstanceData> materialInstances;
-    public StructuredBuffer<MeshData> meshes;
-    public StructuredBuffer<Triangle> indexBuffer;
-    public StructuredBuffer<Vertex> vertexBuffer;
+    public StructuredBuffer<InstanceData>* instances;
+    public StructuredBuffer<MaterialData>* materials;
+    public StructuredBuffer<MaterialInstanceData>* materialInstances;
+    public StructuredBuffer<MeshData>* meshes;
+    public StructuredBuffer<Triangle>* indexBuffer;
+    public StructuredBuffer<Vertex>* vertexBuffer;
     public uint2 screenSize;
 }
 
