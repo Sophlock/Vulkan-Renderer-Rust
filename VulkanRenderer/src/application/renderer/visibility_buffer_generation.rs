@@ -5,29 +5,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
-use smallvec::smallvec;
-use vulkano::{
-    ValidationError, VulkanObject,
-    buffer::BufferContents,
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
-    },
-    device::DeviceOwned,
-    format::{ClearValue, Format},
-    pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
-        graphics::{
-            subpass::PipelineSubpassType,
-            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-            viewport::{Scissor, Viewport},
-        },
-    },
-    render_pass::RenderPass,
-    shader::{ShaderStages, spirv::bytes_to_words},
-};
-
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, Vertex,
@@ -50,6 +27,29 @@ use crate::application::{
         },
     },
 };
+use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
+use smallvec::smallvec;
+use vulkano::pipeline::layout::PushConstantRange;
+use vulkano::{
+    ValidationError, VulkanObject,
+    buffer::BufferContents,
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    },
+    device::DeviceOwned,
+    format::{ClearValue, Format},
+    pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+            viewport::{Scissor, Viewport},
+        },
+    },
+    render_pass::RenderPass,
+    shader::{ShaderStages, spirv::bytes_to_words},
+};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
@@ -60,6 +60,7 @@ pub struct VisibilityBufferProcessingPass {
 struct VisBufferStep {
     shader_object: Arc<ShaderObject>,
     pipeline: Arc<ComputePipeline>,
+    data: Arc<VisibilityBufferData>,
 }
 
 pub struct VisibilityBufferRasterizer {
@@ -83,14 +84,26 @@ pub struct ComputeDispatchParameter {
     pub dispatch: [u32; 3],
 }
 
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct VisBufferPushConstant {
+    pub global_data_address: DeviceAddress,
+    pub this_pipeline_address: DeviceAddress,
+}
+
 impl VisibilityBufferProcessingPass {
-    pub fn new(rhi: &VKRHI, num_materials: u32, data: &VisibilityBufferData) -> Self {
-        let vis_buffer_scan =
-            VisBufferStep::new(rhi, "Engine/VisibilityBuffer/visBufferScan", "countTexels");
+    pub fn new(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> Self {
+        let vis_buffer_scan = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferScan",
+            "countTexels",
+            data.clone(),
+        );
         let shader_cull = VisBufferStep::new(
             rhi,
             "Engine/VisibilityBuffer/visBufferShaderCull",
             "cullShaders",
+            data.clone(),
         );
 
         let cursor = ShaderCursor::new(vis_buffer_scan.shader_object.clone());
@@ -104,8 +117,8 @@ impl VisibilityBufferProcessingPass {
             .unwrap()
             .write_buffer(data.material_fragment_count_buffer.clone());
 
-        data.global_data
-            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        //data.global_data
+        //    .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
@@ -129,14 +142,18 @@ impl VisibilityBufferProcessingPass {
             .field("computeDispatchParameters")
             .unwrap()
             .write_buffer(data.compute_dispatch_commands.clone());
+        input_cursor
+            .field("shadePushConstants")
+            .unwrap()
+            .write_buffer(data.push_constants.clone());
 
-        data.global_data
-            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        //data.global_data
+        //    .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             vis_buffer_scan,
             shader_cull,
-            num_materials,
+            num_materials: data.global_data.num_materials(),
         }
     }
 
@@ -161,7 +178,7 @@ impl VisibilityBufferProcessingPass {
 }
 
 impl VisBufferStep {
-    fn new(rhi: &VKRHI, module: &str, entry_point: &str) -> Self {
+    fn new(rhi: &VKRHI, module: &str, entry_point: &str, data: Arc<VisibilityBufferData>) -> Self {
         let session = rhi.slang_compiler().session();
         let module = session.load_module(module).unwrap();
         let entry = module.find_entry_point_by_name(entry_point).unwrap();
@@ -170,8 +187,18 @@ impl VisBufferStep {
             .unwrap()
             .link()
             .unwrap();
-        let shader_object_layout =
-            ShaderObjectLayout::new(linked.clone(), &[], rhi.device(), ShaderStages::COMPUTE);
+        let shader_object_layout = ShaderObjectLayout::new_with_push_constants(
+            linked.clone(),
+            &[],
+            rhi.device(),
+            ShaderStages::COMPUTE,
+            // Global data is passed as push constant
+            vec![PushConstantRange {
+                stages: ShaderStages::COMPUTE,
+                offset: 0,
+                size: size_of::<DeviceAddress>() as u32,
+            }],
+        );
         let pipeline_layout = shader_object_layout.pipeline_layout().clone();
         let shader_object = ShaderObject::new(
             shader_object_layout,
@@ -190,6 +217,7 @@ impl VisBufferStep {
         Self {
             shader_object,
             pipeline,
+            data,
         }
     }
 
@@ -206,6 +234,13 @@ impl VisBufferStep {
                 self.shader_object.pipeline_layout().clone(),
                 0,
                 self.shader_object.descriptor_sets()[image_index].clone(),
+            )?
+            .push_constants(
+                self.shader_object
+                    .pipeline_layout()
+                    .clone(),
+                0,
+                self.data.global_data_buffer_address(),
             )?;
         unsafe { command_buffer.dispatch(dispatch) }?;
         Ok(())

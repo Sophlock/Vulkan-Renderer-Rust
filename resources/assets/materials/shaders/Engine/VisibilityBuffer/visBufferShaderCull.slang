@@ -1,6 +1,7 @@
 module visBufferShaderCull;
 
 import visBufferData;
+import Core.largeBlock;
 
 struct PipelineBindParameter {
     uint64_t pipelineAddress; 
@@ -16,14 +17,17 @@ struct MaterialCountData {
     RWStructuredBuffer<uint> materialIndices;
     RWStructuredBuffer<PipelineBindParameter> pipelineBindParameters;
     RWStructuredBuffer<ComputeDispatchParameter> computeDispatchParameters;
+    RWStructuredBuffer<VisBufferShadeInput> shadePushConstants;
 }
 
+uniform LargeBlock _;
 uniform MaterialCountData gInput;
-uniform GlobalData gGlobalData;
+uniform GlobalData globalData;
 
 [shader("compute")]
 [numthreads(16, 1, 1)]
-func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
+func cullShaders(uint dispatch: SV_DispatchThreadID, uniform GlobalData* globalDataPtr)->void {
+    //let globalData = inGlobalData.Load(0);
     let materialIndex = dispatch;
     let texelCount = gInput.texelCounts[materialIndex];
     if (texelCount > 0) {
@@ -32,7 +36,10 @@ func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
         gInput.materialIndices.GetDimensions(maxSequence, _);
         if (myIndex >= maxSequence) return;
         gInput.materialIndices[myIndex] = materialIndex;
-        gInput.pipelineBindParameters[myIndex] = {gGlobalData.materials.Load(materialIndex).pipelineAddress};
-        gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.screenSize / 16, 1) };
+        let material = globalData.materials.Load(materialIndex);
+        let pipelineAddress = material.pipelineAddress;
+        gInput.pipelineBindParameters[myIndex] = {pipelineAddress};
+        gInput.computeDispatchParameters[myIndex] = { uint3(globalData.mutData.Load(0).screenSize / 16, 1) };
+        gInput.shadePushConstants[myIndex] = { globalDataPtr, pipelineAddress };
     }
 }

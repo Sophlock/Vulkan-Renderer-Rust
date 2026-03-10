@@ -14,25 +14,20 @@ use crate::application::{
 };
 use ash::vk::{IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV};
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
-use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
-    device::DeviceOwned,
-    memory::allocator::AllocationCreateInfo,
-    pipeline::{Pipeline, PipelineBindPoint},
-};
+use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, device::DeviceOwned, memory::allocator::AllocationCreateInfo, pipeline::{Pipeline, PipelineBindPoint}, VulkanObject};
 use vulkano::sync::ImageMemoryBarrier;
+use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
     commands_layout: Arc<IndirectCommandsLayout>,
     preprocess_buffer: Subbuffer<[u8]>,
-    data: VisibilityBufferData,
+    data: Arc<VisibilityBufferData>,
 }
 
 impl VisibilityBufferShadePass {
     pub const MAX_SEQUENCE_COUNT: u32 = 1000u32;
-    pub fn new(rhi: Rc<VKRHI>, data: VisibilityBufferData) -> Self {
+    pub fn new(rhi: Rc<VKRHI>, data: Arc<VisibilityBufferData>) -> Self {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
@@ -43,11 +38,17 @@ impl VisibilityBufferShadePass {
                         .token_type(IndirectCommandsTokenTypeNV::PIPELINE)
                         .stream(0),
                     IndirectCommandsLayoutTokenNV::default()
+                        .token_type(IndirectCommandsTokenTypeNV::PUSH_CONSTANT)
+                        .pushconstant_offset(0)
+                        .pushconstant_size(size_of::<VisBufferPushConstant>() as u32)
+                        .pushconstant_pipeline_layout(data.global_data.shader_object().pipeline_layout().handle()),
+                    IndirectCommandsLayoutTokenNV::default()
                         .token_type(IndirectCommandsTokenTypeNV::DISPATCH)
                         .stream(1),
                 ],
                 strides: vec![
                     size_of::<PipelineBindParameter>() as u32,
+                    size_of::<VisBufferPushConstant>() as u32,
                     size_of::<ComputeDispatchParameter>() as u32,
                 ],
                 ..IndirectCommandsLayoutCreateInfo::default()

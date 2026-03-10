@@ -1,8 +1,5 @@
-use std::{
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
-
+use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
+use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
 use crate::application::{
     assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
     renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter},
@@ -19,7 +16,12 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
+use ash::vk::DeviceAddress;
 use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
+use std::{
+    ops::Deref,
+    sync::{Arc, RwLock},
+};
 use vulkano::descriptor_set::layout::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
 };
@@ -36,7 +38,6 @@ use vulkano::{
     },
     shader::{ShaderStages, spirv::bytes_to_words},
 };
-use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -58,6 +59,9 @@ pub struct VisibilityBufferData {
     // Holds the compute dispatch data
     pub compute_dispatch_commands: Subbuffer<[ComputeDispatchParameter]>,
 
+    // Holds the push constants
+    pub push_constants: Subbuffer<[VisBufferPushConstant]>,
+
     // Used to clear data before writing
     clear_buffer: Subbuffer<[u32]>,
 
@@ -65,7 +69,10 @@ pub struct VisibilityBufferData {
     pub global_data: VisibilityBufferGlobalData,
 
     // Final output rt
-    pub final_render_target: Arc<RwLock<SwapchainImage>>
+    pub final_render_target: Arc<RwLock<SwapchainImage>>,
+
+    // Buffer with the global data pointers to be used as a push constant
+    pub global_data_buffer: Subbuffer<VisBufferGlobalDataPointers>,
 }
 
 #[derive(Clone)]
@@ -76,9 +83,10 @@ pub struct VisibilityBufferGlobalData {
     pub meshes: Subbuffer<[MeshData]>,
     pub indices: Subbuffer<[u32]>,
     pub vertices: Subbuffer<[Vertex]>,
-    pub screen_size: [u32; 2],
+    pub mutating_data: Subbuffer<MutatingData>,
     pipelines: Vec<Arc<ComputePipeline>>,
     shader_object: Arc<ShaderObject>,
+    material_count: u32,
 }
 
 #[derive(Copy, Clone, BufferContents)]
@@ -111,14 +119,32 @@ pub struct MeshData {
     pub vertex_count: u32,
 }
 
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct MutatingData {
+    pub screen_size: [u32; 2],
+    pub view_matrix: [[f32; 4]; 4],
+}
+
+#[derive(Copy, Clone, BufferContents)]
+#[repr(C)]
+pub struct VisBufferGlobalDataPointers {
+    instances: DeviceAddress,
+    materials: DeviceAddress,
+    material_instances: DeviceAddress,
+    meshes: DeviceAddress,
+    index_buffer: DeviceAddress,
+    vertex_buffer: DeviceAddress,
+    mutating_data: DeviceAddress,
+}
+
 impl VisibilityBufferData {
     pub fn new(
         rhi: &VKRHI,
         swapchain: &Swapchain,
         max_sequence_count: u32,
-        num_materials: u32,
         global_data: VisibilityBufferGlobalData,
-        final_render_target: Arc<RwLock<SwapchainImage>>
+        final_render_target: Arc<RwLock<SwapchainImage>>,
     ) -> Self {
         let visibility_buffer = swapchain.create_gbuffer(
             rhi,
@@ -130,7 +156,7 @@ impl VisibilityBufferData {
         let material_fragment_count_buffer = Self::create_slice_buffer(
             rhi,
             BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
-            num_materials,
+            global_data.num_materials(),
         );
 
         let index_counter_buffer = Buffer::new_sized(
@@ -158,6 +184,12 @@ impl VisibilityBufferData {
             max_sequence_count,
         );
 
+        let push_constants = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER | BufferUsage::INDIRECT_BUFFER,
+            max_sequence_count,
+        );
+
         let clear_buffer = buffer_from_slice(
             rhi.buffer_allocator().clone(),
             rhi.command_buffer_interface(),
@@ -171,6 +203,17 @@ impl VisibilityBufferData {
         )
         .unwrap();
 
+        let global_data_buffer = buffer_from_slice(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            rhi.queues().compute_queue.clone(),
+            &[global_data.buffer_pointers()],
+            BufferUsage::SHADER_DEVICE_ADDRESS,
+            MemoryTypeFilter::PREFER_DEVICE,
+        )
+        .unwrap()
+        .reinterpret();
+
         Self {
             visibility_buffer,
             material_fragment_count_buffer,
@@ -178,9 +221,11 @@ impl VisibilityBufferData {
             material_indices_buffer,
             pipeline_bind_commands,
             compute_dispatch_commands,
+            push_constants,
             clear_buffer,
             global_data,
-            final_render_target
+            final_render_target,
+            global_data_buffer,
         }
     }
 
@@ -215,10 +260,14 @@ impl VisibilityBufferData {
         ))?;
         Ok(())
     }
+
+    pub fn global_data_buffer_address(&self) -> DeviceAddress {
+        self.global_data_buffer.device_address().unwrap().get()
+    }
 }
 
 impl VisibilityBufferGlobalData {
-    pub fn new(rhi: &VKRHI, screen_size: [u32; 2]) -> Self {
+    pub fn new(rhi: &VKRHI, mutating_data: Subbuffer<MutatingData>) -> Self {
         let resources = rhi.resource_manager();
 
         let instances = resources
@@ -236,7 +285,10 @@ impl VisibilityBufferGlobalData {
             })
             .collect::<Vec<_>>();
 
-        let first_linked = Self::create_linked_program(rhi, resources.resource_iterator().unwrap().next().unwrap());
+        let first_linked = Self::create_linked_program(
+            rhi,
+            resources.resource_iterator().unwrap().next().unwrap(),
+        );
         let shader_object = Self::create_shader_object(rhi, first_linked);
         let pipelines = resources
             .resource_iterator::<VKMaterial>()
@@ -270,6 +322,8 @@ impl VisibilityBufferGlobalData {
             })
             .collect::<Vec<_>>();
 
+        let material_count = materials.len() as u32;
+
         Self {
             instances: Self::make_buffer(
                 rhi,
@@ -293,9 +347,10 @@ impl VisibilityBufferGlobalData {
                 .clone()
                 .reinterpret(),
             vertices: resources.shared_buffer().unwrap().clone(),
-            screen_size,
+            mutating_data,
             pipelines,
-            shader_object
+            shader_object,
+            material_count,
         }
     }
 
@@ -331,9 +386,21 @@ impl VisibilityBufferGlobalData {
             .write_address(self.vertices.device_address().unwrap());
         //.write_buffer(self.vertices.clone());
         shader_cursor
-            .field("screenSize")
+            .field("mutData")
             .unwrap()
-            .write(&self.screen_size);
+            .write_address(self.mutating_data.device_address().unwrap());
+    }
+
+    pub fn buffer_pointers(&self) -> VisBufferGlobalDataPointers {
+        VisBufferGlobalDataPointers {
+            instances: self.instances.device_address().unwrap().get(),
+            materials: self.materials.device_address().unwrap().get(),
+            material_instances: self.material_instances.device_address().unwrap().get(),
+            meshes: self.meshes.device_address().unwrap().get(),
+            index_buffer: self.indices.device_address().unwrap().get(),
+            vertex_buffer: self.vertices.device_address().unwrap().get(),
+            mutating_data: self.mutating_data.device_address().unwrap().get(),
+        }
     }
 
     fn make_buffer<T: BufferContents + Copy>(
@@ -350,44 +417,6 @@ impl VisibilityBufferGlobalData {
             MemoryTypeFilter::PREFER_DEVICE,
         )
         .unwrap()
-    }
-
-    fn create_pipeline_layout(rhi: &VKRHI) -> Arc<PipelineLayout> {
-        let bindings = [
-            (
-                0u32,
-                DescriptorSetLayoutBinding {
-                    stages: ShaderStages::COMPUTE,
-                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageImage)
-                },
-            ),
-            (
-                1u32,
-                DescriptorSetLayoutBinding {
-                    stages: ShaderStages::COMPUTE,
-                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::StorageImage)
-                },
-            ),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-        let create_info = DescriptorSetLayoutCreateInfo {
-            bindings,
-            ..DescriptorSetLayoutCreateInfo::default()
-        };
-        let descriptor = DescriptorSetLayout::new(rhi.device().clone(), create_info).unwrap();
-        let push = PushConstantRange {
-            stages: ShaderStages::COMPUTE,
-            offset: 0,
-            size: 32,
-        };
-        let create_info = PipelineLayoutCreateInfo {
-            set_layouts: vec![descriptor],
-            push_constant_ranges: vec![push],
-            ..PipelineLayoutCreateInfo::default()
-        };
-        PipelineLayout::new(rhi.device().clone(), create_info).unwrap()
     }
 
     fn create_linked_program(rhi: &VKRHI, material: &VKMaterial) -> ComponentType {
@@ -420,12 +449,23 @@ impl VisibilityBufferGlobalData {
 
     fn create_shader_object(rhi: &VKRHI, linked: ComponentType) -> Arc<ShaderObject> {
         // We are assuming that all dynamically bound pipelines have the same layout and no (relevant) existential objects
-        let layout = ShaderObjectLayout::new_with_push_constants(linked, &[], rhi.device(), ShaderStages::COMPUTE, vec![PushConstantRange {
-            stages: ShaderStages::COMPUTE,
-            offset: 0,
-            size: 16,
-        }]);
-        ShaderObject::new(layout, rhi.descriptor_allocator(), rhi.buffer_allocator(), rhi.in_flight_frames() as u32)
+        let layout = ShaderObjectLayout::new_with_push_constants(
+            linked,
+            &[],
+            rhi.device(),
+            ShaderStages::COMPUTE,
+            vec![PushConstantRange {
+                stages: ShaderStages::COMPUTE,
+                offset: 0,
+                size: size_of::<VisBufferPushConstant>() as u32,
+            }],
+        );
+        ShaderObject::new(
+            layout,
+            rhi.descriptor_allocator(),
+            rhi.buffer_allocator(),
+            rhi.in_flight_frames() as u32,
+        )
     }
 
     fn compile_pipeline(
@@ -441,10 +481,17 @@ impl VisibilityBufferGlobalData {
                 rhi.device().clone(),
                 bytes_to_words(spirv.as_slice()).unwrap().deref(),
             )
-            .build_pipeline(rhi.device().clone(), shader_object_layout.pipeline_layout().clone())
+            .build_pipeline(
+                rhi.device().clone(),
+                shader_object_layout.pipeline_layout().clone(),
+            )
     }
 
     pub fn shader_object(&self) -> &Arc<ShaderObject> {
         &self.shader_object
+    }
+
+    pub fn num_materials(&self) -> u32 {
+        self.material_count
     }
 }

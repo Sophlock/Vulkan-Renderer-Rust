@@ -33,6 +33,11 @@ public struct Vertex {
     public float2 textureCoordinate;
 }
 
+public struct MutatingData {
+    public uint2 screenSize;
+    public float4x4 viewMatrix;
+}
+
 public struct GlobalData {
     public StructuredBuffer<InstanceData>* instances;
     public StructuredBuffer<MaterialData>* materials;
@@ -40,7 +45,7 @@ public struct GlobalData {
     public StructuredBuffer<MeshData>* meshes;
     public StructuredBuffer<Triangle>* indexBuffer;
     public StructuredBuffer<Vertex>* vertexBuffer;
-    public uint2 screenSize;
+    public StructuredBuffer<MutatingData>* mutData;
 }
 
 public Vertex operator +(Vertex v1, Vertex v2) {
@@ -67,3 +72,9 @@ public Vertex normalize(Vertex v) {
     result.worldTangent = normalize(v.worldTangent);
     return result;
 }
+
+public struct VisBufferShadeInput {
+    public GlobalData* globalData;
+    public uint64_t thisPipelineAddress;
+}
+

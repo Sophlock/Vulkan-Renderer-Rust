@@ -8,16 +8,15 @@ struct MaterialWriteData {
 }
 
 uniform MaterialWriteData gInput;
-uniform GlobalData gGlobalData;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-func writeMaterialData(uint2 dispatch: SV_DispatchThreadID)->void {
+func writeMaterialData(uint2 dispatch: SV_DispatchThreadID, uniform GlobalData* globalData)->void {
     let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
     let instanceID = packedVisBuffer.y;
 
-    let instance = gGlobalData.instances.Load(instanceID);
-    let materialInstance = gGlobalData.materialInstances.Load(instance.materialInstanceIndex);
-    let material = gGlobalData.materials.Load(materialInstance.materialIndex);
+    let instance = globalData.instances.Load(instanceID);
+    let materialInstance = globalData.materialInstances.Load(instance.materialInstanceIndex);
+    let material = globalData.materials.Load(materialInstance.materialIndex);
     gInput.materialDataBuffer[dispatch.xy] = material.pipelineAddress;
 }

@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
     sync::{Arc, RwLock},
 };
-
+use std::ops::DerefMut;
 use egui_winit_vulkano::{
     egui,
     egui::{Color32, Frame},
@@ -42,6 +42,8 @@ use vulkano::{
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use winit::dpi::PhysicalSize;
 
 use crate::application::{
@@ -71,6 +73,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::renderer::visibility_buffer_data::MutatingData;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -83,8 +86,9 @@ pub struct MutableRenderState {
     fullscreen_pass: FullScreenPass,
     vis_buffer_rasterizer: VisibilityBufferRasterizer,
     vis_buffer_processing: VisibilityBufferProcessingPass,
-    vis_buffer_data: VisibilityBufferData,
+    vis_buffer_data: Arc<VisibilityBufferData>,
     vis_buffer_shade: VisibilityBufferShadePass,
+    mutating_data: Subbuffer<MutatingData>
 }
 
 pub struct VKRenderer {
@@ -154,22 +158,26 @@ impl VKRenderer {
             &swapchain,
         );
 
-        // TODO: Correct num materials
-        let num_materials = 1u32;
+        let mutating_data = Buffer::new_sized(rhi.buffer_allocator().clone(), BufferCreateInfo {
+            usage: BufferUsage::SHADER_DEVICE_ADDRESS,
+            ..BufferCreateInfo::default()
+        }, AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..AllocationCreateInfo::default()
+        }).unwrap();
         let vis_buffer_global_data =
-            VisibilityBufferGlobalData::new(rhi.as_ref(), swapchain.extent);
-        let vis_buffer_data = VisibilityBufferData::new(
+            VisibilityBufferGlobalData::new(rhi.as_ref(), mutating_data.clone());
+        let vis_buffer_data = Arc::new(VisibilityBufferData::new(
             rhi.as_ref(),
             &swapchain,
             VisibilityBufferShadePass::MAX_SEQUENCE_COUNT,
-            num_materials,
             vis_buffer_global_data,
             color_render_target.clone()
-        );
+        ));
         let vis_buffer_rasterizer =
-            VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, &vis_buffer_data);
+            VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, vis_buffer_data.as_ref());
         let vis_buffer_processing =
-            VisibilityBufferProcessingPass::new(rhi.as_ref(), num_materials, &vis_buffer_data);
+            VisibilityBufferProcessingPass::new(rhi.as_ref(), &vis_buffer_data);
         let vis_buffer_shade = VisibilityBufferShadePass::new(rhi.clone(), vis_buffer_data.clone());
 
         let result = Self {
@@ -187,6 +195,7 @@ impl VKRenderer {
                 vis_buffer_processing,
                 vis_buffer_data,
                 vis_buffer_shade,
+                mutating_data
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
@@ -229,6 +238,8 @@ impl VKRenderer {
                     //ui.label(format!("Hello '{name}', age {age}"));
                 });
         });
+
+        self.update_mutating_data(scene);
 
         let acquire_image_result = self.mutable_state_const().swapchain.acquire_next_image();
         let (swapchain_image_index, suboptimal, image_available_future) = acquire_image_result
@@ -554,6 +565,17 @@ impl VKRenderer {
                 .image_view()
                 .clone(),
         );
+    }
+
+    fn update_mutating_data(&self, scene: &VKScene) {
+        let data = MutatingData {
+            screen_size: self.mutable_state_const().swapchain.extent,
+            view_matrix: scene.camera().view_projection().to_cols_array_2d(),
+        };
+        let state = self.mutable_state_const();
+        let mut write = state.mutating_data.write().unwrap();
+        write.screen_size = data.screen_size;
+        write.view_matrix = data.view_matrix;
     }
 }
 impl RendererInterface for VKRenderer {

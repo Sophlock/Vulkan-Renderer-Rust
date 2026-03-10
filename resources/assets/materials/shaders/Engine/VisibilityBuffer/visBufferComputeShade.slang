@@ -6,14 +6,6 @@ import Core.globalData;
 import visBufferData;
 import Core.largeBlock;
 
-struct VisBufferShadeInput {
-    GlobalData* globalData;
-    uint64_t thisPipelineAddress;
-}
-
-/*uniform GlobalData gGlobalData;
-uniform ViewData gViewData;*/
-
 Texture2D<uint4> visBuffer;
 RWTexture2D<float4> outputRT;
 LargeBlock _;
@@ -64,7 +56,7 @@ func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadI
 
     // Evaluates the material into a BRDF
     // let materialResult = gMaterial.evaluate(geometry);
-    // Shades the BRDF using the light environment
-    float3 color = float3(1, 1, 1);//max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*//* materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
-    gInput.outputRT[dispatch] = float4(color, 1.);*/
+    // Shades the BRDF using the light environment*/
+    float3 color = float3(1, 1, 1);//max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*//* materialResult.brdf.evaluateEmissive(viewDirection), 0.f);*/
+    outputRT[dispatch] = float4(color, 1.);
 }
