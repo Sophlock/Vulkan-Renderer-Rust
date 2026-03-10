@@ -24,6 +24,8 @@ pub fn create_logical_device(
         khr_fragment_shader_barycentric: true,
         nv_device_generated_commands: true,
         nv_device_generated_commands_compute: true,
+        khr_buffer_device_address: true,
+        khr_synchronization2: true,
         //nv_compute_shader_derivatives: true,
         ..DeviceExtensions::default()
     };
@@ -101,14 +103,14 @@ pub fn create_logical_device(
         unsafe { raw_instance.create_device(physical_device.handle(), &raw_create_info, None) }
             .unwrap();
 
-    let (device, queues) = //Device::new(physical_device.clone(), device_create_info).unwrap();
-    unsafe {
+    let (device, queues) = Device::new(physical_device.clone(), device_create_info).unwrap();
+    /*unsafe {
         Device::from_handle(
             physical_device.clone(),
             raw_device.handle(),
             device_create_info,
         )
-    };
+    };*/
     (
         device,
         QueueCollection::new(queues.collect(), queue_indices),
