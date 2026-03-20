@@ -6,7 +6,6 @@ version = 4
 name = "VulkanRenderer"
 version = "0.1.0"
 dependencies = [
- "ash",
  "asset-system",
  "egui_winit_vulkano",
  "extend",

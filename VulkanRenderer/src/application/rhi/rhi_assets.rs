@@ -8,12 +8,8 @@ use std::{
     sync::Arc,
 };
 
-use ash::vk::DeviceSize;
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
-use vulkano::{
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    memory::allocator::{AllocationCreateInfo, MemoryAllocator},
-};
+use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryAllocator}, DeviceSize};
 
 use crate::application::{
     assets::asset_traits::{

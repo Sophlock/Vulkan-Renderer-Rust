@@ -16,7 +16,6 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
-use ash::vk::{DeviceAddress, DeviceSize};
 use egui_winit_vulkano::egui::epaint::text::layout;
 use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
 use std::ops::Add;
@@ -34,19 +33,10 @@ use vulkano::memory::DeviceAlignment;
 use vulkano::memory::allocator::DeviceLayout;
 use vulkano::pipeline::compute::ComputePipelineCreateInfo;
 use vulkano::sync::{GpuFuture, now};
-use vulkano::{
-    NonZeroDeviceSize, ValidationError,
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
-    format::Format,
-    image::{ImageAspects, ImageUsage},
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
-    pipeline::{
-        ComputePipeline, PipelineLayout,
-        layout::{PipelineLayoutCreateInfo, PushConstantRange},
-    },
-    shader::{ShaderStages, spirv::bytes_to_words},
-};
+use vulkano::{NonZeroDeviceSize, ValidationError, buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer}, format::Format, image::{ImageAspects, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{
+    ComputePipeline, PipelineLayout,
+    layout::{PipelineLayoutCreateInfo, PushConstantRange},
+}, shader::{ShaderStages, spirv::bytes_to_words}, DeviceAddress, DeviceSize};
 use vulkano::pipeline::PipelineCreateFlags;
 
 #[derive(Clone)]

@@ -1,9 +1,9 @@
 use std::{ffi::CString, sync::Arc};
 
-use ash::{
+/*use ash::{
     vk,
     vk::{DeviceQueueCreateInfo, PhysicalDeviceFeatures, PhysicalDeviceFeatures2},
-};
+};*/
 use vulkano::{
     VulkanObject,
     device::{
@@ -117,7 +117,7 @@ pub fn create_logical_device(
     )
 }
 
-pub unsafe fn ash_instance(instance: &Arc<Instance>) -> ash::Instance {
+/*pub unsafe fn ash_instance(instance: &Arc<Instance>) -> ash::Instance {
     ash::Instance::from_parts_1_3(
         instance.handle(),
         instance.fns().v1_0.clone(),
@@ -134,4 +134,4 @@ pub unsafe fn ash_device(device: &Arc<Device>) -> ash::Device {
         device.fns().v1_2.clone(),
         device.fns().v1_3.clone(),
     )
-}
+}*/

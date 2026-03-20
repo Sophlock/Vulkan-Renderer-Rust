@@ -14,7 +14,6 @@ use crate::application::{
     },
     rhi::{
         VKRHI,
-        device_helper::{ash_device, ash_instance},
         pipeline::{compute_pipeline, graphics_pipeline},
         render_pass::RenderPassBuilder,
         rhi_assets::vulkan_scene::VKScene,
@@ -26,29 +25,19 @@ use crate::application::{
         },
     },
 };
-use ash::vk::{DeviceAddress, PipelineIndirectDeviceAddressInfoNV};
 use smallvec::smallvec;
 use vulkano::pipeline::layout::PushConstantRange;
-use vulkano::{
-    ValidationError, VulkanObject,
-    buffer::BufferContents,
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
+use vulkano::{ValidationError, VulkanObject, buffer::BufferContents, command_buffer::{
+    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+    SubpassContents, SubpassEndInfo,
+}, device::DeviceOwned, format::{ClearValue, Format}, pipeline::{
+    ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
+    graphics::{
+        subpass::PipelineSubpassType,
+        vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+        viewport::{Scissor, Viewport},
     },
-    device::DeviceOwned,
-    format::{ClearValue, Format},
-    pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
-        graphics::{
-            subpass::PipelineSubpassType,
-            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-            viewport::{Scissor, Viewport},
-        },
-    },
-    render_pass::RenderPass,
-    shader::{ShaderStages, spirv::bytes_to_words},
-};
+}, render_pass::RenderPass, shader::{ShaderStages, spirv::bytes_to_words}, DeviceAddress};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
