@@ -10,7 +10,6 @@ use crate::application::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, Vertex,
     },
     renderer::{
-        device_generated_commands::map_pipeline_bind_point,
         visibility_buffer_data::{InstanceData, VisibilityBufferData},
     },
     rhi::{
@@ -453,19 +452,10 @@ impl VisibilityBufferRasterizer {
 
 impl PipelineBindParameter {
     pub fn pipeline(
-        pipeline: &Arc<impl Pipeline + VulkanObject<Handle = ash::vk::Pipeline>>,
+        pipeline: &Arc<ComputePipeline>,
     ) -> Self {
-        let address_info = PipelineIndirectDeviceAddressInfoNV::default()
-            .pipeline(pipeline.handle())
-            .pipeline_bind_point(map_pipeline_bind_point(pipeline.bind_point()));
-
-        let instance = unsafe { ash_instance(pipeline.device().instance()) };
-        let device = unsafe { ash_device(pipeline.device()) };
-        let dgc_device =
-            ash::nv::device_generated_commands_compute::Device::new(&instance, &device);
-        let address = unsafe { dgc_device.get_pipeline_indirect_device_address(&address_info) };
         Self {
-            pipeline_address: address,
+            pipeline_address: pipeline.indirect_device_address().get(),
         }
     }
 }

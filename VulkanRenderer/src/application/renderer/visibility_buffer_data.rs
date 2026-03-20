@@ -16,8 +16,10 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
-use ash::vk::DeviceAddress;
+use ash::vk::{DeviceAddress, DeviceSize};
+use egui_winit_vulkano::egui::epaint::text::layout;
 use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
+use std::ops::Add;
 use std::{
     ops::Deref,
     sync::{Arc, RwLock},
@@ -25,8 +27,15 @@ use std::{
 use vulkano::descriptor_set::layout::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
 };
+use vulkano::device_generated_commands::{
+    ComputePipelineIndirectBufferInfo, IndirectCommandsLayout,
+};
+use vulkano::memory::DeviceAlignment;
+use vulkano::memory::allocator::DeviceLayout;
+use vulkano::pipeline::compute::ComputePipelineCreateInfo;
+use vulkano::sync::{GpuFuture, now};
 use vulkano::{
-    ValidationError,
+    NonZeroDeviceSize, ValidationError,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
     format::Format,
@@ -38,6 +47,7 @@ use vulkano::{
     },
     shader::{ShaderStages, spirv::bytes_to_words},
 };
+use vulkano::pipeline::PipelineCreateFlags;
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -290,11 +300,8 @@ impl VisibilityBufferGlobalData {
             resources.resource_iterator().unwrap().next().unwrap(),
         );
         let shader_object = Self::create_shader_object(rhi, first_linked);
-        let pipelines = resources
-            .resource_iterator::<VKMaterial>()
-            .unwrap()
-            .map(|material| Self::compile_pipeline(rhi, material, shader_object.layout().clone()))
-            .collect::<Vec<_>>();
+
+        let pipelines = Self::compile_pipelines(rhi, shader_object.pipeline_layout());
 
         let materials = pipelines
             .iter()
@@ -468,11 +475,11 @@ impl VisibilityBufferGlobalData {
         )
     }
 
-    fn compile_pipeline(
+    fn make_pipeline_create_info(
         rhi: &VKRHI,
         material: &VKMaterial,
-        shader_object_layout: Arc<ShaderObjectLayout>,
-    ) -> Arc<ComputePipeline> {
+        pipeline_layout: Arc<PipelineLayout>,
+    ) -> ComputePipelineCreateInfo {
         let linked = Self::create_linked_program(rhi, material);
         let spirv = linked.entry_point_code(0, 0).unwrap();
 
@@ -481,10 +488,100 @@ impl VisibilityBufferGlobalData {
                 rhi.device().clone(),
                 bytes_to_words(spirv.as_slice()).unwrap().deref(),
             )
-            .build_pipeline(
-                rhi.device().clone(),
-                shader_object_layout.pipeline_layout().clone(),
+            .build_create_info_with_flags(pipeline_layout.clone(), PipelineCreateFlags::INDIRECT_BINDABLE)
+    }
+
+    fn compile_pipelines(
+        rhi: &VKRHI,
+        pipeline_layout: &Arc<PipelineLayout>,
+    ) -> Vec<Arc<ComputePipeline>> {
+        let resources = rhi.resource_manager();
+
+        let pipeline_create_infos = resources
+            .resource_iterator::<VKMaterial>()
+            .unwrap()
+            .map(|material| {
+                Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone())
+            })
+            .collect::<Vec<_>>();
+
+        let layouts = pipeline_create_infos.iter().map(|create_info| {
+            IndirectCommandsLayout::pipeline_indirect_memory_requirements(rhi.device(), create_info)
+                .layout
+        });
+
+        let alignment = layouts
+            .clone()
+            .map(|layout| layout.alignment())
+            .fold(DeviceAlignment::default(), DeviceAlignment::max);
+
+        let sizes = layouts.map(|layout| {
+            layout
+                .size()
+                .checked_next_multiple_of(alignment.as_devicesize())
+                .unwrap()
+        });
+
+        let total_size = sizes.clone().fold(0, DeviceSize::add);
+
+        let indirect_metadata_buffer = Subbuffer::new(
+            Buffer::new(
+                rhi.buffer_allocator().clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::TRANSFER_DST | BufferUsage::INDIRECT_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+                    ..BufferCreateInfo::default()
+                },
+                AllocationCreateInfo::default(),
+                DeviceLayout::new(total_size.try_into().unwrap(), alignment).unwrap(),
             )
+            .unwrap(),
+        );
+
+        let create_infos_with_indirect = sizes
+            .scan(0u64, |state, size| {
+                let offset = *state;
+                *state += size;
+                Some((offset, size))
+            })
+            .map(|(offset, size)| {
+                indirect_metadata_buffer
+                    .clone()
+                    .slice(offset..(offset + size))
+            })
+            .zip(pipeline_create_infos.iter().cloned())
+            .map(|(buffer, create_info)| ComputePipelineCreateInfo {
+                indirect_buffer_info: Some(ComputePipelineIndirectBufferInfo::buffer(buffer)),
+                ..create_info
+            });
+
+        let pipelines = create_infos_with_indirect
+            .map(|create_info| {
+                ComputePipeline::new(rhi.device().clone(), None, create_info).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let mut command_buffer = rhi
+            .command_buffer_interface()
+            .primary_command_buffer(rhi.queue_family_indices().compute_family);
+
+        for pipeline in pipelines.iter() {
+            command_buffer
+                .update_pipeline_indirect_buffer(pipeline.clone())
+                .unwrap();
+        }
+
+        now(rhi.device().clone())
+            .then_execute(
+                rhi.queues().compute_queue.clone(),
+                command_buffer.build().unwrap(),
+            )
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+
+        pipelines
     }
 
     pub fn shader_object(&self) -> &Arc<ShaderObject> {

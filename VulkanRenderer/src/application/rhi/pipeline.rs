@@ -24,6 +24,7 @@ use vulkano::{
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, spirv::ExecutionModel},
 };
+use vulkano::pipeline::PipelineCreateFlags;
 
 pub struct EmptyGraphicsPipeline {}
 
@@ -403,11 +404,7 @@ impl EmptyComputePipelineBuilder {
 
 impl ShaderComputePipelineBuilder {
     pub fn build_create_info(self, layout: Arc<PipelineLayout>) -> ComputePipelineCreateInfo {
-        ComputePipelineCreateInfo {
-            flags: Default::default(),
-            base_pipeline: None,
-            ..ComputePipelineCreateInfo::stage_layout(self.shader, layout)
-        }
+        self.build_create_info_with_flags(layout, PipelineCreateFlags::empty())
     }
 
     pub fn build_pipeline(
@@ -417,5 +414,13 @@ impl ShaderComputePipelineBuilder {
     ) -> Arc<ComputePipeline> {
         let create_info = self.build_create_info(layout);
         ComputePipeline::new(device.clone(), None, create_info).unwrap()
+    }
+    
+    pub fn build_create_info_with_flags(self, layout: Arc<PipelineLayout>, flags: PipelineCreateFlags) -> ComputePipelineCreateInfo {
+        ComputePipelineCreateInfo {
+            flags,
+            base_pipeline: None,
+            ..ComputePipelineCreateInfo::stage_layout(self.shader, layout)
+        }
     }
 }

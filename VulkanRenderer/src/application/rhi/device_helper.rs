@@ -51,7 +51,7 @@ pub fn create_logical_device(
         ..DeviceCreateInfo::default()
     };
 
-    let extra_device_extensions = [
+    /*let extra_device_extensions = [
         //"VK_KHR_compute_shader_derivatives",
         //"VK_EXT_device_generated_commands",
     ];
@@ -101,7 +101,7 @@ pub fn create_logical_device(
 
     let raw_device =
         unsafe { raw_instance.create_device(physical_device.handle(), &raw_create_info, None) }
-            .unwrap();
+            .unwrap();*/
 
     let (device, queues) = Device::new(physical_device.clone(), device_create_info).unwrap();
     /*unsafe {

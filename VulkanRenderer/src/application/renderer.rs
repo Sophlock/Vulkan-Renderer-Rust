@@ -1,4 +1,3 @@
-mod device_generated_commands;
 mod full_screen_pass;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
@@ -301,16 +300,16 @@ impl VKRenderer {
             )
             .unwrap();
 
-        let compute_command_buffer = self
+        self
             .mutable_state_const()
             .vis_buffer_shade
-            .run(compute_command_buffer, swapchain_image_index as usize);
+            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize).unwrap();
         //let compute_command_buffer = compute_command_buffer.build().unwrap();
 
         let draw_finished_future = vis_buffer_generated_future
             .then_execute(
                 self.rhi.queues().compute_queue.clone(),
-                compute_command_buffer,
+                compute_command_buffer.build().unwrap(),
             )
             .unwrap();
 

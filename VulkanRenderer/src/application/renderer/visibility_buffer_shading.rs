@@ -3,10 +3,6 @@ use std::{rc::Rc, sync::Arc};
 use crate::application::rhi::shader_cursor::ShaderCursor;
 use crate::application::{
     renderer::{
-        device_generated_commands::{
-            GeneratedCommandsInfo, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo,
-            execute_generated_commands,
-        },
         visibility_buffer_data::VisibilityBufferData,
         visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter},
     },
@@ -14,8 +10,9 @@ use crate::application::{
 };
 use ash::vk::{IndirectCommandsLayoutTokenNV, IndirectCommandsTokenTypeNV};
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
-use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, device::DeviceOwned, memory::allocator::AllocationCreateInfo, pipeline::{Pipeline, PipelineBindPoint}, VulkanObject};
-use vulkano::sync::ImageMemoryBarrier;
+use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, device::DeviceOwned, memory::allocator::AllocationCreateInfo, pipeline::{Pipeline, PipelineBindPoint}, ValidationError, VulkanObject};
+use vulkano::device_generated_commands::{GeneratedCommandsInfo, GeneratedCommandsPipeline, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo, IndirectCommandsLayoutToken, IndirectCommandsLayoutTokenPushConstant, IndirectCommandsStream, IndirectCommandsTokenType};
+use vulkano::shader::ShaderStages;
 use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
 
 pub struct VisibilityBufferShadePass {
@@ -34,19 +31,29 @@ impl VisibilityBufferShadePass {
                 flags: Default::default(),
                 pipeline_bind_point: PipelineBindPoint::Compute,
                 tokens: vec![
-                    IndirectCommandsLayoutTokenNV::default()
-                        .token_type(IndirectCommandsTokenTypeNV::PIPELINE)
-                        .stream(0),
-                    IndirectCommandsLayoutTokenNV::default()
-                        .token_type(IndirectCommandsTokenTypeNV::PUSH_CONSTANT)
-                        .pushconstant_offset(0)
-                        .pushconstant_size(size_of::<VisBufferPushConstant>() as u32)
-                        .pushconstant_pipeline_layout(data.global_data.shader_object().pipeline_layout().handle()),
-                    IndirectCommandsLayoutTokenNV::default()
-                        .token_type(IndirectCommandsTokenTypeNV::DISPATCH)
-                        .stream(1),
+                    IndirectCommandsLayoutToken {
+                        token_type: IndirectCommandsTokenType::Pipeline,
+                        stream: 0,
+                        ..IndirectCommandsLayoutToken::default()
+                    },
+                    IndirectCommandsLayoutToken {
+                        token_type: IndirectCommandsTokenType::PushConstant,
+                        pushconstant_data: Some(IndirectCommandsLayoutTokenPushConstant {
+                            pipeline_layout: data.global_data.shader_object().pipeline_layout().clone(),
+                            shader_stage_flags: ShaderStages::COMPUTE,
+                            offset: 0,
+                            size: size_of::<VisBufferPushConstant>() as u32,
+                        }),
+                        stream: 1,
+                        ..IndirectCommandsLayoutToken::default()
+                    },
+                    IndirectCommandsLayoutToken {
+                        token_type: IndirectCommandsTokenType::Dispatch,
+                        stream: 2,
+                        ..IndirectCommandsLayoutToken::default()
+                    },
                 ],
-                strides: vec![
+                stream_strides: vec![
                     size_of::<PipelineBindParameter>() as u32,
                     size_of::<VisBufferPushConstant>() as u32,
                     size_of::<ComputeDispatchParameter>() as u32,
@@ -56,7 +63,7 @@ impl VisibilityBufferShadePass {
         )
         .unwrap();
 
-        let requirements = commands_layout.memory_requirements(Self::MAX_SEQUENCE_COUNT);
+        let requirements = commands_layout.memory_requirements(&GeneratedCommandsPipeline::Dynamic(), Self::MAX_SEQUENCE_COUNT);
         let preprocess_buffer = Subbuffer::new(
             Buffer::new(
                 rhi.buffer_allocator().clone(),
@@ -88,11 +95,11 @@ impl VisibilityBufferShadePass {
         }
     }
 
-    pub fn run(
+    pub fn record_command_buffer(
         &self,
-        mut command_buffer: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
-    ) -> Arc<PrimaryAutoCommandBuffer> {
+    ) -> Result<(), Box<ValidationError>> {
         let shader_object = self.data.global_data.shader_object();
         command_buffer
             .bind_descriptor_sets(
@@ -100,23 +107,27 @@ impl VisibilityBufferShadePass {
                 shader_object.pipeline_layout().clone(),
                 0,
                 shader_object.descriptor_sets()[image_index].clone(),
-            )
-            .unwrap();
-        let built_command_buffer = command_buffer.build().unwrap();
+            )?;
         
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
-                self.data.pipeline_bind_commands.clone().reinterpret(),
-                self.data.compute_dispatch_commands.clone().reinterpret(),
+                IndirectCommandsStream {
+                    buffer: self.data.pipeline_bind_commands.clone().reinterpret(),
+                },
+                IndirectCommandsStream {
+                    buffer: self.data.push_constants.clone().reinterpret(),
+                },
+                IndirectCommandsStream {
+                    buffer: self.data.compute_dispatch_commands.clone().reinterpret(),
+                }
             ],
-            max_sequences: Self::MAX_SEQUENCE_COUNT,
+            sequence_count: Self::MAX_SEQUENCE_COUNT,
             sequence_count_buffer: Some(self.data.index_counter_buffer.clone()),
-            ..GeneratedCommandsInfo::layout(
-                self.commands_layout.clone(),
-                self.preprocess_buffer.clone(),
-            )
+            ..GeneratedCommandsInfo::dynamic_pipeline(self.commands_layout.clone(), self.preprocess_buffer.clone())
         };
-        unsafe { execute_generated_commands(&built_command_buffer, true, commands_info) };
-        built_command_buffer
+
+        unsafe {command_buffer.execute_generated_commands(false, commands_info)}?;
+
+        Ok(())
     }
 }
