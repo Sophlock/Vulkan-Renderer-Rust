@@ -16,7 +16,7 @@ dependencies = [
  "image",
  "shader-slang",
  "smallvec",
- "vulkano",
+ "vulkano 0.35.2 (git+https://github.com/Sophlock/vulkano.git?branch=0.35.X)",
  "winit",
  "winit-input-map",
 ]
@@ -724,14 +724,13 @@ dependencies = [
 [[package]]
 name = "egui_winit_vulkano"
 version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6abd5e69939cd416853fc3ec69c0e08721b175d03b508d5574849885c7e85a6"
+source = "git+https://github.com/Sophlock/egui_winit_vulkano.git#035471683989fe808390f74a8d6a3979cadd9029"
 dependencies = [
  "ahash",
  "egui",
  "egui-winit",
  "image",
- "vulkano",
+ "vulkano 0.35.2 (git+https://github.com/Sophlock/vulkano.git?branch=0.35.X)",
  "vulkano-shaders",
  "winit",
 ]
@@ -2959,6 +2958,34 @@ dependencies = [
  "smallvec",
  "thread_local",
  "vk-parse",
+]
+
+[[package]]
+name = "vulkano"
+version = "0.35.2"
+source = "git+https://github.com/Sophlock/vulkano.git?branch=0.35.X#7dead844bf59425d1012f8de187ec7892deb1d39"
+dependencies = [
+ "ash",
+ "bytemuck",
+ "crossbeam-queue",
+ "foldhash",
+ "half",
+ "heck",
+ "indexmap",
+ "libloading",
+ "nom 7.1.3",
+ "once_cell",
+ "parking_lot",
+ "proc-macro2",
+ "quote",
+ "raw-window-handle",
+ "raw-window-metal",
+ "serde",
+ "serde_json",
+ "slabbin",
+ "smallvec",
+ "thread_local",
+ "vk-parse",
  "vulkano-macros",
  "x11-dl",
  "x11rb",
@@ -2967,8 +2994,7 @@ dependencies = [
 [[package]]
 name = "vulkano-macros"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dc929c42c9336fd082079ac3ea30126e4a0dfe36fd2e2b3581303f7d140d20f"
+source = "git+https://github.com/Sophlock/vulkano.git?branch=0.35.X#7dead844bf59425d1012f8de187ec7892deb1d39"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -2988,7 +3014,7 @@ dependencies = [
  "quote",
  "shaderc",
  "syn",
- "vulkano",
+ "vulkano 0.35.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

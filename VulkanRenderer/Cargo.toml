@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-vulkano = "0.35.2"
+#vulkano = "0.35.2"
+vulkano = { git = "https://github.com/Sophlock/vulkano.git", branch = "0.35.X" }
 winit = "0.30.12"
 #egui = "0.32.0"
-egui_winit_vulkano = "0.28.0"
+egui_winit_vulkano = { git = "https://github.com/Sophlock/egui_winit_vulkano.git" }
+#egui_winit_vulkano = "0.28.0"
 glam = "0.31.0"
 #shader-slang = "0.1.0"
 shader-slang = {git = "https://github.com/Sophlock/slang-rs.git"}
