@@ -158,7 +158,7 @@ impl VKRenderer {
         );
 
         let mutating_data = Buffer::new_sized(rhi.buffer_allocator().clone(), BufferCreateInfo {
-            usage: BufferUsage::SHADER_DEVICE_ADDRESS,
+            usage: BufferUsage::SHADER_DEVICE_ADDRESS | BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
             ..BufferCreateInfo::default()
         }, AllocationCreateInfo {
             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
@@ -271,8 +271,8 @@ impl VKRenderer {
             )
             .unwrap();
 
-        //self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
-        //    .unwrap();
+        /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
+            .unwrap();*/
 
         let vis_buffer_generated_future = image_available_future
             .then_execute(
@@ -304,7 +304,6 @@ impl VKRenderer {
             .mutable_state_const()
             .vis_buffer_shade
             .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize).unwrap();
-        //let compute_command_buffer = compute_command_buffer.build().unwrap();
 
         let draw_finished_future = vis_buffer_generated_future
             .then_execute(
