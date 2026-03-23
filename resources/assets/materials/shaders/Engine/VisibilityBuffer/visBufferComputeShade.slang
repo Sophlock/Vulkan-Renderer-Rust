@@ -20,10 +20,14 @@ func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadI
         return;
     }
 
-    /*let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
+    let packedVisBuffer = visBuffer.Load(int3(dispatch.xy, 0));
+    if (packedVisBuffer.equals(uint4(0))) {
+        outputRT[dispatch] = float4(0, 0, 0, 1);
+        return;
+    }
     let instanceID = packedVisBuffer.y - 1;
 
-    let instance = gGlobalData.instances[instanceID];
+    /*let instance = gGlobalData.instances[instanceID];
     let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
     let material = gGlobalData.materials[materialInstance.materialIndex];
 
