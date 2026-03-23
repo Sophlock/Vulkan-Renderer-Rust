@@ -15,8 +15,17 @@ uniform GlobalData gGlobalData;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 func countTexels(uint2 dispatch: SV_DispatchThreadID)->void {
+    float width, height;
+    gInput.visBuffer.GetDimensions(width, height);
+    if (dispatch.x >= width || dispatch.y >= height) {
+        return;
+    }
+
     let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
-    let instanceID = packedVisBuffer.y;
+    if (packedVisBuffer.equals(uint4(0))) {
+        return;
+    }
+    let instanceID = packedVisBuffer.y - 1;
 
     let instance = gGlobalData.instances.Load(instanceID);
     let materialInstance = gGlobalData.materialInstances.Load(instance.materialInstanceIndex);

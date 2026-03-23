@@ -35,7 +35,7 @@ func fragmentMain(float3 barycentric : SV_BaryCentrics, uint triangleID : SV_Pri
     FragmentResult result = {};
 
     result.packedData.x = triangleID;
-    result.packedData.y = instanceID;
+    result.packedData.y = instanceID + 1;
     result.packedData.z = packUnorm2x16(barycentric.xy);
     result.packedData.w = packHalf2x16(ddx(barycentric.xy));
     // TODO: Add ddy as well

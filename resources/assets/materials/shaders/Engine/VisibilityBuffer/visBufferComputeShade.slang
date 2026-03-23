@@ -14,8 +14,14 @@ uniform LargeBlock _;
 [shader("compute")]
 [numthreads(16, 16, 1)]
 func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadID, uniform VisBufferShadeInput gInput)->void {
+    float width, height;
+    visBuffer.GetDimensions(width, height);
+    if (dispatch.x >= width || dispatch.y >= height) {
+        return;
+    }
+
     /*let packedVisBuffer = gInput.visBuffer.Load(int3(dispatch.xy, 0));
-    let instanceID = packedVisBuffer.y;
+    let instanceID = packedVisBuffer.y - 1;
 
     let instance = gGlobalData.instances[instanceID];
     let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];

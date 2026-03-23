@@ -27,6 +27,10 @@ uniform GlobalData gGlobalData;
 [shader("compute")]
 [numthreads(16, 1, 1)]
 func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
+    if (dispatch >= gGlobalData.materials.getCount()) {
+        return;
+    }
+
     let materialIndex = dispatch;
     let texelCount = gInput.texelCounts[materialIndex];
     if (texelCount > 0) {
@@ -38,7 +42,7 @@ func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
         let material = gGlobalData.materials.Load(materialIndex);
         let pipelineAddress = material.pipelineAddress;
         gInput.pipelineBindParameters[myIndex] = {pipelineAddress};
-        gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.mutData.Load(0).screenSize / 16, 1) };
+        gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.mutData.Load(0).screenSize / 16 + 1, 1) };
         gInput.shadePushConstants[myIndex] = { pipelineAddress };
     }
 }
