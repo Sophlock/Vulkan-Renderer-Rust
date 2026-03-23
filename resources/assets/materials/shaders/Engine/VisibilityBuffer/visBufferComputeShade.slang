@@ -6,9 +6,10 @@ import Core.globalData;
 import visBufferData;
 import Core.largeBlock;
 
-Texture2D<uint4> visBuffer;
-RWTexture2D<float4> outputRT;
-LargeBlock _;
+uniform Texture2D<uint4> visBuffer;
+uniform RWTexture2D<float4> outputRT;
+uniform GlobalData gGlobalData;
+uniform LargeBlock _;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

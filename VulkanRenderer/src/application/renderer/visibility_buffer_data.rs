@@ -355,37 +355,38 @@ impl VisibilityBufferGlobalData {
         shader_cursor
             .field("instances")
             .unwrap()
-            .write_address(self.instances.device_address().unwrap());
-        //.write_buffer(self.instances.clone());
+        //    .write_address(self.instances.device_address().unwrap());
+        .write_buffer(self.instances.clone());
         shader_cursor
             .field("materials")
             .unwrap()
-            .write_address(self.materials.device_address().unwrap());
-        //.write_buffer(self.materials.clone());
+        //    .write_address(self.materials.device_address().unwrap());
+        .write_buffer(self.materials.clone());
         shader_cursor
             .field("materialInstances")
             .unwrap()
-            .write_address(self.material_instances.device_address().unwrap());
-        //.write_buffer(self.material_instances.clone());
+        //    .write_address(self.material_instances.device_address().unwrap());
+        .write_buffer(self.material_instances.clone());
         shader_cursor
             .field("meshes")
             .unwrap()
-            .write_address(self.meshes.device_address().unwrap());
-        //.write_buffer(self.meshes.clone());
+        //    .write_address(self.meshes.device_address().unwrap());
+        .write_buffer(self.meshes.clone());
         shader_cursor
             .field("indexBuffer")
             .unwrap()
-            .write_address(self.indices.device_address().unwrap());
-        //.write_buffer(self.indices.clone());
+        //    .write_address(self.indices.device_address().unwrap());
+        .write_buffer(self.indices.clone());
         shader_cursor
             .field("vertexBuffer")
             .unwrap()
-            .write_address(self.vertices.device_address().unwrap());
-        //.write_buffer(self.vertices.clone());
+        //    .write_address(self.vertices.device_address().unwrap());
+        .write_buffer(self.vertices.clone());
         shader_cursor
             .field("mutData")
             .unwrap()
-            .write_address(self.mutating_data.device_address().unwrap());
+        //    .write_address(self.mutating_data.device_address().unwrap());
+        .write_buffer(self.mutating_data.clone());
     }
 
     pub fn buffer_pointers(&self) -> VisBufferGlobalDataPointers {

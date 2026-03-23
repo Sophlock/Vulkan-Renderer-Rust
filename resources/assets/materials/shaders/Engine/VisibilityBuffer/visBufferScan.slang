@@ -1,12 +1,14 @@
 module visBufferScan;
 
 import visBufferData;
+import Core.largeBlock;
 
 struct VisBufferData {
     Texture2D<uint4> visBuffer;
     RWStructuredBuffer<Atomic<uint>> materialFragmentCounts;
 }
 
+uniform LargeBlock _;
 uniform VisBufferData gInput;
 uniform GlobalData gGlobalData;
 

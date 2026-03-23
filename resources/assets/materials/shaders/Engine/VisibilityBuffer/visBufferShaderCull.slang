@@ -22,12 +22,11 @@ struct MaterialCountData {
 
 uniform LargeBlock _;
 uniform MaterialCountData gInput;
-uniform GlobalData globalData;
+uniform GlobalData gGlobalData;
 
 [shader("compute")]
 [numthreads(16, 1, 1)]
-func cullShaders(uint dispatch: SV_DispatchThreadID, uniform GlobalData* globalDataPtr)->void {
-    //let globalData = inGlobalData.Load(0);
+func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
     let materialIndex = dispatch;
     let texelCount = gInput.texelCounts[materialIndex];
     if (texelCount > 0) {
@@ -36,10 +35,10 @@ func cullShaders(uint dispatch: SV_DispatchThreadID, uniform GlobalData* globalD
         gInput.materialIndices.GetDimensions(maxSequence, _);
         if (myIndex >= maxSequence) return;
         gInput.materialIndices[myIndex] = materialIndex;
-        let material = globalData.materials.Load(materialIndex);
+        let material = gGlobalData.materials.Load(materialIndex);
         let pipelineAddress = material.pipelineAddress;
         gInput.pipelineBindParameters[myIndex] = {pipelineAddress};
-        gInput.computeDispatchParameters[myIndex] = { uint3(globalData.mutData.Load(0).screenSize / 16, 1) };
-        gInput.shadePushConstants[myIndex] = { globalDataPtr, pipelineAddress };
+        gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.mutData.Load(0).screenSize / 16, 1) };
+        gInput.shadePushConstants[myIndex] = { pipelineAddress };
     }
 }

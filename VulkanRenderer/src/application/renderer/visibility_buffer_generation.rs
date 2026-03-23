@@ -75,7 +75,6 @@ pub struct ComputeDispatchParameter {
 #[derive(Copy, Clone, BufferContents)]
 #[repr(C)]
 pub struct VisBufferPushConstant {
-    pub global_data_address: DeviceAddress,
     pub this_pipeline_address: DeviceAddress,
 }
 
@@ -105,8 +104,8 @@ impl VisibilityBufferProcessingPass {
             .unwrap()
             .write_buffer(data.material_fragment_count_buffer.clone());
 
-        //data.global_data
-        //    .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
@@ -135,8 +134,8 @@ impl VisibilityBufferProcessingPass {
             .unwrap()
             .write_buffer(data.push_constants.clone());
 
-        //data.global_data
-        //    .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             vis_buffer_scan,
@@ -181,11 +180,11 @@ impl VisBufferStep {
             rhi.device(),
             ShaderStages::COMPUTE,
             // Global data is passed as push constant
-            vec![PushConstantRange {
+            vec![/*PushConstantRange {
                 stages: ShaderStages::COMPUTE,
                 offset: 0,
                 size: size_of::<DeviceAddress>() as u32,
-            }],
+            }*/],
         );
         let pipeline_layout = shader_object_layout.pipeline_layout().clone();
         let shader_object = ShaderObject::new(
@@ -223,13 +222,13 @@ impl VisBufferStep {
                 0,
                 self.shader_object.descriptor_sets()[image_index].clone(),
             )?
-            .push_constants(
+            /*.push_constants(
                 self.shader_object
                     .pipeline_layout()
                     .clone(),
                 0,
                 self.data.global_data_buffer_address(),
-            )?;
+            )?*/;
         unsafe { command_buffer.dispatch(dispatch) }?;
         Ok(())
     }
