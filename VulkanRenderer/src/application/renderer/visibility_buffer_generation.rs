@@ -153,12 +153,12 @@ impl VisibilityBufferProcessingPass {
         self.vis_buffer_scan.record_command_buffer(
             command_buffer,
             image_index,
-            [swapchain_extent[0] / 16, swapchain_extent[1] / 16, 1],
+            [swapchain_extent[0] / 16 + 1, swapchain_extent[1] / 16 + 1, 1],
         )?;
         self.shader_cull.record_command_buffer(
             command_buffer,
             image_index,
-            [self.num_materials / 16, 1, 1],
+            [self.num_materials / 16 + 1, 1, 1],
         )?;
         Ok(())
     }
