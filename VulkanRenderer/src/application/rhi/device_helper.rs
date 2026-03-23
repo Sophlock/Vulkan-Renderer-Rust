@@ -41,6 +41,8 @@ pub fn create_logical_device(
         shader_int64: true,
         buffer_device_address: true,
         variable_pointers_storage_buffer: true,
+        robust_buffer_access: true,
+        robust_buffer_access2: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {
