@@ -36,6 +36,7 @@ public struct Vertex {
 public struct MutatingData {
     public uint2 screenSize;
     public float4x4 viewMatrix;
+    public float3 viewPosition;
 }
 
 public struct GlobalData {

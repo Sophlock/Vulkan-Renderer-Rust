@@ -124,6 +124,7 @@ pub struct MeshData {
 pub struct MutatingData {
     pub screen_size: [u32; 2],
     pub view_matrix: [[f32; 4]; 4],
+    pub view_position: [f32; 3],
 }
 
 #[derive(Copy, Clone, BufferContents)]

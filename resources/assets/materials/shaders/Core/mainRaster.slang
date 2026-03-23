@@ -77,5 +77,5 @@ float4 fragmentMain(ProcessedVertex vertex : Vertex) : SV_Target
     let materialResult = gMaterial.evaluate(geometry);
     // Shades the BRDF using the light environment
     float3 color = max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*/ materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
-    return float4(1.f - exp(-color * gViewData.exposureValue), 1.);
+    return float4(color, 1.);
 }

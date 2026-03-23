@@ -569,11 +569,13 @@ impl VKRenderer {
         let data = MutatingData {
             screen_size: self.mutable_state_const().swapchain.extent,
             view_matrix: scene.camera().view_projection().to_cols_array_2d(),
+            view_position: scene.camera().location().into(),
         };
         let state = self.mutable_state_const();
         let mut write = state.mutating_data.write().unwrap();
         write.screen_size = data.screen_size;
         write.view_matrix = data.view_matrix;
+        write.view_position = data.view_position;
     }
 }
 impl RendererInterface for VKRenderer {

@@ -5,7 +5,6 @@ public struct ViewData
 {
     public float4x4 viewProjection;
     public float3 viewPosition;
-    public float exposureValue;
 }
 
 // Data describing the model
