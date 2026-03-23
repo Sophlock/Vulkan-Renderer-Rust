@@ -10,7 +10,7 @@ use crate::application::{
 };
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, device::DeviceOwned, memory::allocator::AllocationCreateInfo, pipeline::{Pipeline, PipelineBindPoint}, ValidationError, VulkanObject};
-use vulkano::device_generated_commands::{GeneratedCommandsInfo, GeneratedCommandsPipeline, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo, IndirectCommandsLayoutToken, IndirectCommandsLayoutTokenPushConstant, IndirectCommandsStream, IndirectCommandsTokenType};
+use vulkano::device_generated_commands::{GeneratedCommandsInfo, GeneratedCommandsPipeline, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo, IndirectCommandsLayoutToken, IndirectCommandsLayoutTokenPushConstant, IndirectCommandsLayoutUsageFlags, IndirectCommandsStream, IndirectCommandsTokenType};
 use vulkano::shader::ShaderStages;
 use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
 
@@ -27,7 +27,7 @@ impl VisibilityBufferShadePass {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
-                flags: Default::default(),
+                flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS,
                 pipeline_bind_point: PipelineBindPoint::Compute,
                 tokens: vec![
                     IndirectCommandsLayoutToken {
@@ -67,7 +67,7 @@ impl VisibilityBufferShadePass {
             Buffer::new(
                 rhi.buffer_allocator().clone(),
                 BufferCreateInfo {
-                    usage: BufferUsage::INDIRECT_BUFFER,
+                    usage: BufferUsage::INDIRECT_BUFFER | BufferUsage::TRANSFER_DST,
                     ..BufferCreateInfo::default()
                 },
                 AllocationCreateInfo::default(),
@@ -85,6 +85,8 @@ impl VisibilityBufferShadePass {
             .field("outputRT")
             .unwrap()
             .write_swapchain_image(data.final_render_target.clone());
+
+        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             rhi,
@@ -125,7 +127,9 @@ impl VisibilityBufferShadePass {
             ..GeneratedCommandsInfo::dynamic_pipeline(self.commands_layout.clone(), self.preprocess_buffer.clone())
         };
 
-        unsafe {command_buffer.execute_generated_commands(false, commands_info)}?;
+        unsafe {command_buffer.preprocess_generated_commands(commands_info.clone())}?;
+
+        unsafe {command_buffer.execute_generated_commands(true, commands_info)}?;
 
         Ok(())
     }
