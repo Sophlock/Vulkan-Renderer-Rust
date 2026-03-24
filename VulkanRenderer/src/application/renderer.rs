@@ -238,6 +238,8 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
+        self.rhi.as_ref().shader_object_update_queue().borrow_mut().flush_writes(&mut command_buffer);
+
         self.mutable_state_const()
             .vis_buffer_rasterizer
             .record_command_buffer(

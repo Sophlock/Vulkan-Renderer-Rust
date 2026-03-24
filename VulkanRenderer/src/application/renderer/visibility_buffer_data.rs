@@ -468,6 +468,7 @@ impl VisibilityBufferGlobalData {
             rhi.descriptor_allocator(),
             rhi.buffer_allocator(),
             rhi.in_flight_frames() as u32,
+            rhi.shader_object_update_queue().clone()
         )
     }
 

@@ -1,9 +1,22 @@
+use crate::application::rhi::buffer::copy_buffer_to_buffer;
+use crate::application::rhi::{
+    rhi_assets::vulkan_texture::VKTexture,
+    shader_cursor::{ShaderOffset, ShaderSize},
+    shader_object::BoundImageType::ImageSampler,
+    swapchain_resources::SwapchainImage,
+};
+use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
+use smallvec::smallvec;
+use std::cell::{RefCell, RefMut};
+use std::collections::HashSet;
+use std::ops::{DerefMut, Range};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, RwLock},
 };
-
-use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, BufferCopy, CommandBuffer, CopyBufferInfo, PrimaryAutoCommandBuffer,
+};
 use vulkano::{
     DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
@@ -26,13 +39,6 @@ use vulkano::{
     sync::Sharing,
 };
 
-use crate::application::rhi::{
-    rhi_assets::vulkan_texture::VKTexture,
-    shader_cursor::{ShaderOffset, ShaderSize},
-    shader_object::BoundImageType::ImageSampler,
-    swapchain_resources::SwapchainImage,
-};
-
 pub struct ShaderObjectLayout {
     pipeline_layout: Arc<PipelineLayout>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,
@@ -40,23 +46,6 @@ pub struct ShaderObjectLayout {
     existential_offsets: Vec<ShaderOffset>,
     type_layout: *const TypeLayout,
     linked_program: ComponentType,
-}
-
-pub struct ShaderObject {
-    layout: Arc<ShaderObjectLayout>,
-    descriptor_sets: Vec<Arc<DescriptorSet>>,
-    uniform_buffer: Option<Subbuffer<[u8]>>,
-    type_layout: *const TypeLayout,
-    swapchain_resources: Mutex<BoundSwapchainResources>,
-}
-
-enum BoundImageType {
-    Image(Arc<RwLock<SwapchainImage>>),
-    ImageSampler(Arc<RwLock<SwapchainImage>>, Arc<Sampler>),
-}
-
-struct BoundSwapchainResources {
-    bound_images: BTreeMap<(u32, u32), BoundImageType>,
 }
 
 impl ShaderObjectLayout {
@@ -373,12 +362,32 @@ impl ShaderObjectLayout {
     }
 }
 
+pub struct ShaderObject {
+    layout: Arc<ShaderObjectLayout>,
+    descriptor_sets: Vec<Arc<DescriptorSet>>,
+    uniform_buffer: Option<Subbuffer<[u8]>>,
+    type_layout: *const TypeLayout,
+    swapchain_resources: Mutex<BoundSwapchainResources>,
+    staging: RefCell<ShaderObjectStaging>,
+    update_queue: Arc<RefCell<ShaderObjectQueue>>
+}
+
+enum BoundImageType {
+    Image(Arc<RwLock<SwapchainImage>>),
+    ImageSampler(Arc<RwLock<SwapchainImage>>, Arc<Sampler>),
+}
+
+struct BoundSwapchainResources {
+    bound_images: BTreeMap<(u32, u32), BoundImageType>,
+}
+
 impl ShaderObject {
     pub fn new(
         layout: Arc<ShaderObjectLayout>,
         descriptor_allocator: &Arc<dyn DescriptorSetAllocator>,
         buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: u32,
+        update_queue: Arc<RefCell<ShaderObjectQueue>>,
     ) -> Arc<Self> {
         let type_layout = layout
             .type_layout()
@@ -430,12 +439,19 @@ impl ShaderObject {
             })
             .collect();
 
+        let staging = RefCell::new(ShaderObjectStaging::new(
+            ordinary_size,
+            buffer_allocator.clone(),
+        ));
+
         Self {
             descriptor_sets,
             uniform_buffer,
             type_layout,
             layout,
             swapchain_resources: Mutex::new(BoundSwapchainResources::default()),
+            staging,
+            update_queue
         }
         .into()
     }
@@ -460,17 +476,16 @@ impl ShaderObject {
         self.layout.existential_offsets[existential]
     }
 
-    pub fn write_data<T: BufferContents + Clone>(&self, offset: ShaderOffset, data: &T) {
-        let mut content = self.uniform_buffer.as_ref().unwrap().write().unwrap();
-        let pos = (&mut content[offset.byte_offset] as *mut u8).cast::<T>();
-        unsafe { *pos = data.clone() };
+    pub fn write_data<T: BufferContents + Clone>(self: &Arc<Self>, offset: ShaderOffset, data: &T) {
+        self.staging.borrow_mut().write_data(offset, data);
+        self.update_queue.borrow_mut().push(self.clone());
     }
 
-    pub fn write_texture(&self, offset: ShaderOffset, texture: &VKTexture) {
+    pub fn write_texture(self: &Arc<Self>, offset: ShaderOffset, texture: &VKTexture) {
         self.write_image_view(offset, texture.image_view().clone());
     }
 
-    pub fn write_image_view(&self, offset: ShaderOffset, view: Arc<ImageView>) {
+    pub fn write_image_view(self: &Arc<Self>, offset: ShaderOffset, view: Arc<ImageView>) {
         let write = WriteDescriptorSet::image_view_with_layout(
             offset.binding_offset,
             DescriptorImageViewInfo {
@@ -478,16 +493,16 @@ impl ShaderObject {
                 image_layout: ImageLayout::ShaderReadOnlyOptimal, // TODO: Is this always correct?
             },
         );
-        self.perform_descriptor_write([write].iter().cloned());
+        self.queue_descriptor_writes([write].into_iter());
     }
 
-    pub fn write_sampler(&self, offset: ShaderOffset, sampler: Arc<Sampler>) {
+    pub fn write_sampler(self: &Arc<Self>, offset: ShaderOffset, sampler: Arc<Sampler>) {
         let write = WriteDescriptorSet::sampler(offset.binding_offset, sampler);
-        self.perform_descriptor_write([write].iter().cloned());
+        self.queue_descriptor_writes([write].into_iter());
     }
 
     pub fn write_image_view_sampler(
-        &self,
+        self: &Arc<Self>,
         offset: ShaderOffset,
         view: Arc<ImageView>,
         sampler: Arc<Sampler>,
@@ -500,12 +515,12 @@ impl ShaderObject {
             },
             sampler,
         );
-        self.perform_descriptor_write([write].iter().cloned());
+        self.queue_descriptor_writes([write].into_iter());
     }
 
-    pub fn write_buffer<T: ?Sized>(&self, offset: ShaderOffset, buffer: Subbuffer<T>) {
+    pub fn write_buffer<T: ?Sized>(self: &Arc<Self>, offset: ShaderOffset, buffer: Subbuffer<T>) {
         let write = WriteDescriptorSet::buffer(offset.binding_offset, buffer);
-        self.perform_descriptor_write([write].iter().cloned());
+        self.queue_descriptor_writes([write].into_iter());
     }
 
     pub fn write_swapchain_image(
@@ -531,20 +546,13 @@ impl ShaderObject {
         self.register_swapchain_image(offset, BoundImageType::ImageSampler(image, sampler));
     }
 
-    fn perform_descriptor_write<T>(&self, writes: T)
+    fn queue_descriptor_writes<T>(self: &Arc<Self>, writes: T)
     where
         T: Iterator<Item = WriteDescriptorSet>,
         T: Clone,
     {
-        self.descriptor_sets
-            .iter()
-            // TODO: This should use the safe checked version but this requires manual layout transitions
-            .for_each(|set| {
-                if let Err(error) = unsafe {set.update_by_ref(writes.clone(), [])} {
-                    println!("Warning: Descriptor write error occurred: {}\nNote that this might just be a bug in Vulkano!", error);
-                    unsafe { set.update_by_ref_unchecked(writes.clone(), []) }
-                }
-                });
+        self.staging.borrow_mut().queue_descriptor_writes(writes);
+        self.update_queue.borrow_mut().push(self.clone());
     }
 
     fn register_swapchain_image(self: &Arc<Self>, offset: ShaderOffset, image: BoundImageType) {
@@ -597,6 +605,17 @@ impl ShaderObject {
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
         self.descriptor_sets.as_slice()
     }
+
+    pub fn flush_writes(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) {
+        self.staging.borrow_mut().flush_writes(
+            self.uniform_buffer.clone(),
+            self.descriptor_sets.iter().map(|set| set.as_ref()),
+            command_buffer,
+        );
+    }
 }
 
 impl BoundImageType {
@@ -613,5 +632,137 @@ impl Default for BoundSwapchainResources {
         Self {
             bound_images: Default::default(),
         }
+    }
+}
+
+struct ShaderObjectStaging {
+    uniform_buffer: Option<Subbuffer<[u8]>>,
+    modified_uniform_range: Option<Range<usize>>,
+    descriptor_writes: Vec<WriteDescriptorSet>,
+}
+
+impl ShaderObjectStaging {
+    pub fn new(ordinary_size: usize, buffer_allocator: Arc<dyn MemoryAllocator>) -> Self {
+        let buffer_info = BufferCreateInfo {
+            sharing: Sharing::Exclusive,
+            usage: BufferUsage::TRANSFER_SRC,
+            ..BufferCreateInfo::default()
+        };
+        let alloc_info = AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..AllocationCreateInfo::default()
+        };
+
+        let uniform_buffer = if ordinary_size > 0 {
+            Some(
+                Buffer::new_slice::<u8>(
+                    buffer_allocator,
+                    buffer_info,
+                    alloc_info,
+                    ordinary_size as DeviceSize,
+                )
+                .unwrap(),
+            )
+        } else {
+            None
+        };
+
+        Self {
+            uniform_buffer,
+            modified_uniform_range: None,
+            descriptor_writes: Vec::new(),
+        }
+    }
+
+    fn write_data<T: BufferContents + Clone>(&mut self, offset: ShaderOffset, data: &T) {
+        let mut content = self.uniform_buffer.as_ref().unwrap().write().unwrap();
+        let pos = (&mut content[offset.byte_offset] as *mut u8).cast::<T>();
+        unsafe { *pos = data.clone() };
+        let modified_range = offset.byte_offset..(offset.byte_offset + size_of::<T>());
+        self.modified_uniform_range = Some(
+            self.modified_uniform_range
+                .as_ref()
+                .map(|range| {
+                    range.start.min(modified_range.start)..range.end.max(modified_range.end)
+                })
+                .unwrap_or(modified_range),
+        );
+    }
+
+    fn queue_descriptor_writes<T>(&mut self, writes: T)
+    where
+        T: Iterator<Item = WriteDescriptorSet>,
+        T: Clone,
+    {
+        self.descriptor_writes.append(&mut writes.collect());
+    }
+
+    fn flush_writes<'a>(
+        &mut self,
+        uniform_buffer: Option<Subbuffer<[u8]>>,
+        descriptor_sets: impl Iterator<Item = &'a DescriptorSet>,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) {
+        if !self.descriptor_writes.is_empty() {
+            descriptor_sets
+                // TODO: This should use the safe checked version but this requires manual layout transitions
+                .for_each(|set| {
+                    if let Err(error) = unsafe {set.update_by_ref(self.descriptor_writes.iter().cloned(), [])} {
+                        println!("Warning: Descriptor write error occurred: {}\nNote that this might just be a bug in Vulkano!", error);
+                        unsafe { set.update_by_ref_unchecked(self.descriptor_writes.iter().cloned(), []) }
+                    }
+                });
+
+            self.descriptor_writes.clear();
+        }
+
+        if let Some(range) = self.modified_uniform_range.as_ref() {
+            let copy_info = CopyBufferInfo {
+                regions: smallvec![BufferCopy {
+                    src_offset: range.start as DeviceSize,
+                    dst_offset: range.start as DeviceSize,
+                    size: (range.end - range.start) as DeviceSize,
+                    ..BufferCopy::default()
+                }],
+                ..CopyBufferInfo::buffers(
+                    self.uniform_buffer.clone().unwrap(),
+                    uniform_buffer.unwrap(),
+                )
+            };
+            command_buffer.copy_buffer(copy_info).unwrap();
+        }
+
+        self.modified_uniform_range = None;
+    }
+}
+
+pub struct ShaderObjectQueue {
+    queued_objects: Vec<Arc<ShaderObject>>,
+    lookup: HashSet<usize>,
+}
+
+impl ShaderObjectQueue {
+    pub fn new() -> Arc<RefCell<Self>> {
+        RefCell::new(Self {
+            queued_objects: Vec::new(),
+            lookup: HashSet::new(),
+        })
+        .into()
+    }
+
+    pub fn push(&mut self, shader_object: Arc<ShaderObject>) {
+        let ptr = Arc::as_ptr(&shader_object) as usize;
+        if self.lookup.insert(ptr) {
+            self.queued_objects.push(shader_object);
+        }
+    }
+
+    pub fn flush_writes(&mut self, command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) {
+        for shader_object in self.queued_objects.iter() {
+            shader_object.flush_writes(command_buffer);
+        }
+        self.queued_objects.clear();
+        self.lookup.clear();
     }
 }

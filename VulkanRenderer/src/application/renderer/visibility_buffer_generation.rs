@@ -203,6 +203,7 @@ impl VisBufferStep {
             rhi.descriptor_allocator(),
             rhi.buffer_allocator(),
             rhi.in_flight_frames() as u32,
+            rhi.shader_object_update_queue().clone(),
         );
         let pipeline = compute_pipeline()
             .shader(
@@ -274,6 +275,7 @@ impl VisibilityBufferRasterizer {
             rhi.descriptor_allocator(),
             rhi.buffer_allocator(),
             rhi.in_flight_frames() as u32,
+            rhi.shader_object_update_queue().clone(),
         );
         let pipeline = unsafe {
             graphics_pipeline()

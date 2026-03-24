@@ -1,5 +1,5 @@
 use std::{ops::Deref, sync::Arc};
-
+use std::cell::RefCell;
 use asset_system::resource_management::Resource;
 use vulkano::{
     descriptor_set::{DescriptorSet, allocator::DescriptorSetAllocator},
@@ -15,6 +15,7 @@ use crate::application::{
         shader_object::ShaderObject,
     },
 };
+use crate::application::rhi::shader_object::ShaderObjectQueue;
 
 pub struct VKMaterialInstance {
     shader_object: Arc<ShaderObject>,
@@ -29,6 +30,7 @@ impl VKMaterialInstance {
         buffer_allocator: &Arc<dyn MemoryAllocator>,
         in_flight_frames: usize,
         resource_manager: &RHIResourceManager,
+        update_queue: Arc<RefCell<ShaderObjectQueue>>
     ) -> Self {
         let shader_object = ShaderObject::new(
             material
@@ -39,6 +41,7 @@ impl VKMaterialInstance {
             descriptor_allocator,
             buffer_allocator,
             in_flight_frames as u32,
+            update_queue
         );
         Self {
             shader_object,
@@ -86,6 +89,7 @@ impl RHIMaterialInstanceInterface for VKMaterialInstance {
             &rhi.buffer_allocator,
             rhi.frames_in_flight,
             resource_manager.deref(),
+            rhi.shader_object_update_queue().clone(),
         )
     }
 }

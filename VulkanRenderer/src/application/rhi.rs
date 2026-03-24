@@ -70,6 +70,7 @@ use crate::application::{
         swapchain::SwapchainSupportDetails,
     },
 };
+use crate::application::rhi::shader_object::ShaderObjectQueue;
 
 pub struct VKRHI {
     frames_in_flight: usize,
@@ -88,6 +89,7 @@ pub struct VKRHI {
     buffer_allocator: Arc<dyn MemoryAllocator>,
     descriptor_allocator: Arc<dyn DescriptorSetAllocator>,
     resource_manager: RefCell<RHIResourceManager>,
+    shader_object_update_queue: Arc<RefCell<ShaderObjectQueue>>,
 }
 
 impl VKRHI {
@@ -132,6 +134,7 @@ impl VKRHI {
             },
         ));
         let resource_manager = RefCell::new(RHIResourceManager::new(asset_manager));
+        let shader_object_update_queue = ShaderObjectQueue::new();
         let result = Rc::new(Self {
             frames_in_flight,
             window,
@@ -148,6 +151,7 @@ impl VKRHI {
             buffer_allocator,
             descriptor_allocator,
             resource_manager,
+            shader_object_update_queue
         });
         result.resource_manager.borrow_mut().register_rhi(&result);
         result
@@ -350,6 +354,10 @@ impl VKRHI {
         unsafe {
             self.device.wait_idle().unwrap();
         }
+    }
+    
+    pub fn shader_object_update_queue(&self) -> &Arc<RefCell<ShaderObjectQueue>> {
+        &self.shader_object_update_queue
     }
 }
 

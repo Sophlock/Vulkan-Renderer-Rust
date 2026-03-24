@@ -135,6 +135,7 @@ impl FullScreenPass {
             rhi.descriptor_allocator(),
             rhi.buffer_allocator(),
             framebuffers.len() as u32,
+            rhi.shader_object_update_queue().clone()
         );
 
         let sampler = Sampler::new(
