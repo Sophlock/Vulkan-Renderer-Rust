@@ -2,6 +2,7 @@ mod full_screen_pass;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
+mod post_processing;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -72,6 +73,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::renderer::post_processing::{PostProcessPass, PostProcessSettings};
 use crate::application::renderer::visibility_buffer_data::MutatingData;
 
 pub struct MutableRenderState {
@@ -106,13 +108,6 @@ struct CompiledMaterial {
     pipeline: Arc<GraphicsPipeline>,
 }
 
-struct PostProcessPass {
-    shader_object_layout: Arc<ShaderObjectLayout>,
-    shader_object: Arc<ShaderObject>,
-    pipeline: Arc<ComputePipeline>,
-    sampler: Arc<Sampler>,
-}
-
 impl VKRenderer {
     pub fn new(rhi: Rc<VKRHI>) -> Self {
         let swapchain = Swapchain::new(rhi.as_ref());
@@ -142,7 +137,7 @@ impl VKRenderer {
             },
         );
 
-        let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref());
+        let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref(), color_render_target.clone(), pp_render_target.clone());
 
         let fullscreen_pass = FullScreenPass::new(
             rhi.as_ref(),
@@ -179,7 +174,7 @@ impl VKRenderer {
             VisibilityBufferProcessingPass::new(rhi.as_ref(), &vis_buffer_data);
         let vis_buffer_shade = VisibilityBufferShadePass::new(rhi.clone(), vis_buffer_data.clone());
 
-        let result = Self {
+        Self {
             rhi,
             mutable_state: RefCell::new(MutableRenderState {
                 swapchain,
@@ -199,9 +194,7 @@ impl VKRenderer {
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
-        };
-        result.write_framebuffer_descriptors();
-        result
+        }
     }
 
     pub fn redraw(&self, scene: &VKScene) {
@@ -217,7 +210,6 @@ impl VKRenderer {
         if self.mutable_state_const().should_recreate_swapchain {
             self.mutable_state()
                 .recreate_swapchain_internal(self.rhi.as_ref(), &self.render_pass);
-            self.write_framebuffer_descriptors();
         }
 
         self.update_mutating_data(scene);
@@ -237,6 +229,9 @@ impl VKRenderer {
         if suboptimal {
             self.mutable_state().request_recreate_swapchain();
         }
+
+        let swapchain_extent = self.mutable_state_const().swapchain.extent;
+
         let mut command_buffer = self
             .rhi
             .command_buffer_interface()
@@ -247,7 +242,7 @@ impl VKRenderer {
             .record_command_buffer(
                 &mut command_buffer,
                 swapchain_image_index as usize,
-                self.mutable_state_const().swapchain.extent,
+                swapchain_extent,
                 scene,
                 &self.mutable_state_const().vis_buffer_data,
             )
@@ -278,7 +273,7 @@ impl VKRenderer {
             .record_command_buffer(
                 &mut compute_command_buffer,
                 swapchain_image_index as usize,
-                self.mutable_state_const().swapchain.extent,
+                swapchain_extent,
             )
             .unwrap();
 
@@ -306,9 +301,10 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
-        self.record_post_process_command_buffer(
+        self.post_process.record_command_buffer(
             &mut compute_command_buffer,
             swapchain_image_index as usize,
+            swapchain_extent
         )
         .unwrap();
 
@@ -329,7 +325,7 @@ impl VKRenderer {
             .fullscreen_pass
             .record_command_buffer(
                 &mut command_buffer,
-                self.mutable_state_const().swapchain.extent,
+                swapchain_extent,
                 swapchain_image_index as usize,
             )
             .unwrap();
@@ -478,30 +474,6 @@ impl VKRenderer {
             .map(|_| ())
     }
 
-    fn record_post_process_command_buffer(
-        &self,
-        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        image_index: usize,
-    ) -> Result<(), Box<ValidationError>> {
-        let extent = self.mutable_state().swapchain.extent;
-        let groups = [extent[0] / 16, extent[1] / 16, 1];
-
-        command_buffer
-            .bind_pipeline_compute(self.post_process.pipeline.clone())?
-            .bind_descriptor_sets(
-                PipelineBindPoint::Compute,
-                self.post_process
-                    .shader_object_layout
-                    .pipeline_layout()
-                    .clone(),
-                0,
-                self.post_process.shader_object.descriptor_sets()[image_index].clone(),
-            )?;
-        unsafe { command_buffer.dispatch(groups) }?;
-
-        Ok(())
-    }
-
     pub fn compile_materials(&self) {
         self.material_compiler
             .borrow_mut()
@@ -515,36 +487,6 @@ impl VKRenderer {
         self.mutable_state.borrow_mut()
     }
 
-    fn write_framebuffer_descriptors(&self) {
-        let global_cursor = ShaderCursor::new(self.post_process.shader_object.clone());
-        let cursor = global_cursor.field("gComputeInput").unwrap();
-        cursor.field("input").unwrap().write_image_view_sampler(
-            self.mutable_state_const()
-                .color_render_target
-                .read()
-                .unwrap()
-                .image_view()
-                .clone(),
-            self.post_process.sampler.clone(),
-        );
-        cursor.field("screenSize").unwrap().write(
-            &self
-                .mutable_state_const()
-                .swapchain
-                .extent
-                .map(|i| i as f32),
-        );
-        cursor.field("exposureValue").unwrap().write(&1.0f32);
-        cursor.field("result").unwrap().write_image_view(
-            self.mutable_state_const()
-                .pp_render_target
-                .read()
-                .unwrap()
-                .image_view()
-                .clone(),
-        );
-    }
-
     fn update_mutating_data(&self, scene: &VKScene) {
         let data = MutatingData {
             screen_size: self.mutable_state_const().swapchain.extent,
@@ -556,6 +498,10 @@ impl VKRenderer {
         write.screen_size = data.screen_size;
         write.view_matrix = data.view_matrix;
         write.view_position = data.view_position;
+    }
+    
+    pub fn post_process_settings(&self) -> RefMut<PostProcessSettings> {
+        self.post_process.settings_mut()
     }
 }
 impl RendererInterface for VKRenderer {
@@ -647,54 +593,5 @@ impl MaterialCompiler {
                 )
             })
             .collect();
-    }
-}
-
-impl PostProcessPass {
-    fn new(compiler: &SlangCompiler, rhi: &VKRHI) -> Self {
-        let module = compiler
-            .session()
-            .load_module("Compute/compute_test")
-            .unwrap();
-        let entry = module.find_entry_point_by_name("compute_test").unwrap();
-        let module_component: ComponentType = module.into();
-        let composed = compiler
-            .session()
-            .create_composite_component_type(&[module_component, entry.into()])
-            .unwrap();
-        let linked = composed.link().unwrap();
-        let spirv = linked.entry_point_code(0, 0).unwrap();
-
-        let shader_object_layout =
-            ShaderObjectLayout::new(linked, &[], rhi.device(), ShaderStages::COMPUTE);
-        let shader_object = ShaderObject::new(
-            shader_object_layout.clone(),
-            rhi.descriptor_allocator(),
-            rhi.buffer_allocator(),
-            rhi.in_flight_frames() as u32,
-        );
-
-        let pipeline = compute_pipeline()
-            .shader(
-                rhi.device().clone(),
-                bytes_to_words(spirv.as_slice()).unwrap().deref(),
-            )
-            .build_pipeline(
-                rhi.device().clone(),
-                shader_object_layout.pipeline_layout().clone(),
-            );
-
-        let sampler = Sampler::new(
-            rhi.device().clone(),
-            SamplerCreateInfo::simple_repeat_linear_no_mipmap(),
-        )
-        .unwrap();
-
-        Self {
-            shader_object_layout,
-            shader_object,
-            pipeline,
-            sampler,
-        }
     }
 }

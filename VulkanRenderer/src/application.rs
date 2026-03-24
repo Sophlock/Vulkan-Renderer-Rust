@@ -180,7 +180,8 @@ impl Application {
     }
 
     fn draw_gui(&mut self, delta_time: f32) {
-        let mut gui = self.renderer.as_ref().unwrap().rhi().gui_mut();
+        let renderer = &self.renderer.as_ref().unwrap();
+        let mut gui = renderer.rhi().gui_mut();
 
         gui.immediate_ui(|ui| {
             let ctx = ui.context();
@@ -200,14 +201,16 @@ impl Application {
                             .count()
                     ));
 
+                    ui.add_space(10f32);
                     ui.heading("Render Settings");
-
+                    ui.label("Post Process:");
+                    renderer.post_process_settings().draw_gui(ui);
 
                     //ui.text_edit_singleline(&mut name);
                     //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-                    if ui.button("Increment").clicked() {
+                    //if ui.button("Increment").clicked() {
                         // age += 1;
-                    }
+                    //}
                     //ui.label(format!("Hello '{name}', age {age}"));
                 });
         });
