@@ -26,7 +26,7 @@ use vulkano::{
     render_pass::RenderPass,
     shader::{ShaderStages, spirv::bytes_to_words},
 };
-
+use vulkano::command_buffer::{DrawIndexedIndirectCommand, DrawIndirectCommand};
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, Vertex,
@@ -425,7 +425,9 @@ impl VisibilityBufferRasterizer {
             .bind_vertex_buffers(1, data.global_data.instances.clone())?
             .bind_index_buffer(data.global_data.indices.clone())?;
 
-        scene
+        unsafe {command_buffer.draw_indexed_indirect(data.global_data.draw_indirect_commands.clone())}?;
+
+        /*scene
             .models()
             .iter()
             .map(|model_handle| {
@@ -443,7 +445,7 @@ impl VisibilityBufferRasterizer {
                 .map(|_| ())
             })
             .reduce(Result::or)
-            .unwrap_or(Ok(()))?;
+            .unwrap_or(Ok(()))?;*/
 
         command_buffer
             .end_render_pass(SubpassEndInfo::default())

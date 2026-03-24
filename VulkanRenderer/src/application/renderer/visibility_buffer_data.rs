@@ -3,26 +3,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
-use vulkano::{
-    DeviceAddress, DeviceSize, ValidationError,
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
-    device_generated_commands::{ComputePipelineIndirectBufferInfo, IndirectCommandsLayout},
-    format::Format,
-    image::{ImageAspects, ImageUsage},
-    memory::{
-        DeviceAlignment,
-        allocator::{AllocationCreateInfo, DeviceLayout, MemoryTypeFilter},
-    },
-    pipeline::{
-        ComputePipeline, PipelineCreateFlags, PipelineLayout, compute::ComputePipelineCreateInfo,
-        layout::PushConstantRange,
-    },
-    shader::{ShaderStages, spirv::bytes_to_words},
-    sync::{GpuFuture, now},
-};
-
 use crate::application::{
     assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
     renderer::visibility_buffer_generation::{
@@ -42,6 +22,27 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
+use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
+use vulkano::command_buffer::{DrawIndexedIndirectCommand, DrawIndirectCommand};
+use vulkano::{
+    DeviceAddress, DeviceSize, ValidationError,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
+    device_generated_commands::{ComputePipelineIndirectBufferInfo, IndirectCommandsLayout},
+    format::Format,
+    image::{ImageAspects, ImageUsage},
+    memory::{
+        DeviceAlignment,
+        allocator::{AllocationCreateInfo, DeviceLayout, MemoryTypeFilter},
+    },
+    pipeline::{
+        ComputePipeline, PipelineCreateFlags, PipelineLayout, compute::ComputePipelineCreateInfo,
+        layout::PushConstantRange,
+    },
+    shader::{ShaderStages, spirv::bytes_to_words},
+    sync::{GpuFuture, now},
+};
+use crate::application::assets::asset_traits::RHIResource;
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -91,6 +92,7 @@ pub struct VisibilityBufferGlobalData {
     pipelines: Vec<Arc<ComputePipeline>>,
     shader_object: Arc<ShaderObject>,
     material_count: u32,
+    pub draw_indirect_commands: Subbuffer<[DrawIndexedIndirectCommand]>,
 }
 
 #[derive(Copy, Clone, BufferContents)]
@@ -275,7 +277,7 @@ impl VisibilityBufferGlobalData {
     pub fn new(rhi: &VKRHI, mutating_data: Subbuffer<MutatingData>) -> Self {
         let resources = rhi.resource_manager();
 
-        let instances = resources
+        let mut instances = resources
             .resource_iterator::<VKModel>()
             .unwrap()
             .map(|instance| InstanceData {
@@ -287,6 +289,24 @@ impl VisibilityBufferGlobalData {
                     .inverse()
                     .transpose()
                     .to_cols_array_2d(),
+            })
+            .collect::<Vec<_>>();
+
+        instances.sort_unstable_by_key(|instance| instance.mesh_index);
+
+        let draw_indirect_commands = instances
+            .chunk_by(|left, right| left.mesh_index == right.mesh_index)
+            .scan(0u32, |offset, slice|  {
+                let mesh = resources.resource_iterator::<VKMesh>().unwrap().nth(slice[0].mesh_index as usize).unwrap();
+                let first_instance = *offset;
+                *offset += slice.len() as u32;
+                Some(DrawIndexedIndirectCommand {
+                    index_count: mesh.index_size() as u32,
+                    instance_count: slice.len() as u32,
+                    first_index: mesh.index_offset() as u32,
+                    vertex_offset: mesh.vertex_offset() as u32,
+                    first_instance,
+                })
             })
             .collect::<Vec<_>>();
 
@@ -325,6 +345,15 @@ impl VisibilityBufferGlobalData {
             .collect::<Vec<_>>();
 
         let material_count = materials.len() as u32;
+        
+        let draw_indirect_commands = buffer_from_slice(
+            rhi.buffer_allocator().clone(),
+            rhi.command_buffer_interface(),
+            rhi.queues().compute_queue.clone(),
+            draw_indirect_commands.as_slice(),
+            BufferUsage::INDIRECT_BUFFER,
+            MemoryTypeFilter::PREFER_DEVICE,
+        ).unwrap();
 
         Self {
             instances: Self::make_buffer(
@@ -353,6 +382,7 @@ impl VisibilityBufferGlobalData {
             pipelines,
             shader_object,
             material_count,
+            draw_indirect_commands
         }
     }
 
@@ -468,7 +498,7 @@ impl VisibilityBufferGlobalData {
             rhi.descriptor_allocator(),
             rhi.buffer_allocator(),
             rhi.in_flight_frames() as u32,
-            rhi.shader_object_update_queue().clone()
+            rhi.shader_object_update_queue().clone(),
         )
     }
 
@@ -555,10 +585,14 @@ impl VisibilityBufferGlobalData {
             });
 
         let num_materials = pipeline_create_infos.len();
-        let pipelines = create_infos_with_indirect.enumerate()
+        let pipelines = create_infos_with_indirect
+            .enumerate()
             .map(|(i, create_info)| {
                 if i % 10 == 0 {
-                    println!("Created {} visibility buffer materials of {}", i, num_materials);
+                    println!(
+                        "Created {} visibility buffer materials of {}",
+                        i + 1, num_materials
+                    );
                 }
                 ComputePipeline::new(rhi.device().clone(), None, create_info).unwrap()
             })

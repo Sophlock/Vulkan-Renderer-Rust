@@ -593,7 +593,7 @@ impl MaterialCompiler {
             .enumerate()
             .map(|(i, material)| {
                 if i % 10 == 0 {
-                    println!("Created {} ordinary materials", i);
+                    println!("Created {} ordinary materials", i + 1);
                 }
                 (
                     material.uuid(),
