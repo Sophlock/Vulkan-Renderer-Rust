@@ -23,7 +23,8 @@ impl SlangCompiler {
         let options = CompilerOptions::default()
             .optimization(OptimizationLevel::High)
             .emit_spirv_directly(true)
-            .matrix_layout_column(true);
+            .matrix_layout_column(true)
+            .force_c_layout(true);
         let session_description = SessionDesc::default()
             .targets(&targets)
             .search_paths(search_paths.as_slice())

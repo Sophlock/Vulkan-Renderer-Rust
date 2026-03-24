@@ -474,8 +474,6 @@ impl VKRenderer {
                     .field("viewProjection")
                     .unwrap()
                     .write(scene.camera().view_projection().as_ref());
-                let ev = 1f32;
-                view_cursor.field("exposureValue").unwrap().write(&ev);
 
                 command_buffer
                     .bind_pipeline_graphics(compiled_material.pipeline.clone())?
