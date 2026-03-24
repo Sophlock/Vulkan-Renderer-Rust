@@ -5,8 +5,8 @@ use application::Application;
 use winit::event_loop::EventLoop;
 
 pub enum AppEvent {
-    Tick,
-    Render,
+    Tick = 0,
+    Render = 1,
 }
 
 fn main() {

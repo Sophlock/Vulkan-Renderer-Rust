@@ -220,24 +220,6 @@ impl VKRenderer {
             self.write_framebuffer_descriptors();
         }
 
-        self.rhi.gui_mut().immediate_ui(|ui| {
-            let ctx = ui.context();
-            egui::CentralPanel::default()
-                .frame(Frame::default().fill(Color32::TRANSPARENT))
-                .show(&ctx, |ui| {
-                    ui.heading("My egui Application");
-                    ui.horizontal(|ui| {
-                        ui.label("Your name: ");
-                        //ui.text_edit_singleline(&mut name);
-                    });
-                    //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-                    if ui.button("Increment").clicked() {
-                        // age += 1;
-                    }
-                    //ui.label(format!("Hello '{name}', age {age}"));
-                });
-        });
-
         self.update_mutating_data(scene);
 
         let acquire_image_result = self.mutable_state_const().swapchain.acquire_next_image();

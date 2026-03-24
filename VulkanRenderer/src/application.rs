@@ -4,12 +4,14 @@ mod renderer;
 mod rhi;
 mod scene;
 
-use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
-
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+use egui_winit_vulkano::egui;
+use egui_winit_vulkano::egui::{Color32, Frame};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
+use std::time::{Duration, SystemTime};
+use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
 use vulkano::buffer::BufferUsage;
 use winit::{
     application::ApplicationHandler,
@@ -19,6 +21,7 @@ use winit::{
 };
 use winit_input_map::{InputCode, InputMap, input_map};
 
+use crate::application::assets::AssetManager::AssetManager;
 use crate::{
     AppEvent,
     application::{
@@ -34,7 +37,6 @@ use crate::{
         scene::{Scene, model::Model, transform::Transform},
     },
 };
-use crate::application::assets::AssetManager::AssetManager;
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,
@@ -42,6 +44,7 @@ pub struct Application {
     rhi_scene_proxy: Option<VKScene>,
     scene: Scene,
     input: InputMap<InputAction>,
+    time_measurement: TimeMeasureSystem,
     gilrs: Gilrs,
 }
 
@@ -55,25 +58,26 @@ impl Application {
             asset_manager,
             scene,
             input: Self::build_input_map(),
+            time_measurement: TimeMeasureSystem::new(),
             gilrs: Gilrs::new().unwrap(),
         }
     }
 
     fn scene(asset_manager: &mut AssetManager) -> Scene {
         let material = asset_manager.add_material(
-                "TestMat",
-                "Materials/basicMaterials",
-                "SingleColorUnlitMaterial",
-            );
-        let mesh = asset_manager.add_mesh("TestMesh","resources/assets/meshes/sphere.glb");
+            "TestMat",
+            "Materials/basicMaterials",
+            "SingleColorUnlitMaterial",
+        );
+        let mesh = asset_manager.add_mesh("TestMesh", "resources/assets/meshes/sphere.glb");
         let material_instance = asset_manager.add_material_instance("TestMatInst", material);
         let mut scene = Scene::new();
-        scene.models.push(
-            asset_manager.add_model("TestModel",
-                Transform::default(),
-                mesh,
-                material_instance,
-            ));
+        scene.models.push(asset_manager.add_model(
+            "TestModel",
+            Transform::default(),
+            mesh,
+            material_instance,
+        ));
         scene.camera.transform.location = Vec3::new(0., 0., 2.);
         scene
     }
@@ -116,7 +120,7 @@ impl Application {
         self.scene.camera.aspect = x as f32 / y as f32;
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self, delta_time: f32) {
         use InputAction::*;
 
         let mouse_move = self.input.dir(MouseLeft, MouseRight, MouseUp, MouseDown);
@@ -135,16 +139,17 @@ impl Application {
         if both {
             let right = cam.transform.right();
             let up = cam.transform.up();
-            cam.transform.location -= (right * mouse_move.0 + up * mouse_move.1) * cam.speed;
+            cam.transform.location -=
+                (right * mouse_move.0 + up * mouse_move.1) * cam.speed * delta_time;
         } else if left {
             let forward = cam.transform.forward();
             let forward_proj = forward.with_y(0.).normalize();
 
-            cam.transform.location += forward_proj * mouse_move.1;
-            cam_euler.0 += mouse_move.0 * 0.1;
+            cam.transform.location += forward_proj * mouse_move.1 * cam.speed * delta_time;
+            cam_euler.0 += mouse_move.0 * cam.rot_speed * delta_time;
         } else if right {
-            cam_euler.0 += mouse_move.0 * cam.rot_speed;
-            cam_euler.1 -= mouse_move.1 * cam.rot_speed;
+            cam_euler.0 += mouse_move.0 * cam.rot_speed * delta_time;
+            cam_euler.1 -= mouse_move.1 * cam.rot_speed * delta_time;
         }
 
         if left || right {
@@ -152,13 +157,16 @@ impl Application {
             let right = cam.transform.right();
             let vertical = self.input.axis(Up, Down);
 
-            cam.transform.location +=
-                (forward * cam_move.0 + right * cam_move.1 - Vec3::Y * vertical) * cam.speed * 0.2;
+            cam.transform.location += (forward * cam_move.0 + right * cam_move.1
+                - Vec3::Y * vertical)
+                * cam.speed
+                * 0.2
+                * delta_time;
 
-            cam.speed += scroll * 0.01;
+            cam.speed += scroll * 1.5 * delta_time;
             cam.speed = cam.speed.max(0.);
         } else {
-            cam.fov += scroll * cam.speed * 0.1;
+            cam.fov += scroll * cam.speed * 0.1 * delta_time;
         }
 
         cam_euler.1 = cam_euler.1.clamp(-1.5, 1.5);
@@ -167,6 +175,46 @@ impl Application {
             Quat::from_euler(EulerRot::YXZ, cam_euler.0, cam_euler.1, cam_euler.2);
 
         self.input.init();
+
+        self.draw_gui(delta_time);
+    }
+
+    fn draw_gui(&mut self, delta_time: f32) {
+        let mut gui = self.renderer.as_ref().unwrap().rhi().gui_mut();
+
+        gui.immediate_ui(|ui| {
+            let ctx = ui.context();
+            egui::CentralPanel::default()
+                .frame(Frame::default().fill(Color32::TRANSPARENT))
+                .show(&ctx, |ui| {
+                    ui.heading("Render Statistics");
+                    ui.label(format!("Frametime: {:.4}s", delta_time));
+                    ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
+                    ui.label(format!(
+                        "Number of pipelines: {}",
+                        self.asset_manager
+                            .borrow()
+                            .resource_manager()
+                            .get_iter::<Material>()
+                            .unwrap()
+                            .count()
+                    ));
+
+                    ui.heading("Render Settings");
+
+
+                    //ui.text_edit_singleline(&mut name);
+                    //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
+                    if ui.button("Increment").clicked() {
+                        // age += 1;
+                    }
+                    //ui.label(format!("Hello '{name}', age {age}"));
+                });
+        });
+    }
+
+    fn mark_frame(&mut self, frame_type: &AppEvent) -> f32 {
+        self.time_measurement.update(frame_type).as_secs_f32()
     }
 }
 
@@ -176,11 +224,17 @@ impl ApplicationHandler<AppEvent> for Application {
 
         rhi.resource_manager_mut().allocate_shared_buffer::<Vertex>(
             1000000,
-            BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+            BufferUsage::VERTEX_BUFFER
+                | BufferUsage::TRANSFER_DST
+                | BufferUsage::STORAGE_BUFFER
+                | BufferUsage::SHADER_DEVICE_ADDRESS,
         );
         rhi.resource_manager_mut().allocate_shared_buffer::<Index>(
             1000000,
-            BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+            BufferUsage::INDEX_BUFFER
+                | BufferUsage::TRANSFER_DST
+                | BufferUsage::STORAGE_BUFFER
+                | BufferUsage::SHADER_DEVICE_ADDRESS,
         );
         self.update_scene_proxy(rhi.as_ref());
 
@@ -190,8 +244,9 @@ impl ApplicationHandler<AppEvent> for Application {
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
+        let delta_time = self.mark_frame(&event);
         match event {
-            AppEvent::Tick => self.tick(),
+            AppEvent::Tick => self.tick(delta_time),
             AppEvent::Render => self
                 .renderer
                 .as_ref()
@@ -251,5 +306,27 @@ impl ApplicationHandler<AppEvent> for Application {
 
     fn exiting(&mut self, event_loop: &ActiveEventLoop) {
         self.renderer.as_ref().unwrap().rhi().shutdown();
+    }
+}
+
+struct TimeMeasureSystem {
+    last_times: [SystemTime; 2],
+}
+
+impl TimeMeasureSystem {
+    pub fn new() -> Self {
+        Self {
+            last_times: [SystemTime::now(); 2],
+        }
+    }
+
+    pub fn update(&mut self, frame_type: &AppEvent) -> Duration {
+        let index: usize = match frame_type {
+            AppEvent::Tick => 0,
+            AppEvent::Render => 1
+        };
+        let last = self.last_times[index];
+        self.last_times[index] = SystemTime::now();
+        self.last_times[index].duration_since(last).unwrap()
     }
 }

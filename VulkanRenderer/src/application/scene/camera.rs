@@ -47,8 +47,8 @@ impl Default for Camera {
             aspect: 16.0 / 9.0,
             near: 0.001,
             far: 100000.0,
-            speed: 0.5,
-            rot_speed: 0.1,
+            speed: 15f32,
+            rot_speed: 3f32,
         }
     }
 }
