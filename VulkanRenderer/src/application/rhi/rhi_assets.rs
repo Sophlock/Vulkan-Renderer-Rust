@@ -25,6 +25,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::assets::AssetManager::AssetManager;
 
 pub mod vulkan_camera;
 pub mod vulkan_material;
@@ -37,7 +38,7 @@ pub mod vulkan_texture;
 pub struct RHIResourceManager {
     resources: ResourceManager,
     asset_to_rhi: HashMap<usize, usize>,
-    asset_manager: Arc<RefCell<ResourceManager>>,
+    asset_manager: Arc<RefCell<AssetManager>>,
     rhi: Option<Weak<VKRHI>>,
     shared_buffers: HashMap<TypeId, SharedBuffer>,
 }
@@ -60,7 +61,7 @@ macro_rules! implement_rhi_resource {
         ) -> RHIHandle<$rhi_type> {
             let asset_manager_arc = self.asset_manager.clone();
             let asset_manager = asset_manager_arc.borrow();
-            let source_data = source.get(asset_manager.deref()).unwrap();
+            let source_data = source.get(asset_manager.resource_manager()).unwrap();
             let asset_id = source_data.asset_metadata().uuid();
             if let Some(id) = self.asset_to_rhi.get(&asset_id) {
                 RHIHandle::<$rhi_type>::new(id.clone())
@@ -75,7 +76,7 @@ macro_rules! implement_rhi_resource {
 }
 
 impl RHIResourceManager {
-    pub fn new(asset_manager: Arc<RefCell<ResourceManager>>) -> Self {
+    pub fn new(asset_manager: Arc<RefCell<AssetManager>>) -> Self {
         Self {
             resources: ResourceManager::new(),
             asset_to_rhi: HashMap::new(),
@@ -103,7 +104,7 @@ impl RHIResourceManager {
         self.rhi.as_ref().unwrap().upgrade().unwrap()
     }
 
-    fn asset_manager(&self) -> Ref<ResourceManager> {
+    fn asset_manager(&self) -> Ref<AssetManager> {
         self.asset_manager.borrow()
     }
 

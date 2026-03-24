@@ -55,7 +55,7 @@ use vulkano::{
     sync::{GpuFuture, Sharing},
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
-
+use crate::application::assets::AssetManager::AssetManager;
 use super::assets::asset_traits::{
     RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
 };
@@ -90,7 +90,7 @@ pub struct VKRHI {
 impl VKRHI {
     pub fn new(
         event_loop: &ActiveEventLoop,
-        asset_manager: Arc<RefCell<ResourceManager>>,
+        asset_manager: Arc<RefCell<AssetManager>>,
     ) -> Rc<Self> {
         let window = Self::create_window(event_loop);
         let instance = Self::create_instance(&Surface::required_extensions(event_loop).unwrap());

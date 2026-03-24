@@ -34,10 +34,11 @@ use crate::{
         scene::{Scene, model::Model, transform::Transform},
     },
 };
+use crate::application::assets::AssetManager::AssetManager;
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,
-    asset_manager: Arc<RefCell<ResourceManager>>,
+    asset_manager: Arc<RefCell<AssetManager>>,
     rhi_scene_proxy: Option<VKScene>,
     scene: Scene,
     input: InputMap<InputAction>,
@@ -46,7 +47,7 @@ pub struct Application {
 
 impl Application {
     pub fn new() -> Self {
-        let asset_manager = Arc::new(RefCell::new(ResourceManager::new()));
+        let asset_manager = AssetManager::new();
         let scene = Self::scene(asset_manager.borrow_mut().deref_mut());
         Self {
             renderer: None,
@@ -58,36 +59,21 @@ impl Application {
         }
     }
 
-    fn scene(asset_manager: &mut ResourceManager) -> Scene {
-        let material = AssetHandle::<Material> {
-            uuid: asset_manager.add(Material::new(
-                "TestMat".into(),
-                "Materials/basicMaterials".into(),
-                "SingleColorUnlitMaterial".into(),
-            )),
-            _phantom: PhantomData,
-        };
-        let mesh = AssetHandle::<Mesh> {
-            uuid: asset_manager.add(Mesh::new(
-                "TestMesh".into(),
-                "resources/assets/meshes/sphere.glb",
-            )),
-            _phantom: PhantomData,
-        };
-        let material_instance = AssetHandle::<MaterialInstance> {
-            uuid: asset_manager.add(MaterialInstance::new("TestMatInst".into(), material)),
-            _phantom: PhantomData,
-        };
+    fn scene(asset_manager: &mut AssetManager) -> Scene {
+        let material = asset_manager.add_material(
+                "TestMat",
+                "Materials/basicMaterials",
+                "SingleColorUnlitMaterial",
+            );
+        let mesh = asset_manager.add_mesh("TestMesh","resources/assets/meshes/sphere.glb");
+        let material_instance = asset_manager.add_material_instance("TestMatInst", material);
         let mut scene = Scene::new();
-        scene.models.push(AssetHandle::<Model> {
-            uuid: asset_manager.add(Model::new(
-                "TestModel".into(),
+        scene.models.push(
+            asset_manager.add_model("TestModel",
                 Transform::default(),
                 mesh,
                 material_instance,
-            )),
-            _phantom: PhantomData,
-        });
+            ));
         scene.camera.transform.location = Vec3::new(0., 0., 2.);
         scene
     }
