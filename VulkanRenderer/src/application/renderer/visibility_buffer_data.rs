@@ -554,8 +554,12 @@ impl VisibilityBufferGlobalData {
                 ..create_info
             });
 
-        let pipelines = create_infos_with_indirect
-            .map(|create_info| {
+        let num_materials = pipeline_create_infos.len();
+        let pipelines = create_infos_with_indirect.enumerate()
+            .map(|(i, create_info)| {
+                if i % 10 == 0 {
+                    println!("Created {} visibility buffer materials of {}", i, num_materials);
+                }
                 ComputePipeline::new(rhi.device().clone(), None, create_info).unwrap()
             })
             .collect::<Vec<_>>();

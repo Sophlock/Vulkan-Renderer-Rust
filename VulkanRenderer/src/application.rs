@@ -69,20 +69,44 @@ impl Application {
     }
 
     fn scene(asset_manager: &mut AssetManager) -> Scene {
-        let material = asset_manager.add_material(
-            "TestMat",
-            "Materials/basicMaterials",
-            "SingleColorUnlitMaterial",
-        );
-        let mesh = asset_manager.add_mesh("TestMesh", "resources/assets/meshes/sphere.glb");
-        let material_instance = asset_manager.add_material_instance("TestMatInst", material);
+        let num_materials = 1;
+        let num_instances = 2000;
+
         let mut scene = Scene::new();
-        scene.models.push(asset_manager.add_model(
-            "TestModel",
-            Transform::default(),
-            mesh,
-            material_instance,
-        ));
+        let mesh = asset_manager.add_mesh("TestMesh", "resources/assets/meshes/sphere.glb");
+
+        use rand::prelude::*;
+
+        // Get an RNG:
+        let mut rng = rand::rng();
+        let bounds = -200f32..200f32;
+
+        for i in 0..num_materials {
+            let material = asset_manager.add_material(
+                format!("TestMat_{}", i).as_str(),
+                "Materials/basicMaterials",
+                "SingleColorUnlitMaterial",
+            );
+            let material_instance = asset_manager
+                .add_material_instance(format!("TestMatInst_{}", i).as_str(), material);
+
+            for j in 0..num_instances {
+                let transform = Transform {
+                    location: Vec3::new(
+                        rng.random_range(bounds.clone()),
+                        rng.random_range(bounds.clone()),
+                        rng.random_range(bounds.clone()),
+                    ),
+                    ..Transform::default()
+                };
+                scene.models.push(asset_manager.add_model(
+                    format!("TestModel_{}_{}", i, j).as_str(),
+                    transform,
+                    mesh.clone(),
+                    material_instance.clone(),
+                ));
+            }
+        }
         scene.camera.transform.location = Vec3::new(0., 0., 2.);
         scene
     }

@@ -590,7 +590,11 @@ impl MaterialCompiler {
         self.compiled_materials = resource_manager
             .resource_iterator::<VKMaterial>()
             .unwrap()
-            .map(|material| {
+            .enumerate()
+            .map(|(i, material)| {
+                if i % 10 == 0 {
+                    println!("Created {} ordinary materials", i);
+                }
                 (
                     material.uuid(),
                     self.compile_material(material, rhi.device(), render_pass),
