@@ -1,15 +1,11 @@
-use std::{ffi::CString, sync::Arc};
+use std::sync::Arc;
 
 /*use ash::{
     vk,
     vk::{DeviceQueueCreateInfo, PhysicalDeviceFeatures, PhysicalDeviceFeatures2},
 };*/
-use vulkano::{
-    VulkanObject,
-    device::{
-        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
-    },
-    instance::Instance,
+use vulkano::device::{
+    Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, physical::PhysicalDevice,
 };
 
 use crate::application::rhi::queue::{QueueCollection, QueueFamilyIndices};

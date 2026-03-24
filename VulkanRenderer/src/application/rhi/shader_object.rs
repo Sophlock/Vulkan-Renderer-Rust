@@ -18,11 +18,14 @@ use vulkano::{
     device::{Device, DeviceOwned},
     image::{ImageLayout, sampler::Sampler, view::ImageView},
     memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter},
-    pipeline::{PipelineLayout, layout::PipelineLayoutCreateInfo},
+    pipeline::{
+        PipelineLayout,
+        layout::{PipelineLayoutCreateInfo, PushConstantRange},
+    },
     shader::ShaderStages,
     sync::Sharing,
 };
-use vulkano::pipeline::layout::PushConstantRange;
+
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture,
     shader_cursor::{ShaderOffset, ShaderSize},
@@ -61,16 +64,22 @@ impl ShaderObjectLayout {
         linked_program: ComponentType,
         existential_objects: &[&TypeLayout],
         device: &Arc<Device>,
-        shader_stages: ShaderStages
+        shader_stages: ShaderStages,
     ) -> Arc<Self> {
-        Self::new_with_push_constants(linked_program, existential_objects, device, shader_stages, vec![])
+        Self::new_with_push_constants(
+            linked_program,
+            existential_objects,
+            device,
+            shader_stages,
+            vec![],
+        )
     }
     pub fn new_with_push_constants(
         linked_program: ComponentType,
         existential_objects: &[&TypeLayout],
         device: &Arc<Device>,
         shader_stages: ShaderStages,
-        push_constant_ranges: Vec<PushConstantRange> 
+        push_constant_ranges: Vec<PushConstantRange>,
     ) -> Arc<Self> {
         // TODO: This currently does not handle ParameterBlocks!
 
@@ -236,7 +245,9 @@ impl ShaderObjectLayout {
             BindingType::InputRenderTarget => DescriptorType::InputAttachment,
             BindingType::RawBuffer => DescriptorType::StorageBuffer,
             BindingType::MutableRawBuffer => DescriptorType::StorageBuffer,
-            BindingType::PushConstant => panic!("Push constants cannot be mapped to a descriptor type!"),
+            BindingType::PushConstant => {
+                panic!("Push constants cannot be mapped to a descriptor type!")
+            }
             _ => DescriptorType::UniformBuffer, //panic!("Unknown slang binding type {:?}", binding_type),
                                                 /*BindingType::TypedBuffer => {}
                                                 BindingType::RawBuffer => {}
@@ -261,13 +272,13 @@ impl ShaderObjectLayout {
         (0..size)
             .filter(|i| layout.binding_range_type(*i) != BindingType::PushConstant)
             .map(move |i| {
-            let descriptor_type = Self::map_descriptor_type(layout.binding_range_type(i));
-            DescriptorSetLayoutBinding {
-                descriptor_count: layout.binding_range_binding_count(i) as u32,
-                stages: shader_stages,
-                ..DescriptorSetLayoutBinding::descriptor_type(descriptor_type)
-            }
-        })
+                let descriptor_type = Self::map_descriptor_type(layout.binding_range_type(i));
+                DescriptorSetLayoutBinding {
+                    descriptor_count: layout.binding_range_binding_count(i) as u32,
+                    stages: shader_stages,
+                    ..DescriptorSetLayoutBinding::descriptor_type(descriptor_type)
+                }
+            })
     }
 
     fn build_sizes_offsets(

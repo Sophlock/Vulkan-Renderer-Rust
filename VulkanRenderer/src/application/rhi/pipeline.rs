@@ -5,7 +5,7 @@ use vulkano::{
     device::Device,
     image::SampleCount,
     pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, PipelineLayout,
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineCreateFlags, PipelineLayout,
         PipelineShaderStageCreateInfo,
         compute::ComputePipelineCreateInfo,
         graphics::{
@@ -24,7 +24,6 @@ use vulkano::{
     },
     shader::{ShaderModule, ShaderModuleCreateInfo, spirv::ExecutionModel},
 };
-use vulkano::pipeline::PipelineCreateFlags;
 
 pub struct EmptyGraphicsPipeline {}
 
@@ -415,8 +414,12 @@ impl ShaderComputePipelineBuilder {
         let create_info = self.build_create_info(layout);
         ComputePipeline::new(device.clone(), None, create_info).unwrap()
     }
-    
-    pub fn build_create_info_with_flags(self, layout: Arc<PipelineLayout>, flags: PipelineCreateFlags) -> ComputePipelineCreateInfo {
+
+    pub fn build_create_info_with_flags(
+        self,
+        layout: Arc<PipelineLayout>,
+        flags: PipelineCreateFlags,
+    ) -> ComputePipelineCreateInfo {
         ComputePipelineCreateInfo {
             flags,
             base_pipeline: None,

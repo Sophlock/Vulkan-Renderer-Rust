@@ -4,14 +4,21 @@ mod renderer;
 mod rhi;
 mod scene;
 
-use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
-use egui_winit_vulkano::egui;
-use egui_winit_vulkano::egui::{Color32, Frame};
+use std::{
+    cell::RefCell,
+    ops::DerefMut,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+
+use egui_winit_vulkano::{
+    egui,
+    egui::{Color32, Frame},
+};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
-use std::time::{Duration, SystemTime};
-use std::{cell::RefCell, marker::PhantomData, ops::DerefMut, rc::Rc, sync::Arc};
 use vulkano::buffer::BufferUsage;
 use winit::{
     application::ApplicationHandler,
@@ -21,20 +28,18 @@ use winit::{
 };
 use winit_input_map::{InputCode, InputMap, input_map};
 
-use crate::application::assets::AssetManager::AssetManager;
 use crate::{
     AppEvent,
     application::{
         assets::{
+            AssetManager::AssetManager,
             asset_traits::{Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex},
             material::Material,
-            material_instance::MaterialInstance,
-            mesh::Mesh,
         },
         input::InputAction,
         renderer::VKRenderer,
         rhi::rhi_assets::vulkan_scene::VKScene,
-        scene::{Scene, model::Model, transform::Transform},
+        scene::{Scene, transform::Transform},
     },
 };
 
@@ -209,7 +214,7 @@ impl Application {
                     //ui.text_edit_singleline(&mut name);
                     //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
                     //if ui.button("Increment").clicked() {
-                        // age += 1;
+                    // age += 1;
                     //}
                     //ui.label(format!("Hello '{name}', age {age}"));
                 });
@@ -326,7 +331,7 @@ impl TimeMeasureSystem {
     pub fn update(&mut self, frame_type: &AppEvent) -> Duration {
         let index: usize = match frame_type {
             AppEvent::Tick => 0,
-            AppEvent::Render => 1
+            AppEvent::Render => 1,
         };
         let last = self.last_times[index];
         self.last_times[index] = SystemTime::now();

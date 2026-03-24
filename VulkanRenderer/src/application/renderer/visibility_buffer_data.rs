@@ -1,8 +1,33 @@
-use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
-use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
+use std::{
+    ops::{Add, Deref},
+    sync::{Arc, RwLock},
+};
+
+use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
+use vulkano::{
+    DeviceAddress, DeviceSize, ValidationError,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
+    device_generated_commands::{ComputePipelineIndirectBufferInfo, IndirectCommandsLayout},
+    format::Format,
+    image::{ImageAspects, ImageUsage},
+    memory::{
+        DeviceAlignment,
+        allocator::{AllocationCreateInfo, DeviceLayout, MemoryTypeFilter},
+    },
+    pipeline::{
+        ComputePipeline, PipelineCreateFlags, PipelineLayout, compute::ComputePipelineCreateInfo,
+        layout::PushConstantRange,
+    },
+    shader::{ShaderStages, spirv::bytes_to_words},
+    sync::{GpuFuture, now},
+};
+
 use crate::application::{
     assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
-    renderer::visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter},
+    renderer::visibility_buffer_generation::{
+        ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+    },
     rhi::{
         VKRHI,
         buffer::buffer_from_slice,
@@ -12,32 +37,11 @@ use crate::application::{
             vulkan_mesh::VKMesh, vulkan_model::VKModel,
         },
         shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
         swapchain::Swapchain,
         swapchain_resources::SwapchainImage,
     },
 };
-use egui_winit_vulkano::egui::epaint::text::layout;
-use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
-use std::ops::Add;
-use std::{
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
-use vulkano::descriptor_set::layout::{
-    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
-};
-use vulkano::device_generated_commands::{
-    ComputePipelineIndirectBufferInfo, IndirectCommandsLayout,
-};
-use vulkano::memory::DeviceAlignment;
-use vulkano::memory::allocator::DeviceLayout;
-use vulkano::pipeline::compute::ComputePipelineCreateInfo;
-use vulkano::sync::{GpuFuture, now};
-use vulkano::{NonZeroDeviceSize, ValidationError, buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer}, format::Format, image::{ImageAspects, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{
-    ComputePipeline, PipelineLayout,
-    layout::{PipelineLayoutCreateInfo, PushConstantRange},
-}, shader::{ShaderStages, spirv::bytes_to_words}, DeviceAddress, DeviceSize};
-use vulkano::pipeline::PipelineCreateFlags;
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -356,38 +360,38 @@ impl VisibilityBufferGlobalData {
         shader_cursor
             .field("instances")
             .unwrap()
-        //    .write_address(self.instances.device_address().unwrap());
-        .write_buffer(self.instances.clone());
+            //    .write_address(self.instances.device_address().unwrap());
+            .write_buffer(self.instances.clone());
         shader_cursor
             .field("materials")
             .unwrap()
-        //    .write_address(self.materials.device_address().unwrap());
-        .write_buffer(self.materials.clone());
+            //    .write_address(self.materials.device_address().unwrap());
+            .write_buffer(self.materials.clone());
         shader_cursor
             .field("materialInstances")
             .unwrap()
-        //    .write_address(self.material_instances.device_address().unwrap());
-        .write_buffer(self.material_instances.clone());
+            //    .write_address(self.material_instances.device_address().unwrap());
+            .write_buffer(self.material_instances.clone());
         shader_cursor
             .field("meshes")
             .unwrap()
-        //    .write_address(self.meshes.device_address().unwrap());
-        .write_buffer(self.meshes.clone());
+            //    .write_address(self.meshes.device_address().unwrap());
+            .write_buffer(self.meshes.clone());
         shader_cursor
             .field("indexBuffer")
             .unwrap()
-        //    .write_address(self.indices.device_address().unwrap());
-        .write_buffer(self.indices.clone());
+            //    .write_address(self.indices.device_address().unwrap());
+            .write_buffer(self.indices.clone());
         shader_cursor
             .field("vertexBuffer")
             .unwrap()
-        //    .write_address(self.vertices.device_address().unwrap());
-        .write_buffer(self.vertices.clone());
+            //    .write_address(self.vertices.device_address().unwrap());
+            .write_buffer(self.vertices.clone());
         shader_cursor
             .field("mutData")
             .unwrap()
-        //    .write_address(self.mutating_data.device_address().unwrap());
-        .write_buffer(self.mutating_data.clone());
+            //    .write_address(self.mutating_data.device_address().unwrap());
+            .write_buffer(self.mutating_data.clone());
     }
 
     pub fn buffer_pointers(&self) -> VisBufferGlobalDataPointers {
@@ -480,7 +484,10 @@ impl VisibilityBufferGlobalData {
                 rhi.device().clone(),
                 bytes_to_words(spirv.as_slice()).unwrap().deref(),
             )
-            .build_create_info_with_flags(pipeline_layout.clone(), PipelineCreateFlags::INDIRECT_BINDABLE)
+            .build_create_info_with_flags(
+                pipeline_layout.clone(),
+                PipelineCreateFlags::INDIRECT_BINDABLE,
+            )
     }
 
     fn compile_pipelines(
@@ -492,9 +499,7 @@ impl VisibilityBufferGlobalData {
         let pipeline_create_infos = resources
             .resource_iterator::<VKMaterial>()
             .unwrap()
-            .map(|material| {
-                Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone())
-            })
+            .map(|material| Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone()))
             .collect::<Vec<_>>();
 
         let layouts = pipeline_create_infos.iter().map(|create_info| {
@@ -520,7 +525,9 @@ impl VisibilityBufferGlobalData {
             Buffer::new(
                 rhi.buffer_allocator().clone(),
                 BufferCreateInfo {
-                    usage: BufferUsage::TRANSFER_DST | BufferUsage::INDIRECT_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+                    usage: BufferUsage::TRANSFER_DST
+                        | BufferUsage::INDIRECT_BUFFER
+                        | BufferUsage::SHADER_DEVICE_ADDRESS,
                     ..BufferCreateInfo::default()
                 },
                 AllocationCreateInfo::default(),

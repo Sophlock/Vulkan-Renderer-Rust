@@ -21,7 +21,6 @@ use std::{
     sync::Arc,
 };
 
-use asset_system::resource_management::ResourceManager;
 use command_buffer::CommandBufferInterface;
 use egui_winit_vulkano::{Gui, GuiConfig};
 use physical_device::find_depth_format;
@@ -55,17 +54,21 @@ use vulkano::{
     sync::{GpuFuture, Sharing},
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
-use crate::application::assets::AssetManager::AssetManager;
+
 use super::assets::asset_traits::{
     RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
 };
-use crate::application::rhi::{
-    rhi_assets::{
-        RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
-        vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel, vulkan_scene::VKScene,
+use crate::application::{
+    assets::AssetManager::AssetManager,
+    rhi::{
+        rhi_assets::{
+            RHIResourceManager, vulkan_camera::VKCamera, vulkan_material::VKMaterial,
+            vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel,
+            vulkan_scene::VKScene,
+        },
+        shaders::SlangCompiler,
+        swapchain::SwapchainSupportDetails,
     },
-    shaders::SlangCompiler,
-    swapchain::SwapchainSupportDetails,
 };
 
 pub struct VKRHI {

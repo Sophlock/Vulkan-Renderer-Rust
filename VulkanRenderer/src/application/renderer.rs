@@ -1,49 +1,41 @@
 mod full_screen_pass;
+mod post_processing;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
-mod post_processing;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     rc::Rc,
     sync::{Arc, RwLock},
 };
-use std::ops::DerefMut;
-use egui_winit_vulkano::{
-    egui,
-    egui::{Color32, Frame},
-};
-use shader_slang::ComponentType;
+
 use smallvec::smallvec;
 use vulkano::{
     Validated, ValidationError, VulkanError, VulkanObject,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents, SubpassEndInfo,
     },
     device::Device,
     format::{ClearValue, Format},
-    image::{
-        ImageAspects, ImageLayout, ImageUsage,
-        sampler::{Sampler, SamplerCreateInfo},
-    },
+    image::{ImageAspects, ImageLayout, ImageUsage},
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
     pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
+        DynamicState, GraphicsPipeline, PipelineBindPoint,
         graphics::{
             subpass::PipelineSubpassType,
             viewport::{Scissor, Viewport},
         },
     },
     render_pass::RenderPass,
-    shader::{ShaderStages, spirv::bytes_to_words},
+    shader::spirv::bytes_to_words,
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use winit::dpi::PhysicalSize;
 
 use crate::application::{
@@ -53,7 +45,8 @@ use crate::application::{
     },
     renderer::{
         full_screen_pass::FullScreenPass,
-        visibility_buffer_data::{VisibilityBufferData, VisibilityBufferGlobalData},
+        post_processing::{PostProcessPass, PostProcessSettings},
+        visibility_buffer_data::{MutatingData, VisibilityBufferData, VisibilityBufferGlobalData},
         visibility_buffer_generation::{
             VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
         },
@@ -61,20 +54,15 @@ use crate::application::{
     },
     rhi::{
         VKRHI,
-        pipeline::{compute_pipeline, graphics_pipeline},
+        pipeline::graphics_pipeline,
         render_pass::RenderPassBuilder,
         rhi_assets::{vulkan_material::VKMaterial, vulkan_scene::VKScene},
-        shader_cursor::ShaderCursor,
-        shader_object::{ShaderObject, ShaderObjectLayout},
-        shaders::SlangCompiler,
         swapchain::Swapchain,
         swapchain_resources::{
             SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
         },
     },
 };
-use crate::application::renderer::post_processing::{PostProcessPass, PostProcessSettings};
-use crate::application::renderer::visibility_buffer_data::MutatingData;
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -89,7 +77,7 @@ pub struct MutableRenderState {
     vis_buffer_processing: VisibilityBufferProcessingPass,
     vis_buffer_data: Arc<VisibilityBufferData>,
     vis_buffer_shade: VisibilityBufferShadePass,
-    mutating_data: Subbuffer<MutatingData>
+    mutating_data: Subbuffer<MutatingData>,
 }
 
 pub struct VKRenderer {
@@ -137,7 +125,12 @@ impl VKRenderer {
             },
         );
 
-        let post_process = PostProcessPass::new(rhi.slang_compiler(), rhi.as_ref(), color_render_target.clone(), pp_render_target.clone());
+        let post_process = PostProcessPass::new(
+            rhi.slang_compiler(),
+            rhi.as_ref(),
+            color_render_target.clone(),
+            pp_render_target.clone(),
+        );
 
         let fullscreen_pass = FullScreenPass::new(
             rhi.as_ref(),
@@ -152,13 +145,21 @@ impl VKRenderer {
             &swapchain,
         );
 
-        let mutating_data = Buffer::new_sized(rhi.buffer_allocator().clone(), BufferCreateInfo {
-            usage: BufferUsage::SHADER_DEVICE_ADDRESS | BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
-            ..BufferCreateInfo::default()
-        }, AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..AllocationCreateInfo::default()
-        }).unwrap();
+        let mutating_data = Buffer::new_sized(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::SHADER_DEVICE_ADDRESS
+                    | BufferUsage::STORAGE_BUFFER
+                    | BufferUsage::TRANSFER_DST,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..AllocationCreateInfo::default()
+            },
+        )
+        .unwrap();
         let vis_buffer_global_data =
             VisibilityBufferGlobalData::new(rhi.as_ref(), mutating_data.clone());
         let vis_buffer_data = Arc::new(VisibilityBufferData::new(
@@ -166,7 +167,7 @@ impl VKRenderer {
             &swapchain,
             VisibilityBufferShadePass::MAX_SEQUENCE_COUNT,
             vis_buffer_global_data,
-            color_render_target.clone()
+            color_render_target.clone(),
         ));
         let vis_buffer_rasterizer =
             VisibilityBufferRasterizer::new(rhi.clone(), &swapchain, vis_buffer_data.as_ref());
@@ -189,7 +190,7 @@ impl VKRenderer {
                 vis_buffer_processing,
                 vis_buffer_data,
                 vis_buffer_shade,
-                mutating_data
+                mutating_data,
             }),
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
@@ -249,7 +250,7 @@ impl VKRenderer {
             .unwrap();
 
         /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
-            .unwrap();*/
+        .unwrap();*/
 
         let vis_buffer_generated_future = image_available_future
             .then_execute(
@@ -277,10 +278,10 @@ impl VKRenderer {
             )
             .unwrap();
 
-        self
-            .mutable_state_const()
+        self.mutable_state_const()
             .vis_buffer_shade
-            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize).unwrap();
+            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
+            .unwrap();
 
         let draw_finished_future = vis_buffer_generated_future
             .then_execute(
@@ -301,12 +302,13 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
-        self.post_process.record_command_buffer(
-            &mut compute_command_buffer,
-            swapchain_image_index as usize,
-            swapchain_extent
-        )
-        .unwrap();
+        self.post_process
+            .record_command_buffer(
+                &mut compute_command_buffer,
+                swapchain_image_index as usize,
+                swapchain_extent,
+            )
+            .unwrap();
 
         let post_process_finished_future = draw_finished_future
             .then_signal_semaphore()
@@ -499,7 +501,7 @@ impl VKRenderer {
         write.view_matrix = data.view_matrix;
         write.view_position = data.view_position;
     }
-    
+
     pub fn post_process_settings(&self) -> RefMut<PostProcessSettings> {
         self.post_process.settings_mut()
     }

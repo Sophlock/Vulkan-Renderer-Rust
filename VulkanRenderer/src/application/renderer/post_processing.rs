@@ -1,21 +1,27 @@
-use std::cell::{RefCell, RefMut};
-use crate::application::rhi::VKRHI;
-use crate::application::rhi::pipeline::compute_pipeline;
-use crate::application::rhi::shader_cursor::ShaderCursor;
-use crate::application::rhi::shader_object::{ShaderObject, ShaderObjectLayout};
-use crate::application::rhi::shaders::SlangCompiler;
-use crate::application::rhi::swapchain_resources::SwapchainImage;
-use egui_winit_vulkano::egui;
-use egui_winit_vulkano::egui::Ui;
+use std::{
+    cell::{RefCell, RefMut},
+    ops::Deref,
+    sync::{Arc, RwLock},
+};
+
+use egui_winit_vulkano::{egui, egui::Ui};
 use shader_slang::ComponentType;
-use std::ops::Deref;
-use std::sync::{Arc, RwLock};
-use vulkano::ValidationError;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
-use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
-use vulkano::pipeline::{ComputePipeline, PipelineBindPoint};
-use vulkano::shader::ShaderStages;
-use vulkano::shader::spirv::bytes_to_words;
+use vulkano::{
+    ValidationError,
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
+    image::sampler::{Sampler, SamplerCreateInfo},
+    pipeline::{ComputePipeline, PipelineBindPoint},
+    shader::{ShaderStages, spirv::bytes_to_words},
+};
+
+use crate::application::rhi::{
+    VKRHI,
+    pipeline::compute_pipeline,
+    shader_cursor::ShaderCursor,
+    shader_object::{ShaderObject, ShaderObjectLayout},
+    shaders::SlangCompiler,
+    swapchain_resources::SwapchainImage,
+};
 
 pub struct PostProcessPass {
     shader_object_layout: Arc<ShaderObjectLayout>,
@@ -144,7 +150,11 @@ impl PostProcessSettings {
 
     fn write_settings(&self) {
         let global_cursor = ShaderCursor::new(self.shader_object.clone());
-        let cursor = global_cursor.field("gPostProcessData").unwrap().field("settings").unwrap();
+        let cursor = global_cursor
+            .field("gPostProcessData")
+            .unwrap()
+            .field("settings")
+            .unwrap();
         cursor
             .field("exposureValue")
             .unwrap()
@@ -153,7 +163,11 @@ impl PostProcessSettings {
 
     pub fn draw_gui(&mut self, gui: &mut Ui) {
         let global_cursor = ShaderCursor::new(self.shader_object.clone());
-        let cursor = global_cursor.field("gPostProcessData").unwrap().field("settings").unwrap();
+        let cursor = global_cursor
+            .field("gPostProcessData")
+            .unwrap()
+            .field("settings")
+            .unwrap();
 
         if gui
             .add(egui::Slider::new(&mut self.exposure_value, -20f32..=20f32))

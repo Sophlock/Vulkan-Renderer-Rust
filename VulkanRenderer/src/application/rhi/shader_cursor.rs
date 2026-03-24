@@ -1,7 +1,11 @@
 use std::sync::{Arc, RwLock};
 
 use shader_slang::{ParameterCategory, TypeKind, reflection::TypeLayout};
-use vulkano::{buffer::{BufferContents, Subbuffer}, image::{sampler::Sampler, view::ImageView}, NonNullDeviceAddress};
+use vulkano::{
+    NonNullDeviceAddress,
+    buffer::{BufferContents, Subbuffer},
+    image::{sampler::Sampler, view::ImageView},
+};
 
 use crate::application::rhi::{
     rhi_assets::vulkan_texture::VKTexture, shader_object::ShaderObject,
@@ -126,7 +130,7 @@ impl ShaderCursor {
         self.shader_object
             .write_swapchain_image_sampler(self.offset, image, sampler);
     }
-    
+
     pub fn write_address(&mut self, address: NonNullDeviceAddress) {
         self.write(&address.get())
     }

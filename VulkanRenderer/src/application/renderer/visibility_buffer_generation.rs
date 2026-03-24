@@ -5,13 +5,33 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use smallvec::smallvec;
+use vulkano::{
+    DeviceAddress, ValidationError,
+    buffer::BufferContents,
+    command_buffer::{
+        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
+        SubpassContents, SubpassEndInfo,
+    },
+    device::DeviceOwned,
+    format::{ClearValue, Format},
+    pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+            viewport::{Scissor, Viewport},
+        },
+    },
+    render_pass::RenderPass,
+    shader::{ShaderStages, spirv::bytes_to_words},
+};
+
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface, Vertex,
     },
-    renderer::{
-        visibility_buffer_data::{InstanceData, VisibilityBufferData},
-    },
+    renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData},
     rhi::{
         VKRHI,
         pipeline::{compute_pipeline, graphics_pipeline},
@@ -25,19 +45,6 @@ use crate::application::{
         },
     },
 };
-use smallvec::smallvec;
-use vulkano::pipeline::layout::PushConstantRange;
-use vulkano::{ValidationError, VulkanObject, buffer::BufferContents, command_buffer::{
-    AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-    SubpassContents, SubpassEndInfo,
-}, device::DeviceOwned, format::{ClearValue, Format}, pipeline::{
-    ComputePipeline, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint,
-    graphics::{
-        subpass::PipelineSubpassType,
-        vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-        viewport::{Scissor, Viewport},
-    },
-}, render_pass::RenderPass, shader::{ShaderStages, spirv::bytes_to_words}, DeviceAddress};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_scan: VisBufferStep,
@@ -153,7 +160,11 @@ impl VisibilityBufferProcessingPass {
         self.vis_buffer_scan.record_command_buffer(
             command_buffer,
             image_index,
-            [swapchain_extent[0] / 16 + 1, swapchain_extent[1] / 16 + 1, 1],
+            [
+                swapchain_extent[0] / 16 + 1,
+                swapchain_extent[1] / 16 + 1,
+                1,
+            ],
         )?;
         self.shader_cull.record_command_buffer(
             command_buffer,
@@ -439,9 +450,7 @@ impl VisibilityBufferRasterizer {
 }
 
 impl PipelineBindParameter {
-    pub fn pipeline(
-        pipeline: &Arc<ComputePipeline>,
-    ) -> Self {
+    pub fn pipeline(pipeline: &Arc<ComputePipeline>) -> Self {
         Self {
             pipeline_address: pipeline.indirect_device_address().get(),
         }

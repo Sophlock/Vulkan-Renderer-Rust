@@ -1,18 +1,30 @@
 use std::{rc::Rc, sync::Arc};
 
-use crate::application::rhi::shader_cursor::ShaderCursor;
+use vulkano::{
+    ValidationError,
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
+    device::DeviceOwned,
+    device_generated_commands::{
+        GeneratedCommandsInfo, GeneratedCommandsPipeline, IndirectCommandsLayout,
+        IndirectCommandsLayoutCreateInfo, IndirectCommandsLayoutToken,
+        IndirectCommandsLayoutTokenPushConstant, IndirectCommandsLayoutUsageFlags,
+        IndirectCommandsStream, IndirectCommandsTokenType,
+    },
+    memory::allocator::AllocationCreateInfo,
+    pipeline::PipelineBindPoint,
+    shader::ShaderStages,
+};
+
 use crate::application::{
     renderer::{
         visibility_buffer_data::VisibilityBufferData,
-        visibility_buffer_generation::{ComputeDispatchParameter, PipelineBindParameter},
+        visibility_buffer_generation::{
+            ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+        },
     },
-    rhi::VKRHI,
+    rhi::{VKRHI, shader_cursor::ShaderCursor},
 };
-use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
-use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, device::DeviceOwned, memory::allocator::AllocationCreateInfo, pipeline::{Pipeline, PipelineBindPoint}, ValidationError, VulkanObject};
-use vulkano::device_generated_commands::{GeneratedCommandsInfo, GeneratedCommandsPipeline, IndirectCommandsLayout, IndirectCommandsLayoutCreateInfo, IndirectCommandsLayoutToken, IndirectCommandsLayoutTokenPushConstant, IndirectCommandsLayoutUsageFlags, IndirectCommandsStream, IndirectCommandsTokenType};
-use vulkano::shader::ShaderStages;
-use crate::application::renderer::visibility_buffer_generation::VisBufferPushConstant;
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -38,7 +50,11 @@ impl VisibilityBufferShadePass {
                     IndirectCommandsLayoutToken {
                         token_type: IndirectCommandsTokenType::PushConstant,
                         pushconstant_data: Some(IndirectCommandsLayoutTokenPushConstant {
-                            pipeline_layout: data.global_data.shader_object().pipeline_layout().clone(),
+                            pipeline_layout: data
+                                .global_data
+                                .shader_object()
+                                .pipeline_layout()
+                                .clone(),
                             shader_stage_flags: ShaderStages::COMPUTE,
                             offset: 0,
                             size: size_of::<VisBufferPushConstant>() as u32,
@@ -62,7 +78,10 @@ impl VisibilityBufferShadePass {
         )
         .unwrap();
 
-        let requirements = commands_layout.memory_requirements(&GeneratedCommandsPipeline::Dynamic(), Self::MAX_SEQUENCE_COUNT);
+        let requirements = commands_layout.memory_requirements(
+            &GeneratedCommandsPipeline::Dynamic(),
+            Self::MAX_SEQUENCE_COUNT,
+        );
         let preprocess_buffer = Subbuffer::new(
             Buffer::new(
                 rhi.buffer_allocator().clone(),
@@ -86,7 +105,8 @@ impl VisibilityBufferShadePass {
             .unwrap()
             .write_swapchain_image(data.final_render_target.clone());
 
-        data.global_data.write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
             rhi,
@@ -102,14 +122,13 @@ impl VisibilityBufferShadePass {
         image_index: usize,
     ) -> Result<(), Box<ValidationError>> {
         let shader_object = self.data.global_data.shader_object();
-        command_buffer
-            .bind_descriptor_sets(
-                PipelineBindPoint::Compute,
-                shader_object.pipeline_layout().clone(),
-                0,
-                shader_object.descriptor_sets()[image_index].clone(),
-            )?;
-        
+        command_buffer.bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            shader_object.pipeline_layout().clone(),
+            0,
+            shader_object.descriptor_sets()[image_index].clone(),
+        )?;
+
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
                 IndirectCommandsStream {
@@ -120,16 +139,19 @@ impl VisibilityBufferShadePass {
                 },
                 IndirectCommandsStream {
                     buffer: self.data.compute_dispatch_commands.clone().reinterpret(),
-                }
+                },
             ],
             sequence_count: Self::MAX_SEQUENCE_COUNT,
             sequence_count_buffer: Some(self.data.index_counter_buffer.clone()),
-            ..GeneratedCommandsInfo::dynamic_pipeline(self.commands_layout.clone(), self.preprocess_buffer.clone())
+            ..GeneratedCommandsInfo::dynamic_pipeline(
+                self.commands_layout.clone(),
+                self.preprocess_buffer.clone(),
+            )
         };
 
-        unsafe {command_buffer.preprocess_generated_commands(commands_info.clone())}?;
+        unsafe { command_buffer.preprocess_generated_commands(commands_info.clone()) }?;
 
-        unsafe {command_buffer.execute_generated_commands(true, commands_info)}?;
+        unsafe { command_buffer.execute_generated_commands(true, commands_info) }?;
 
         Ok(())
     }

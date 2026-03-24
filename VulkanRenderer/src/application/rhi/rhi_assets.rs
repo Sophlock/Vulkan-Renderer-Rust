@@ -9,13 +9,20 @@ use std::{
 };
 
 use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
-use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryAllocator}, DeviceSize};
+use vulkano::{
+    DeviceSize,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    memory::allocator::{AllocationCreateInfo, MemoryAllocator},
+};
 
 use crate::application::{
-    assets::asset_traits::{
-        MaterialInstanceInterface, MaterialInterface, MeshInterface, ModelInterface,
-        RHIMaterialInstanceInterface, RHIMaterialInterface, RHIMeshInterface, RHIModelInterface,
-        RHIResource, RHITextureInterface, TextureInterface,
+    assets::{
+        AssetManager::AssetManager,
+        asset_traits::{
+            MaterialInstanceInterface, MaterialInterface, MeshInterface, ModelInterface,
+            RHIMaterialInstanceInterface, RHIMaterialInterface, RHIMeshInterface,
+            RHIModelInterface, RHIResource, RHITextureInterface, TextureInterface,
+        },
     },
     rhi::{
         VKRHI,
@@ -25,7 +32,6 @@ use crate::application::{
         },
     },
 };
-use crate::application::assets::AssetManager::AssetManager;
 
 pub mod vulkan_camera;
 pub mod vulkan_material;

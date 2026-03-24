@@ -1,14 +1,11 @@
-use crate::application::assets::material::Material;
-use crate::application::assets::material_instance::MaterialInstance;
-use crate::application::assets::mesh::Mesh;
-use asset_system::assets::AssetHandle;
-use asset_system::resource_management::ResourceManager;
-use std::cell::RefCell;
-use std::marker::PhantomData;
-use std::path::Path;
-use std::sync::Arc;
-use crate::application::scene::model::Model;
-use crate::application::scene::transform::Transform;
+use std::{cell::RefCell, marker::PhantomData, path::Path, sync::Arc};
+
+use asset_system::{assets::AssetHandle, resource_management::ResourceManager};
+
+use crate::application::{
+    assets::{material::Material, material_instance::MaterialInstance, mesh::Mesh},
+    scene::{model::Model, transform::Transform},
+};
 
 pub struct AssetManager {
     resource_manager: ResourceManager,
@@ -56,7 +53,7 @@ impl AssetManager {
             _phantom: PhantomData,
         }
     }
-    
+
     pub fn add_model(
         &mut self,
         name: &str,
@@ -71,7 +68,7 @@ impl AssetManager {
             _phantom: PhantomData,
         }
     }
-    
+
     pub fn resource_manager(&self) -> &ResourceManager {
         &self.resource_manager
     }
