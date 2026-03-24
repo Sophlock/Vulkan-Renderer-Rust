@@ -75,7 +75,6 @@ func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadI
     let materialResult = materialInstanceData.evaluate(geometry);
     // Shades the BRDF using the light environment*/
     float3 color = max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*/ materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
-    color = mul(modelData.modelTransform, float4(0, 0, 0, 1)).xyz;
     outputRT[dispatch] = float4(color, 1.);
 }
 
