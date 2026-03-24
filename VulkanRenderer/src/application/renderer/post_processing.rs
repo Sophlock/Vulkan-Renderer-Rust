@@ -171,7 +171,7 @@ impl PostProcessSettings {
             .unwrap();
 
         if gui
-            .add(egui::Slider::new(&mut self.exposure_value, -20f32..=20f32))
+            .add(egui::Slider::new(&mut self.exposure_value, 0f32..=20f32))
             .changed()
         {
             cursor

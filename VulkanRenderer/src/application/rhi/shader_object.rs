@@ -636,8 +636,9 @@ impl Default for BoundSwapchainResources {
 }
 
 struct ShaderObjectStaging {
-    uniform_buffer: Option<Subbuffer<[u8]>>,
+    staging_buffer: Option<Subbuffer<[u8]>>,
     modified_uniform_range: Option<Range<usize>>,
+    cpu_uniform_buffer: Vec<u8>,
     descriptor_writes: Vec<WriteDescriptorSet>,
 }
 
@@ -668,16 +669,19 @@ impl ShaderObjectStaging {
             None
         };
 
+        let mut cpu_uniform_buffer = Vec::new();
+        cpu_uniform_buffer.resize(ordinary_size, 0);
+
         Self {
-            uniform_buffer,
+            staging_buffer: uniform_buffer,
             modified_uniform_range: None,
             descriptor_writes: Vec::new(),
+            cpu_uniform_buffer
         }
     }
 
     fn write_data<T: BufferContents + Clone>(&mut self, offset: ShaderOffset, data: &T) {
-        let mut content = self.uniform_buffer.as_ref().unwrap().write().unwrap();
-        let pos = (&mut content[offset.byte_offset] as *mut u8).cast::<T>();
+        let pos = (&mut self.cpu_uniform_buffer[offset.byte_offset] as *mut u8).cast::<T>();
         unsafe { *pos = data.clone() };
         let modified_range = offset.byte_offset..(offset.byte_offset + size_of::<T>());
         self.modified_uniform_range = Some(
@@ -718,15 +722,19 @@ impl ShaderObjectStaging {
         }
 
         if let Some(range) = self.modified_uniform_range.as_ref() {
+            let offset = range.start as DeviceSize;
+            let end = range.end as DeviceSize;
+            let size = end - offset;
+            self.write_to_staging_buffer(range);
             let copy_info = CopyBufferInfo {
                 regions: smallvec![BufferCopy {
-                    src_offset: range.start as DeviceSize,
-                    dst_offset: range.start as DeviceSize,
-                    size: (range.end - range.start) as DeviceSize,
+                    src_offset: offset,
+                    dst_offset: offset,
+                    size,
                     ..BufferCopy::default()
                 }],
                 ..CopyBufferInfo::buffers(
-                    self.uniform_buffer.clone().unwrap(),
+                    self.staging_buffer.clone().unwrap(),
                     uniform_buffer.unwrap(),
                 )
             };
@@ -734,6 +742,11 @@ impl ShaderObjectStaging {
         }
 
         self.modified_uniform_range = None;
+    }
+
+    fn write_to_staging_buffer(&self, range: &Range<usize>) {
+        let mut content = self.staging_buffer.as_ref().unwrap().write().unwrap();
+        content[range.clone()].copy_from_slice(&self.cpu_uniform_buffer[range.clone()]);
     }
 }
 
