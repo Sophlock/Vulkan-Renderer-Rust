@@ -17,9 +17,9 @@ use crate::application::{
 };
 
 pub struct VKMaterial {
-    vert_spirv: Blob,
+    /*vert_spirv: Blob,
     frag_spirv: Blob,
-    shader_object_layout: Arc<ShaderObjectLayout>,
+    shader_object_layout: Arc<ShaderObjectLayout>,*/
     uuid: usize,
     module_name: String,
     material_name: String,
@@ -32,7 +32,7 @@ impl VKMaterial {
         module_name: &str,
         material_name: &str,
     ) -> shader_slang::Result<Self> {
-        let module = compiler.session().load_module(module_name)?;
+        /*let module = compiler.session().load_module(module_name)?;
         let module_component: ComponentType = module.into();
         let composed = Self::append_raster_entry_points(&module_component, compiler)?;
 
@@ -55,12 +55,12 @@ impl VKMaterial {
             existential_objects.as_slice(),
             device,
             ShaderStages::all_graphics(),
-        );
+        );*/
 
         Ok(Self {
-            shader_object_layout,
+            /*shader_object_layout,
             vert_spirv,
-            frag_spirv,
+            frag_spirv,*/
             uuid: 0,
             module_name: String::from(module_name),
             material_name: String::from(material_name),
@@ -86,7 +86,7 @@ impl VKMaterial {
         ])
     }
 
-    pub fn shader_object_layout(&self) -> &Arc<ShaderObjectLayout> {
+    /*pub fn shader_object_layout(&self) -> &Arc<ShaderObjectLayout> {
         &self.shader_object_layout
     }
 
@@ -101,7 +101,7 @@ impl VKMaterial {
 
     pub fn frag_spirv(&self) -> &Blob {
         &self.frag_spirv
-    }
+    }*/
 
     pub fn module_name(&self) -> &str {
         &self.module_name

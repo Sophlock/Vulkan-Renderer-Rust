@@ -18,7 +18,7 @@ use crate::application::{
 use crate::application::rhi::shader_object::ShaderObjectQueue;
 
 pub struct VKMaterialInstance {
-    shader_object: Arc<ShaderObject>,
+    //shader_object: Arc<ShaderObject>,
     material: RHIHandle<VKMaterial>,
     uuid: usize,
 }
@@ -32,7 +32,7 @@ impl VKMaterialInstance {
         resource_manager: &RHIResourceManager,
         update_queue: Arc<RefCell<ShaderObjectQueue>>
     ) -> Self {
-        let shader_object = ShaderObject::new(
+        /*let shader_object = ShaderObject::new(
             material
                 .get(resource_manager)
                 .unwrap()
@@ -42,9 +42,9 @@ impl VKMaterialInstance {
             buffer_allocator,
             in_flight_frames as u32,
             update_queue
-        );
+        );*/
         Self {
-            shader_object,
+            //shader_object,
             material,
             uuid: 0,
         }
@@ -55,11 +55,13 @@ impl VKMaterialInstance {
     }
 
     pub fn shader_cursor(&self) -> ShaderCursor {
-        ShaderCursor::new(self.shader_object.clone())
+        //ShaderCursor::new(self.shader_object.clone())
+        unimplemented!()
     }
 
     pub fn descriptor_sets(&self) -> &[Arc<DescriptorSet>] {
-        self.shader_object.descriptor_sets()
+        //self.shader_object.descriptor_sets()
+        unimplemented!()
     }
 }
 

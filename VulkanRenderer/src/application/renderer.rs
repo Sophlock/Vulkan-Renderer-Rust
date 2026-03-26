@@ -384,7 +384,7 @@ impl VKRenderer {
         image_index: usize,
         scene: &VKScene,
     ) -> Result<(), Box<ValidationError>> {
-        command_buffer
+       /* command_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
@@ -475,7 +475,8 @@ impl VKRenderer {
 
         command_buffer
             .end_render_pass(SubpassEndInfo::default())
-            .map(|_| ())
+            .map(|_| ())*/
+        unimplemented!()
     }
 
     pub fn compile_materials(&self) {
@@ -543,7 +544,7 @@ impl MaterialCompiler {
         }
     }
 
-    fn compile_material(
+    /*fn compile_material(
         &self,
         material: &VKMaterial,
         device: &Arc<Device>,
@@ -579,14 +580,14 @@ impl MaterialCompiler {
                 .into(),
             );
         CompiledMaterial { pipeline }
-    }
+    }*/
 
     fn find_compiled_material(&self, material: &VKMaterial) -> Option<&CompiledMaterial> {
         self.compiled_materials.get(&material.uuid())
     }
 
     pub fn compile_materials(&mut self, rhi: &VKRHI, render_pass: &Arc<RenderPass>) {
-        let resource_manager = rhi.resource_manager();
+        /*let resource_manager = rhi.resource_manager();
         self.compiled_materials = resource_manager
             .resource_iterator::<VKMaterial>()
             .unwrap()
@@ -600,6 +601,6 @@ impl MaterialCompiler {
                     self.compile_material(material, rhi.device(), render_pass),
                 )
             })
-            .collect();
+            .collect();*/
     }
 }
