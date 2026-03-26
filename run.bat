@@ -1,1 +1,1 @@
-.\target\debug\VulkanRenderer.exe
+cargo run --release
