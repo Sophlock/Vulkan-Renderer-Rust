@@ -2,7 +2,7 @@ use std::{
     ops::{Add, Deref},
     sync::{Arc, RwLock},
 };
-
+use std::collections::HashMap;
 use crate::application::{
     assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
     renderer::visibility_buffer_generation::{
@@ -22,7 +22,7 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
-use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg};
+use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg, Blob};
 use vulkano::command_buffer::{DrawIndexedIndirectCommand, DrawIndirectCommand};
 use vulkano::{
     DeviceAddress, DeviceSize, ValidationError,
@@ -42,7 +42,8 @@ use vulkano::{
     shader::{ShaderStages, spirv::bytes_to_words},
     sync::{GpuFuture, now},
 };
-use crate::application::assets::asset_traits::RHIResource;
+use vulkano::device::Device;
+use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -174,7 +175,7 @@ impl VisibilityBufferData {
             },
             AllocationCreateInfo::default(),
         )
-        .unwrap();
+            .unwrap();
 
         let material_indices_buffer =
             Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
@@ -208,7 +209,7 @@ impl VisibilityBufferData {
             BufferUsage::TRANSFER_SRC,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-        .unwrap();
+            .unwrap();
 
         let global_data_buffer = buffer_from_slice(
             rhi.buffer_allocator().clone(),
@@ -218,8 +219,8 @@ impl VisibilityBufferData {
             BufferUsage::SHADER_DEVICE_ADDRESS,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-        .unwrap()
-        .reinterpret();
+            .unwrap()
+            .reinterpret();
 
         Self {
             visibility_buffer,
@@ -250,7 +251,7 @@ impl VisibilityBufferData {
             AllocationCreateInfo::default(),
             length.into(),
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn clear(
@@ -296,8 +297,12 @@ impl VisibilityBufferGlobalData {
 
         let draw_indirect_commands = instances
             .chunk_by(|left, right| left.mesh_index == right.mesh_index)
-            .scan(0u32, |offset, slice|  {
-                let mesh = resources.resource_iterator::<VKMesh>().unwrap().nth(slice[0].mesh_index as usize).unwrap();
+            .scan(0u32, |offset, slice| {
+                let mesh = resources
+                    .resource_iterator::<VKMesh>()
+                    .unwrap()
+                    .nth(slice[0].mesh_index as usize)
+                    .unwrap();
                 let first_instance = *offset;
                 *offset += slice.len() as u32;
                 Some(DrawIndexedIndirectCommand {
@@ -345,7 +350,7 @@ impl VisibilityBufferGlobalData {
             .collect::<Vec<_>>();
 
         let material_count = materials.len() as u32;
-        
+
         let draw_indirect_commands = buffer_from_slice(
             rhi.buffer_allocator().clone(),
             rhi.command_buffer_interface(),
@@ -353,7 +358,8 @@ impl VisibilityBufferGlobalData {
             draw_indirect_commands.as_slice(),
             BufferUsage::INDIRECT_BUFFER,
             MemoryTypeFilter::PREFER_DEVICE,
-        ).unwrap();
+        )
+            .unwrap();
 
         Self {
             instances: Self::make_buffer(
@@ -382,7 +388,7 @@ impl VisibilityBufferGlobalData {
             pipelines,
             shader_object,
             material_count,
-            draw_indirect_commands
+            draw_indirect_commands,
         }
     }
 
@@ -449,7 +455,7 @@ impl VisibilityBufferGlobalData {
             BufferUsage::STORAGE_BUFFER | usage,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-        .unwrap()
+            .unwrap()
     }
 
     fn create_linked_program(rhi: &VKRHI, material: &VKMaterial) -> ComponentType {
@@ -506,9 +512,18 @@ impl VisibilityBufferGlobalData {
         rhi: &VKRHI,
         material: &VKMaterial,
         pipeline_layout: Arc<PipelineLayout>,
+        spirv_cache: &mut HashMap<String, Blob>
     ) -> ComputePipelineCreateInfo {
-        let linked = Self::create_linked_program(rhi, material);
-        let spirv = linked.entry_point_code(0, 0).unwrap();
+        let material_key = format!("{}_{}", material.module_name(), material.module_name());
+
+        let spirv = if let Some(spirv) = spirv_cache.get(&material_key) {
+            spirv.clone()
+        } else {
+            let linked = Self::create_linked_program(rhi, material);
+            let spirv = linked.entry_point_code(0, 0).unwrap();
+            spirv_cache.insert(material_key, spirv.clone());
+            spirv
+        };
 
         compute_pipeline()
             .shader(
@@ -527,16 +542,28 @@ impl VisibilityBufferGlobalData {
     ) -> Vec<Arc<ComputePipeline>> {
         let resources = rhi.resource_manager();
 
+        // TODO: This is just for testing the visibility buffer performance!
+        let mut spirv_cache = HashMap::new();
+
         let pipeline_create_infos = resources
             .resource_iterator::<VKMaterial>()
             .unwrap()
-            .map(|material| Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone()))
+            .map(|material| Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone(), &mut spirv_cache))
             .collect::<Vec<_>>();
 
-        let layouts = pipeline_create_infos.iter().map(|create_info| {
-            IndirectCommandsLayout::pipeline_indirect_memory_requirements(rhi.device(), create_info)
-                .layout
-        });
+        let layouts = pipeline_create_infos
+            .iter()
+            .enumerate()
+            .map(|(i, create_info)| {
+                if i % 10 == 0 {
+                    println!("Queried memory requirements of {} pipelines", i + 1);
+                }
+                IndirectCommandsLayout::pipeline_indirect_memory_requirements(
+                    rhi.device(),
+                    create_info,
+                )
+                    .layout
+            });
 
         let alignment = layouts
             .clone()
@@ -564,7 +591,7 @@ impl VisibilityBufferGlobalData {
                 AllocationCreateInfo::default(),
                 DeviceLayout::new(total_size.try_into().unwrap(), alignment).unwrap(),
             )
-            .unwrap(),
+                .unwrap(),
         );
 
         let create_infos_with_indirect = sizes
@@ -591,7 +618,8 @@ impl VisibilityBufferGlobalData {
                 if i % 10 == 0 {
                     println!(
                         "Created {} visibility buffer materials of {}",
-                        i + 1, num_materials
+                        i + 1,
+                        num_materials
                     );
                 }
                 ComputePipeline::new(rhi.device().clone(), None, create_info).unwrap()

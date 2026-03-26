@@ -392,6 +392,10 @@ impl EmptyComputePipelineBuilder {
     pub fn shader(self, device: Arc<Device>, shader: &[u32]) -> ShaderComputePipelineBuilder {
         let shader_module =
             unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(shader)).unwrap() };
+        self.shader_module(shader_module)
+    }
+
+    pub fn shader_module(self, shader_module: Arc<ShaderModule>) -> ShaderComputePipelineBuilder {
         let shader = PipelineShaderStageCreateInfo::new(
             shader_module
                 .single_entry_point_with_execution(ExecutionModel::GLCompute)
