@@ -66,11 +66,11 @@ use crate::application::{
             vulkan_material_instance::VKMaterialInstance, vulkan_model::VKModel,
             vulkan_scene::VKScene,
         },
+        shader_object::ShaderObjectQueue,
         shaders::SlangCompiler,
         swapchain::SwapchainSupportDetails,
     },
 };
-use crate::application::rhi::shader_object::ShaderObjectQueue;
 
 pub struct VKRHI {
     frames_in_flight: usize,
@@ -151,7 +151,7 @@ impl VKRHI {
             buffer_allocator,
             descriptor_allocator,
             resource_manager,
-            shader_object_update_queue
+            shader_object_update_queue,
         });
         result.resource_manager.borrow_mut().register_rhi(&result);
         result
@@ -355,7 +355,7 @@ impl VKRHI {
             self.device.wait_idle().unwrap();
         }
     }
-    
+
     pub fn shader_object_update_queue(&self) -> &Arc<RefCell<ShaderObjectQueue>> {
         &self.shader_object_update_queue
     }

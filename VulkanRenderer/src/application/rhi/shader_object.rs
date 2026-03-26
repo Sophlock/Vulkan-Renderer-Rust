@@ -1,25 +1,18 @@
-use crate::application::rhi::buffer::copy_buffer_to_buffer;
-use crate::application::rhi::{
-    rhi_assets::vulkan_texture::VKTexture,
-    shader_cursor::{ShaderOffset, ShaderSize},
-    shader_object::BoundImageType::ImageSampler,
-    swapchain_resources::SwapchainImage,
-};
-use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
-use smallvec::smallvec;
-use std::cell::{RefCell, RefMut};
-use std::collections::HashSet;
-use std::ops::{DerefMut, Range};
 use std::{
-    collections::BTreeMap,
+    cell::RefCell,
+    collections::{BTreeMap, HashSet},
+    ops::Range,
     sync::{Arc, Mutex, RwLock},
 };
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, BufferCopy, CommandBuffer, CopyBufferInfo, PrimaryAutoCommandBuffer,
-};
+
+use shader_slang::{BindingType, ComponentType, ParameterCategory, reflection::TypeLayout};
+use smallvec::smallvec;
 use vulkano::{
     DeviceSize,
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{
+        AutoCommandBufferBuilder, BufferCopy, CopyBufferInfo, PrimaryAutoCommandBuffer,
+    },
     descriptor_set::{
         DescriptorImageViewInfo, DescriptorSet, WriteDescriptorSet,
         allocator::DescriptorSetAllocator,
@@ -37,6 +30,13 @@ use vulkano::{
     },
     shader::ShaderStages,
     sync::Sharing,
+};
+
+use crate::application::rhi::{
+    rhi_assets::vulkan_texture::VKTexture,
+    shader_cursor::{ShaderOffset, ShaderSize},
+    shader_object::BoundImageType::ImageSampler,
+    swapchain_resources::SwapchainImage,
 };
 
 pub struct ShaderObjectLayout {
@@ -292,7 +292,7 @@ pub struct ShaderObject {
     type_layout: *const TypeLayout,
     swapchain_resources: Mutex<BoundSwapchainResources>,
     staging: RefCell<ShaderObjectStaging>,
-    update_queue: Arc<RefCell<ShaderObjectQueue>>
+    update_queue: Arc<RefCell<ShaderObjectQueue>>,
 }
 
 enum BoundImageType {
@@ -374,7 +374,7 @@ impl ShaderObject {
             layout,
             swapchain_resources: Mutex::new(BoundSwapchainResources::default()),
             staging,
-            update_queue
+            update_queue,
         }
         .into()
     }
@@ -599,7 +599,7 @@ impl ShaderObjectStaging {
             staging_buffer: uniform_buffer,
             modified_uniform_range: None,
             descriptor_writes: Vec::new(),
-            cpu_uniform_buffer
+            cpu_uniform_buffer,
         }
     }
 
@@ -694,7 +694,10 @@ impl ShaderObjectQueue {
         }
     }
 
-    pub fn flush_writes(&mut self, command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>) {
+    pub fn flush_writes(
+        &mut self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+    ) {
         for shader_object in self.queued_objects.iter() {
             shader_object.flush_writes(command_buffer);
         }

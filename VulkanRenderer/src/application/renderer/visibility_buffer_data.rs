@@ -1,8 +1,32 @@
 use std::{
+    collections::HashMap,
     ops::{Add, Deref},
     sync::{Arc, RwLock},
 };
-use std::collections::HashMap;
+
+use shader_slang::{Blob, ComponentType, structs::specialization_arg::SpecializationArg};
+use vulkano::{
+    DeviceAddress, DeviceSize, ValidationError,
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    command_buffer::{
+        AutoCommandBufferBuilder, CopyBufferInfo, DrawIndexedIndirectCommand,
+        PrimaryAutoCommandBuffer,
+    },
+    device_generated_commands::{ComputePipelineIndirectBufferInfo, IndirectCommandsLayout},
+    format::Format,
+    image::{ImageAspects, ImageUsage},
+    memory::{
+        DeviceAlignment,
+        allocator::{AllocationCreateInfo, DeviceLayout, MemoryTypeFilter},
+    },
+    pipeline::{
+        ComputePipeline, PipelineCreateFlags, PipelineLayout, compute::ComputePipelineCreateInfo,
+        layout::PushConstantRange,
+    },
+    shader::{ShaderStages, spirv::bytes_to_words},
+    sync::{GpuFuture, now},
+};
+
 use crate::application::{
     assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
     renderer::visibility_buffer_generation::{
@@ -22,28 +46,6 @@ use crate::application::{
         swapchain_resources::SwapchainImage,
     },
 };
-use shader_slang::{ComponentType, structs::specialization_arg::SpecializationArg, Blob};
-use vulkano::command_buffer::{DrawIndexedIndirectCommand, DrawIndirectCommand};
-use vulkano::{
-    DeviceAddress, DeviceSize, ValidationError,
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
-    device_generated_commands::{ComputePipelineIndirectBufferInfo, IndirectCommandsLayout},
-    format::Format,
-    image::{ImageAspects, ImageUsage},
-    memory::{
-        DeviceAlignment,
-        allocator::{AllocationCreateInfo, DeviceLayout, MemoryTypeFilter},
-    },
-    pipeline::{
-        ComputePipeline, PipelineCreateFlags, PipelineLayout, compute::ComputePipelineCreateInfo,
-        layout::PushConstantRange,
-    },
-    shader::{ShaderStages, spirv::bytes_to_words},
-    sync::{GpuFuture, now},
-};
-use vulkano::device::Device;
-use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 
 #[derive(Clone)]
 pub struct VisibilityBufferData {
@@ -175,7 +177,7 @@ impl VisibilityBufferData {
             },
             AllocationCreateInfo::default(),
         )
-            .unwrap();
+        .unwrap();
 
         let material_indices_buffer =
             Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
@@ -209,7 +211,7 @@ impl VisibilityBufferData {
             BufferUsage::TRANSFER_SRC,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-            .unwrap();
+        .unwrap();
 
         let global_data_buffer = buffer_from_slice(
             rhi.buffer_allocator().clone(),
@@ -219,8 +221,8 @@ impl VisibilityBufferData {
             BufferUsage::SHADER_DEVICE_ADDRESS,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-            .unwrap()
-            .reinterpret();
+        .unwrap()
+        .reinterpret();
 
         Self {
             visibility_buffer,
@@ -251,7 +253,7 @@ impl VisibilityBufferData {
             AllocationCreateInfo::default(),
             length.into(),
         )
-            .unwrap()
+        .unwrap()
     }
 
     pub fn clear(
@@ -359,7 +361,7 @@ impl VisibilityBufferGlobalData {
             BufferUsage::INDIRECT_BUFFER,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-            .unwrap();
+        .unwrap();
 
         Self {
             instances: Self::make_buffer(
@@ -455,7 +457,7 @@ impl VisibilityBufferGlobalData {
             BufferUsage::STORAGE_BUFFER | usage,
             MemoryTypeFilter::PREFER_DEVICE,
         )
-            .unwrap()
+        .unwrap()
     }
 
     fn create_linked_program(rhi: &VKRHI, material: &VKMaterial) -> ComponentType {
@@ -512,7 +514,7 @@ impl VisibilityBufferGlobalData {
         rhi: &VKRHI,
         material: &VKMaterial,
         pipeline_layout: Arc<PipelineLayout>,
-        spirv_cache: &mut HashMap<String, Blob>
+        spirv_cache: &mut HashMap<String, Blob>,
     ) -> ComputePipelineCreateInfo {
         let material_key = format!("{}_{}", material.module_name(), material.module_name());
 
@@ -548,7 +550,14 @@ impl VisibilityBufferGlobalData {
         let pipeline_create_infos = resources
             .resource_iterator::<VKMaterial>()
             .unwrap()
-            .map(|material| Self::make_pipeline_create_info(rhi, material, pipeline_layout.clone(), &mut spirv_cache))
+            .map(|material| {
+                Self::make_pipeline_create_info(
+                    rhi,
+                    material,
+                    pipeline_layout.clone(),
+                    &mut spirv_cache,
+                )
+            })
             .collect::<Vec<_>>();
 
         let layouts = pipeline_create_infos
@@ -562,7 +571,7 @@ impl VisibilityBufferGlobalData {
                     rhi.device(),
                     create_info,
                 )
-                    .layout
+                .layout
             });
 
         let alignment = layouts
@@ -591,7 +600,7 @@ impl VisibilityBufferGlobalData {
                 AllocationCreateInfo::default(),
                 DeviceLayout::new(total_size.try_into().unwrap(), alignment).unwrap(),
             )
-                .unwrap(),
+            .unwrap(),
         );
 
         let create_infos_with_indirect = sizes

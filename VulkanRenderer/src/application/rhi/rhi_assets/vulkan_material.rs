@@ -1,19 +1,14 @@
 use std::sync::Arc;
 
 use asset_system::resource_management::Resource;
-use shader_slang::{
-    Blob, ComponentType, LayoutRules, structs::specialization_arg::SpecializationArg,
-};
-use vulkano::{device::Device, pipeline::PipelineLayout, shader::ShaderStages};
+use shader_slang::ComponentType;
+use vulkano::device::Device;
 
 use crate::application::{
     assets::asset_traits::{
         MaterialInterface, RHIMaterialInterface, RHIResource, RendererInterface,
     },
-    rhi::{
-        VKRHI, rhi_assets::RHIResourceManager, shader_object::ShaderObjectLayout,
-        shaders::SlangCompiler,
-    },
+    rhi::{VKRHI, rhi_assets::RHIResourceManager, shaders::SlangCompiler},
 };
 
 pub struct VKMaterial {

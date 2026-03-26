@@ -12,27 +12,15 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use smallvec::smallvec;
 use vulkano::{
     Validated, ValidationError, VulkanError, VulkanObject,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
-    },
-    device::Device,
-    format::{ClearValue, Format},
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
+    format::Format,
     image::{ImageAspects, ImageLayout, ImageUsage},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
-    pipeline::{
-        DynamicState, GraphicsPipeline, PipelineBindPoint,
-        graphics::{
-            subpass::PipelineSubpassType,
-            viewport::{Scissor, Viewport},
-        },
-    },
+    pipeline::GraphicsPipeline,
     render_pass::RenderPass,
-    shader::spirv::bytes_to_words,
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
@@ -41,7 +29,7 @@ use winit::dpi::PhysicalSize;
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
-        RendererInterface, Vertex,
+        RendererInterface,
     },
     renderer::{
         full_screen_pass::FullScreenPass,
@@ -54,7 +42,6 @@ use crate::application::{
     },
     rhi::{
         VKRHI,
-        pipeline::graphics_pipeline,
         render_pass::RenderPassBuilder,
         rhi_assets::{vulkan_material::VKMaterial, vulkan_scene::VKScene},
         swapchain::Swapchain,
@@ -238,7 +225,11 @@ impl VKRenderer {
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
-        self.rhi.as_ref().shader_object_update_queue().borrow_mut().flush_writes(&mut command_buffer);
+        self.rhi
+            .as_ref()
+            .shader_object_update_queue()
+            .borrow_mut()
+            .flush_writes(&mut command_buffer);
 
         self.mutable_state_const()
             .vis_buffer_rasterizer
@@ -384,7 +375,7 @@ impl VKRenderer {
         image_index: usize,
         scene: &VKScene,
     ) -> Result<(), Box<ValidationError>> {
-       /* command_buffer
+        /* command_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
