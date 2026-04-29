@@ -197,20 +197,25 @@ impl VKRenderer {
     }
 
     fn draw_frame(&self, scene: &VKScene) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
+        // Wait for the previous frame to finish
         self.mutable_state_const()
             .in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
 
+        // Update profiler measurements on CPU and reset query pool
         self.profiler.read_results();
 
+        // Recreate swapchain if needed
         if self.mutable_state_const().should_recreate_swapchain {
             self.mutable_state()
                 .recreate_swapchain_internal(self.rhi.as_ref(), &self.render_pass);
         }
 
+        // Update camera matrix and screen data
         self.update_mutating_data(scene);
 
+        // Acquire swapchain image
         let acquire_image_result = self.mutable_state_const().swapchain.acquire_next_image();
         let (swapchain_image_index, suboptimal, image_available_future) = acquire_image_result
             .map_or_else(
@@ -223,23 +228,27 @@ impl VKRenderer {
                 },
                 |v| Some(v),
             )?;
+        // Request a recreation for the next frame if the swapchain is not optimal
         if suboptimal {
             self.mutable_state().request_recreate_swapchain();
         }
 
         let swapchain_extent = self.mutable_state_const().swapchain.extent;
 
+        // Command buffer for a graphics queue. This will do all the rasterization work
         let mut command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
+        // Flush any pending writes to shader parameters
         self.rhi
             .as_ref()
             .shader_object_update_queue()
             .borrow_mut()
             .flush_writes(&mut command_buffer);
 
+        // Rasterize the visibility buffer
         self.profiler.write(&mut command_buffer, ProfilerStage::PreVisbuffer).unwrap();
         self.mutable_state_const()
             .vis_buffer_rasterizer
@@ -256,6 +265,7 @@ impl VKRenderer {
         /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
         .unwrap();*/
 
+        // Submit to graphics queue
         let vis_buffer_generated_future = image_available_future
             .then_execute(
                 self.rhi.queues().graphics_queue.clone(),
@@ -263,16 +273,20 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Command buffer for compute queue. This will perform processing on the visibility buffer
+        // and execute device generated commands to shade the final image.
         let mut compute_command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
+        // Clear outdated visibility buffer data
         self.mutable_state_const()
             .vis_buffer_data
             .clear(&mut compute_command_buffer)
             .unwrap();
 
+        // Perform visibility buffer processing
         self.mutable_state_const()
             .vis_buffer_processing
             .record_command_buffer(
@@ -282,11 +296,13 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Shade the visibility buffer
         self.mutable_state_const()
             .vis_buffer_shade
             .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
             .unwrap();
 
+        // Submit to compute queue
         let draw_finished_future = vis_buffer_generated_future
             .then_execute(
                 self.rhi.queues().compute_queue.clone(),
@@ -301,11 +317,13 @@ impl VKRenderer {
         )
         .unwrap();*/
 
+        // Command buffer for post-processing
         let mut compute_command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
 
+        // Do post-processing
         self.post_process
             .record_command_buffer(
                 &mut compute_command_buffer,
@@ -314,6 +332,7 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Submit to compute queue
         let post_process_finished_future = draw_finished_future
             .then_signal_semaphore()
             .then_execute(
@@ -322,11 +341,13 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Command buffer for drawing back into the swapchain
         let mut command_buffer = self
             .rhi
             .command_buffer_interface()
             .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
 
+        // Fullscreen pass to render image into the swapchain image
         self.mutable_state_const()
             .fullscreen_pass
             .record_command_buffer(
@@ -336,6 +357,7 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Submit to graphics queue
         let final_output_finished_future = post_process_finished_future
             .then_signal_semaphore()
             .then_execute(
@@ -344,6 +366,7 @@ impl VKRenderer {
             )
             .unwrap();
 
+        // Render UI onto swapchain image
         let gui_draw_future = self.rhi.gui_mut().draw_on_image(
             final_output_finished_future,
             self.mutable_state_const()
@@ -355,6 +378,7 @@ impl VKRenderer {
                 .clone(),
         );
 
+        // Present
         let present_future = present(
             gui_draw_future,
             self.rhi.queues().present_queue.clone(),
@@ -364,6 +388,7 @@ impl VKRenderer {
             ),
         );
 
+        // Return the future representing the end of the frame
         let in_flight_future = present_future
             .boxed()
             .then_signal_fence_and_flush()
@@ -510,7 +535,7 @@ impl VKRenderer {
     pub fn post_process_settings(&self) -> RefMut<PostProcessSettings> {
         self.post_process.settings_mut()
     }
-    
+
     pub fn profiler(&self) -> &Profiler {
         &self.profiler
     }
