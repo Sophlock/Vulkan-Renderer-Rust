@@ -12,10 +12,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use egui_winit_vulkano::egui::epaint::PathShape;
+use egui_winit_vulkano::egui::{epaint, Sense, Stroke, StrokeKind, Ui, Vec2};
 use egui_winit_vulkano::{
-    egui,
+    Gui, egui,
     egui::{Color32, Frame},
 };
+use emath::{Pos2, Rect, RectTransform};
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
@@ -215,9 +218,16 @@ impl Application {
             egui::CentralPanel::default()
                 .frame(Frame::default().fill(Color32::TRANSPARENT))
                 .show(&ctx, |ui| {
+                    egui::Window::new("GUI")
+                        .resizable(false)
+                        .default_size([300.0, 350.0])
+                        .constrain_to(ui.available_rect_before_wrap())
+                        .show(&ctx, |ui| {
                     ui.heading("Render Statistics");
                     ui.label(format!("Frametime: {:.2}ms", delta_time * 1000f32));
                     ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
+                    self.time_measurement
+                        .paint_graph_to_gui(&AppEvent::Render, ui);
                     ui.label(format!(
                         "Number of pipelines: {}",
                         self.asset_manager
@@ -239,7 +249,7 @@ impl Application {
                     // age += 1;
                     //}
                     //ui.label(format!("Hello '{name}', age {age}"));
-                });
+                });});
         });
     }
 
@@ -345,12 +355,14 @@ impl ApplicationHandler<AppEvent> for Application {
 
 struct TimeMeasureSystem {
     last_times: [SystemTime; 2],
+    graphs: [FrameTimeGraph; 2],
 }
 
 impl TimeMeasureSystem {
     pub fn new() -> Self {
         Self {
             last_times: [SystemTime::now(); 2],
+            graphs: [FrameTimeGraph::new(), FrameTimeGraph::new()],
         }
     }
 
@@ -361,6 +373,141 @@ impl TimeMeasureSystem {
         };
         let last = self.last_times[index];
         self.last_times[index] = SystemTime::now();
-        self.last_times[index].duration_since(last).unwrap()
+        let duration = self.last_times[index].duration_since(last).unwrap();
+        self.graphs[index].register_duration(duration);
+        duration
+    }
+
+    pub fn paint_graph_to_gui(&mut self, frame_type: &AppEvent, ui: &mut Ui) {
+        let index: usize = match frame_type {
+            AppEvent::Tick => 0,
+            AppEvent::Render => 1,
+        };
+        self.graphs[index].paint_to_gui(ui)
+    }
+}
+
+struct FrameTimeGraph {
+    durations: Vec<Duration>,
+    smoothed_durations: Vec<Duration>,
+    current_index: usize,
+}
+
+impl FrameTimeGraph {
+    const CAPACITY: usize = 200;
+    const SMOOTHING: usize = 10;
+    const HEIGHT: f32 = 100f32;
+    const WIDTH: f32 = 150f32;
+    pub fn new() -> Self {
+        let mut durations = vec![];
+        let mut smoothed_durations = vec![];
+        durations.reserve_exact(Self::CAPACITY);
+        smoothed_durations.reserve_exact(Self::CAPACITY);
+        Self {
+            durations,
+            smoothed_durations,
+            current_index: 0,
+        }
+    }
+
+    pub fn paint_to_gui(&self, ui: &mut Ui) {
+        if self.durations.is_empty() {
+            return;
+        }
+
+        let (response, painter) =
+            ui.allocate_painter(Vec2::new(Self::WIDTH, Self::HEIGHT), Sense::hover());
+
+        let to_screen = RectTransform::from_to(
+            Rect::from_min_size(Pos2::ZERO, response.rect.size()),
+            response.rect,
+        );
+
+        let min = self.durations.iter().min().unwrap().as_secs_f32();
+        let max = self.durations.iter().max().unwrap().as_secs_f32();
+
+        let durations_path = Self::shape_from_vec(
+            &self.durations,
+            min,
+            max,
+            self.current_index,
+            &to_screen,
+            Stroke::new(1f32, Color32::CYAN.linear_multiply(0.3f32)),
+        );
+        let smoothed_durations_path = Self::shape_from_vec(
+            &self.smoothed_durations,
+            min,
+            max,
+            self.current_index,
+            &to_screen,
+            Stroke::new(1f32, Color32::RED.linear_multiply(0.7f32)),
+        );
+
+        painter.add(epaint::RectShape::stroke(response.rect, 0, Stroke::new(1f32, Color32::GRAY), StrokeKind::Inside));
+
+        painter.add(durations_path);
+        painter.add(smoothed_durations_path);
+    }
+
+    fn shape_from_vec(
+        vec: &Vec<Duration>,
+        min: f32,
+        max: f32,
+        current_index: usize,
+        to_screen: &RectTransform,
+        stroke: Stroke,
+    ) -> PathShape {
+        let sample_width = Self::WIDTH / Self::CAPACITY as f32;
+        let samples = vec
+            .iter()
+            .chain(vec.iter())
+            .skip(current_index)
+            .take(vec.len())
+            .enumerate()
+            .map(|(i, duration)| {
+                Pos2::new(
+                    (vec.len() - i) as f32 * sample_width,
+                    (duration.as_secs_f32() - min) * Self::HEIGHT / (max - min),
+                )
+            })
+            .map(|pos| to_screen * pos)
+            .collect();
+
+        PathShape::line(samples, stroke)
+    }
+
+    pub fn register_duration(&mut self, duration: Duration) {
+        if self.current_index >= self.durations.len() {
+            self.durations.push(duration);
+            if self.durations.len() < Self::SMOOTHING {
+                self.smoothed_durations.push(Duration::from_secs_f32(
+                    self.durations.iter().map(|d| d.as_secs_f32()).sum::<f32>()
+                        / self.durations.len() as f32,
+                ));
+            } else {
+                self.smoothed_durations.push(Duration::from_secs_f32(
+                    self.durations
+                        .iter()
+                        .skip(self.durations.len() - Self::SMOOTHING)
+                        .map(|d| d.as_secs_f32())
+                        .sum::<f32>()
+                        / Self::SMOOTHING as f32,
+                ));
+            }
+        } else {
+            self.durations[self.current_index] = duration;
+            self.smoothed_durations[self.current_index] = Duration::from_secs_f32(
+                self.durations
+                    .iter()
+                    .chain(self.durations.iter())
+                    .skip(Self::CAPACITY + self.current_index - Self::SMOOTHING)
+                    .take(Self::SMOOTHING)
+                    .map(|d| d.as_secs_f32())
+                    .sum::<f32>()
+                    / Self::SMOOTHING as f32,
+            );
+        }
+
+        self.current_index = (self.current_index + 1) % Self::CAPACITY;
     }
 }

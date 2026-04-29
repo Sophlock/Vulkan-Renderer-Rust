@@ -23,6 +23,7 @@ gilrs = "0.11.1"
 
 asset-system = {path = "../asset_system" }
 rand = "0.10.0"
+emath = "0.31.1"
 
 [features]
 default = ["winit/rwh_06", "glam/bytemuck"]
