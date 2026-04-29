@@ -1,3 +1,4 @@
+use enum_iterator::Sequence;
 use std::cell::{Ref, RefCell};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -58,7 +59,7 @@ impl Profiler {
                     .get_results(
                         0..Self::query_count(),
                         results.as_mut_slice(),
-                        QueryResultFlags::empty(),
+                        QueryResultFlags::WAIT,
                     )
                     .unwrap();
             }
@@ -90,13 +91,13 @@ impl ProfilerStage {
 
     fn pipeline_stage(&self) -> PipelineStage {
         match self {
-            ProfilerStage::PreVisbuffer => PipelineStage::BottomOfPipe,
+            ProfilerStage::PreVisbuffer => PipelineStage::TopOfPipe,
             ProfilerStage::PostVisbuffer => PipelineStage::BottomOfPipe,
         }
     }
 }
 
-#[derive(Ord, Eq, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Ord, Eq, PartialEq, PartialOrd, Sequence, Debug)]
 pub enum ProfilerCategory {
     VisbufferRasterization,
 }
@@ -106,7 +107,7 @@ pub struct ProfilerRecords {
     timestamp_period: f32,
     results_available: bool,
     had_writes: bool,
-    timestamp_buffer: Vec<u32>
+    timestamp_buffer: Vec<u32>,
 }
 
 impl ProfilerRecords {
@@ -118,29 +119,43 @@ impl ProfilerRecords {
             timestamp_period,
             results_available: false,
             had_writes: false,
-            timestamp_buffer
+            timestamp_buffer,
         }
     }
 
     fn update_times(&mut self) {
-        self.last_durations.insert(
+        self.update_time(
             ProfilerCategory::VisbufferRasterization,
-            self.duration_between(
-                ProfilerStage::PreVisbuffer,
-                ProfilerStage::PostVisbuffer,
-            ),
+            ProfilerStage::PreVisbuffer,
+            ProfilerStage::PostVisbuffer,
         );
         self.results_available = true;
     }
 
-    fn duration_between(
-        &self,
+    fn update_time(
+        &mut self,
+        category: ProfilerCategory,
         start: ProfilerStage,
         end: ProfilerStage,
-    ) -> Duration {
-        let difference =
-            self.timestamp_buffer[end.query_id() as usize] - self.timestamp_buffer[start.query_id() as usize];
-        Duration::from_secs_f32(self.timestamp_period * difference as f32)
+    ) {
+        let duration =
+            self.duration_between(start, end);
+        if duration.is_some() {
+            self.last_durations.insert(category, duration.unwrap());
+        }
+    }
+
+    fn duration_between(&self, start: ProfilerStage, end: ProfilerStage) -> Option<Duration> {
+        let start_time = self.timestamp_buffer[start.query_id() as usize];
+        let end_time = self.timestamp_buffer[end.query_id() as usize];
+        if start_time > end_time {
+            None
+        } else {
+            let difference = end_time / 1000 - start_time / 1000;
+            Some(Duration::from_secs_f32(
+                self.timestamp_period * difference as f32 / 1000000f32,
+            ))
+        }
     }
 
     pub fn last_durations(&self) -> Option<&BTreeMap<ProfilerCategory, Duration>> {

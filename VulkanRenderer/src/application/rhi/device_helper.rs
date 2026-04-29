@@ -22,6 +22,7 @@ pub fn create_logical_device(
         nv_device_generated_commands_compute: true,
         khr_buffer_device_address: true,
         khr_synchronization2: true,
+        khr_calibrated_timestamps: true,
         //nv_compute_shader_derivatives: true,
         ..DeviceExtensions::default()
     };

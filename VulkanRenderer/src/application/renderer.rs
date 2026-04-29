@@ -3,7 +3,7 @@ mod post_processing;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
-mod profiling;
+pub mod profiling;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -509,6 +509,10 @@ impl VKRenderer {
 
     pub fn post_process_settings(&self) -> RefMut<PostProcessSettings> {
         self.post_process.settings_mut()
+    }
+    
+    pub fn profiler(&self) -> &Profiler {
+        &self.profiler
     }
 }
 impl RendererInterface for VKRenderer {

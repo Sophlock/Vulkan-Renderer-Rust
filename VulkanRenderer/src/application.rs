@@ -4,6 +4,16 @@ mod renderer;
 mod rhi;
 mod scene;
 
+use egui_winit_vulkano::{
+    egui,
+    egui::{Color32, Sense, Stroke, StrokeKind, Ui, Vec2, epaint, epaint::PathShape},
+};
+use emath::{Pos2, Rect, RectTransform};
+use enum_iterator::all;
+use gilrs::Gilrs;
+use glam::{EulerRot, Quat, Vec3};
+use rhi::VKRHI;
+use std::collections::BTreeMap;
 use std::{
     cell::RefCell,
     ops::DerefMut,
@@ -11,15 +21,6 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-
-use egui_winit_vulkano::{
-    egui,
-    egui::{Color32, Sense, Stroke, StrokeKind, Ui, Vec2, epaint, epaint::PathShape},
-};
-use emath::{Pos2, Rect, RectTransform};
-use gilrs::Gilrs;
-use glam::{EulerRot, Quat, Vec3};
-use rhi::VKRHI;
 use vulkano::buffer::BufferUsage;
 use winit::{
     application::ApplicationHandler,
@@ -29,6 +30,7 @@ use winit::{
 };
 use winit_input_map::{InputCode, InputMap, input_map};
 
+use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
 use crate::{
     AppEvent,
     application::{
@@ -219,8 +221,6 @@ impl Application {
                 .show(&ctx, |ui| {
                     ui.heading("Render Statistics");
                     //ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
-                    self.time_measurement
-                        .paint_graph_to_gui(&AppEvent::Render, ui);
                     ui.label(format!(
                         "Number of pipelines: {}",
                         self.asset_manager
@@ -230,6 +230,9 @@ impl Application {
                             .unwrap()
                             .count()
                     ));
+                    self.time_measurement
+                        .paint_graph_to_gui(&AppEvent::Render, ui);
+                    self.time_measurement.paint_detail_graphs_to_gui(ui);
 
                     ui.add_space(10f32);
                     ui.heading("Render Settings");
@@ -320,6 +323,8 @@ impl ApplicationHandler<AppEvent> for Application {
                     .unwrap()
                     .redraw(self.rhi_scene_proxy.as_ref().unwrap());
                 self.mark_frame(&AppEvent::Render);
+                self.time_measurement
+                    .update_detail_graphs(self.renderer.as_ref().unwrap().profiler())
             }
             _ => {}
         }
@@ -346,16 +351,22 @@ impl ApplicationHandler<AppEvent> for Application {
 struct TimeMeasureSystem {
     last_times: [SystemTime; 2],
     graphs: [FrameTimeGraph; 2],
+
+    detail_graphs: BTreeMap<ProfilerCategory, FrameTimeGraph>,
 }
 
 impl TimeMeasureSystem {
     pub fn new() -> Self {
+        let detail_graphs = all::<ProfilerCategory>()
+            .map(|category| (category, FrameTimeGraph::new(format!("{:?}", category))))
+            .collect();
         Self {
             last_times: [SystemTime::now(); 2],
             graphs: [
                 FrameTimeGraph::new("Tick"),
                 FrameTimeGraph::new("Total Frametime"),
             ],
+            detail_graphs,
         }
     }
 
@@ -375,12 +386,29 @@ impl TimeMeasureSystem {
         duration
     }
 
-    pub fn paint_graph_to_gui(&mut self, frame_type: &AppEvent, ui: &mut Ui) {
+    pub fn paint_graph_to_gui(&self, frame_type: &AppEvent, ui: &mut Ui) {
         let index: usize = match frame_type {
             AppEvent::Tick => 0,
             AppEvent::Render => 1,
         };
         self.graphs[index].paint_to_gui(ui)
+    }
+
+    pub fn update_detail_graphs(&mut self, profiler: &Profiler) {
+        profiler.records().last_durations().map(|durations| {
+            durations.iter().for_each(|(category, duration)| {
+                self.detail_graphs
+                    .get_mut(category)
+                    .unwrap()
+                    .register_duration(*duration)
+            })
+        });
+    }
+
+    pub fn paint_detail_graphs_to_gui(&self, ui: &mut Ui) {
+        self.detail_graphs
+            .iter()
+            .for_each(|(_, graph)| graph.paint_to_gui(ui))
     }
 }
 
