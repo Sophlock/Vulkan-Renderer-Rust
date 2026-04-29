@@ -12,11 +12,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use egui_winit_vulkano::egui::epaint::PathShape;
-use egui_winit_vulkano::egui::{Sense, Stroke, StrokeKind, Ui, Vec2, epaint};
 use egui_winit_vulkano::{
-    Gui, egui,
-    egui::{Color32, Frame},
+    egui,
+    egui::{Color32, Sense, Stroke, StrokeKind, Ui, Vec2, epaint, epaint::PathShape},
 };
 use emath::{Pos2, Rect, RectTransform};
 use gilrs::Gilrs;

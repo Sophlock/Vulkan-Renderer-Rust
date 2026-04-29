@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use vulkano::{
     device::physical::PhysicalDevice,
     format::{Format, FormatFeatures},

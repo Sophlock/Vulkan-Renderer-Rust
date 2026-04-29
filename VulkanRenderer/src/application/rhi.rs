@@ -211,7 +211,7 @@ impl VKRHI {
             .unwrap()
             .filter(|physical_device: &Arc<PhysicalDevice>| {
                 physical_device::is_physical_device_suitable_for_surface(physical_device, surface)
-                && physical_device::has_dgc_support(physical_device)
+                    && physical_device::has_dgc_support(physical_device)
             })
             .last()
             .expect("No suitable physical device found");
