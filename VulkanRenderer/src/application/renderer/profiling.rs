@@ -32,7 +32,7 @@ impl Profiler {
     }
 
     fn query_count() -> u32 {
-        2
+        Self::QUERY_COUNT
     }
 
     pub fn write(
@@ -72,27 +72,39 @@ impl Profiler {
         self.records.borrow()
     }
 
-    const PRE_VISBUFFER: u32 = 0;
-    const POST_VISBUFFER: u32 = 1;
+    const PRE_VISBUFFER_RASTER: u32 = 0;
+    const POST_VISBUFFER_RASTER: u32 = 1;
+    const PRE_VISBUFFER_PROCESS: u32 = 2;
+    const POST_VISBUFFER_PROCESS: u32 = 3;
+    const POST_VISBUFFER_SHADE: u32 = 4;
+
+    const QUERY_COUNT: u32 = 5;
 }
 
 pub enum ProfilerStage {
-    PreVisbuffer,
-    PostVisbuffer,
+    PreVisbufferRaster,
+    PostVisbufferRaster,
+    PreVisbufferProcess,
+    PostVisbufferProcess,
+    PostVisbufferShade,
 }
 
 impl ProfilerStage {
     fn query_id(&self) -> u32 {
         match self {
-            ProfilerStage::PreVisbuffer => Profiler::PRE_VISBUFFER,
-            ProfilerStage::PostVisbuffer => Profiler::POST_VISBUFFER,
+            ProfilerStage::PreVisbufferRaster => Profiler::PRE_VISBUFFER_RASTER,
+            ProfilerStage::PostVisbufferRaster => Profiler::POST_VISBUFFER_RASTER,
+            ProfilerStage::PreVisbufferProcess => Profiler::PRE_VISBUFFER_PROCESS,
+            ProfilerStage::PostVisbufferProcess => Profiler::POST_VISBUFFER_PROCESS,
+            ProfilerStage::PostVisbufferShade => Profiler::POST_VISBUFFER_SHADE,
         }
     }
 
     fn pipeline_stage(&self) -> PipelineStage {
         match self {
-            ProfilerStage::PreVisbuffer => PipelineStage::TopOfPipe,
-            ProfilerStage::PostVisbuffer => PipelineStage::BottomOfPipe,
+            ProfilerStage::PreVisbufferRaster => PipelineStage::TopOfPipe,
+            ProfilerStage::PostVisbufferRaster => PipelineStage::BottomOfPipe,
+            _ => PipelineStage::ComputeShader,
         }
     }
 }
@@ -100,6 +112,8 @@ impl ProfilerStage {
 #[derive(Copy, Clone, Ord, Eq, PartialEq, PartialOrd, Sequence, Debug)]
 pub enum ProfilerCategory {
     VisbufferRasterization,
+    VisbufferProcess,
+    VisbufferShade,
 }
 
 pub struct ProfilerRecords {
@@ -126,8 +140,18 @@ impl ProfilerRecords {
     fn update_times(&mut self) {
         self.update_time(
             ProfilerCategory::VisbufferRasterization,
-            ProfilerStage::PreVisbuffer,
-            ProfilerStage::PostVisbuffer,
+            ProfilerStage::PreVisbufferRaster,
+            ProfilerStage::PostVisbufferRaster,
+        );
+        self.update_time(
+            ProfilerCategory::VisbufferProcess,
+            ProfilerStage::PreVisbufferProcess,
+            ProfilerStage::PostVisbufferProcess,
+        );
+        self.update_time(
+            ProfilerCategory::VisbufferShade,
+            ProfilerStage::PostVisbufferProcess,
+            ProfilerStage::PostVisbufferShade,
         );
         self.results_available = true;
     }
@@ -138,8 +162,7 @@ impl ProfilerRecords {
         start: ProfilerStage,
         end: ProfilerStage,
     ) {
-        let duration =
-            self.duration_between(start, end);
+        let duration = self.duration_between(start, end);
         if duration.is_some() {
             self.last_durations.insert(category, duration.unwrap());
         }

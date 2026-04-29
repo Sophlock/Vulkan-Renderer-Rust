@@ -249,7 +249,7 @@ impl VKRenderer {
             .flush_writes(&mut command_buffer);
 
         // Rasterize the visibility buffer
-        self.profiler.write(&mut command_buffer, ProfilerStage::PreVisbuffer).unwrap();
+        self.profiler.write(&mut command_buffer, ProfilerStage::PreVisbufferRaster).unwrap();
         self.mutable_state_const()
             .vis_buffer_rasterizer
             .record_command_buffer(
@@ -260,7 +260,7 @@ impl VKRenderer {
                 &self.mutable_state_const().vis_buffer_data,
             )
             .unwrap();
-        self.profiler.write(&mut command_buffer, ProfilerStage::PostVisbuffer).unwrap();
+        self.profiler.write(&mut command_buffer, ProfilerStage::PostVisbufferRaster).unwrap();
 
         /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
         .unwrap();*/
@@ -286,6 +286,8 @@ impl VKRenderer {
             .clear(&mut compute_command_buffer)
             .unwrap();
 
+        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PreVisbufferProcess).unwrap();
+
         // Perform visibility buffer processing
         self.mutable_state_const()
             .vis_buffer_processing
@@ -296,11 +298,15 @@ impl VKRenderer {
             )
             .unwrap();
 
+        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PostVisbufferProcess).unwrap();
+
         // Shade the visibility buffer
         self.mutable_state_const()
             .vis_buffer_shade
             .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
             .unwrap();
+
+        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PostVisbufferShade).unwrap();
 
         // Submit to compute queue
         let draw_finished_future = vis_buffer_generated_future
