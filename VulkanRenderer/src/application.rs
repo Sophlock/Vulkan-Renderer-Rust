@@ -217,10 +217,17 @@ impl Application {
             let ctx = ui.context();
             egui::Window::new("GUI")
                 .resizable(false)
-                .default_size([300.0, 350.0])
+                .default_size([400.0, 500.0])
                 .show(&ctx, |ui| {
                     ui.heading("Render Statistics");
-                    //ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
+                    ui.label(format!(
+                        "Framerate: {:.1}fps",
+                        1f32 / self
+                            .time_measurement
+                            .last_duration(&AppEvent::Render)
+                            .unwrap_or(Duration::ZERO)
+                            .as_secs_f32()
+                    ));
                     ui.label(format!(
                         "Number of pipelines: {}",
                         self.asset_manager
@@ -410,6 +417,14 @@ impl TimeMeasureSystem {
             .iter()
             .for_each(|(_, graph)| graph.paint_to_gui(ui))
     }
+
+    pub fn last_duration(&self, frame_type: &AppEvent) -> Option<Duration> {
+        let index: usize = match frame_type {
+            AppEvent::Tick => 0,
+            AppEvent::Render => 1,
+        };
+        self.graphs[index].last_duration()
+    }
 }
 
 struct FrameTimeGraph {
@@ -447,11 +462,7 @@ impl FrameTimeGraph {
         }
 
         ui.collapsing(&self.name, |ui| {
-            let current_time = if self.current_index == 0 {
-                self.durations.last().unwrap().as_secs_f32()
-            } else {
-                self.durations[self.current_index - 1].as_secs_f32()
-            };
+            let current_time = self.last_duration().unwrap().as_secs_f32();
             ui.label(format!("Current: {:.2}ms", current_time * 1000f32));
 
             let (response, painter) =
@@ -573,5 +584,13 @@ impl FrameTimeGraph {
 
         self.total_time += duration;
         self.total_sample_count += 1;
+    }
+
+    pub fn last_duration(&self) -> Option<Duration> {
+        if self.current_index == 0 {
+            self.durations.last().cloned()
+        } else {
+            Some(self.durations[self.current_index - 1])
+        }
     }
 }
