@@ -13,7 +13,7 @@ use std::{
 };
 
 use egui_winit_vulkano::egui::epaint::PathShape;
-use egui_winit_vulkano::egui::{epaint, Sense, Stroke, StrokeKind, Ui, Vec2};
+use egui_winit_vulkano::egui::{Sense, Stroke, StrokeKind, Ui, Vec2, epaint};
 use egui_winit_vulkano::{
     Gui, egui,
     egui::{Color32, Frame},
@@ -215,41 +215,42 @@ impl Application {
 
         gui.immediate_ui(|ui| {
             let ctx = ui.context();
-            egui::CentralPanel::default()
-                .frame(Frame::default().fill(Color32::TRANSPARENT))
-                .show(&ctx, |ui| {
+            //egui::CentralPanel::default()
+            //    .frame(Frame::default().fill(Color32::TRANSPARENT))
+            //    .show(&ctx, |ui| {
                     egui::Window::new("GUI")
                         .resizable(false)
                         .default_size([300.0, 350.0])
-                        .constrain_to(ui.available_rect_before_wrap())
+                        //.constrain_to(ui.available_rect_before_wrap())
                         .show(&ctx, |ui| {
-                    ui.heading("Render Statistics");
-                    ui.label(format!("Frametime: {:.2}ms", delta_time * 1000f32));
-                    ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
-                    self.time_measurement
-                        .paint_graph_to_gui(&AppEvent::Render, ui);
-                    ui.label(format!(
-                        "Number of pipelines: {}",
-                        self.asset_manager
-                            .borrow()
-                            .resource_manager()
-                            .get_iter::<Material>()
-                            .unwrap()
-                            .count()
-                    ));
+                            ui.heading("Render Statistics");
+                            ui.label(format!("Frametime: {:.2}ms", delta_time * 1000f32));
+                            ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
+                            self.time_measurement
+                                .paint_graph_to_gui(&AppEvent::Render, ui);
+                            ui.label(format!(
+                                "Number of pipelines: {}",
+                                self.asset_manager
+                                    .borrow()
+                                    .resource_manager()
+                                    .get_iter::<Material>()
+                                    .unwrap()
+                                    .count()
+                            ));
 
-                    ui.add_space(10f32);
-                    ui.heading("Render Settings");
-                    ui.label("Post Process:");
-                    renderer.post_process_settings().draw_gui(ui);
+                            ui.add_space(10f32);
+                            ui.heading("Render Settings");
+                            ui.label("Post Process:");
+                            renderer.post_process_settings().draw_gui(ui);
 
-                    //ui.text_edit_singleline(&mut name);
-                    //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-                    //if ui.button("Increment").clicked() {
-                    // age += 1;
-                    //}
-                    //ui.label(format!("Hello '{name}', age {age}"));
-                });});
+                            //ui.text_edit_singleline(&mut name);
+                            //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
+                            //if ui.button("Increment").clicked() {
+                            // age += 1;
+                            //}
+                            //ui.label(format!("Hello '{name}', age {age}"));
+                        });
+                //});
         });
     }
 
@@ -305,13 +306,16 @@ impl ApplicationHandler<AppEvent> for Application {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        self.input.update_with_window_event(&event);
-        self.renderer
+        let input_consumed = self
+            .renderer
             .as_ref()
             .unwrap()
             .rhi()
             .gui_mut()
             .update(&event);
+        if !input_consumed {
+            self.input.update_with_window_event(&event);
+        }
         match event {
             WindowEvent::Resized(size) => {
                 self.update_aspect_ratio(size.width, size.height);
@@ -443,7 +447,12 @@ impl FrameTimeGraph {
             Stroke::new(1f32, Color32::RED.linear_multiply(0.7f32)),
         );
 
-        painter.add(epaint::RectShape::stroke(response.rect, 0, Stroke::new(1f32, Color32::GRAY), StrokeKind::Inside));
+        painter.add(epaint::RectShape::stroke(
+            response.rect,
+            0,
+            Stroke::new(1f32, Color32::GRAY),
+            StrokeKind::Inside,
+        ));
 
         painter.add(durations_path);
         painter.add(smoothed_durations_path);
