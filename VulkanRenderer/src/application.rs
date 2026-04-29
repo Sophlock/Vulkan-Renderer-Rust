@@ -269,6 +269,7 @@ impl ApplicationHandler<AppEvent> for Application {
         self.renderer = Some(Rc::new(VKRenderer::new(rhi)));
         // TODO: This should be called on demand as well
         self.renderer.as_ref().unwrap().compile_materials();
+        self.time_measurement.reset();
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
@@ -353,8 +354,15 @@ impl TimeMeasureSystem {
     pub fn new() -> Self {
         Self {
             last_times: [SystemTime::now(); 2],
-            graphs: [FrameTimeGraph::new("Tick"), FrameTimeGraph::new("Total Frametime")],
+            graphs: [
+                FrameTimeGraph::new("Tick"),
+                FrameTimeGraph::new("Total Frametime"),
+            ],
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.last_times = [SystemTime::now(); 2];
     }
 
     pub fn update(&mut self, frame_type: &AppEvent) -> Duration {
@@ -415,8 +423,7 @@ impl FrameTimeGraph {
         ui.collapsing(&self.name, |ui| {
             let current_time = if self.current_index == 0 {
                 self.durations.last().unwrap().as_secs_f32()
-            }
-            else {
+            } else {
                 self.durations[self.current_index - 1].as_secs_f32()
             };
             ui.label(format!("Current: {:.2}ms", current_time * 1000f32));
@@ -435,10 +442,18 @@ impl FrameTimeGraph {
             ui.label(format!("Recent Min: {:.2}ms", min * 1000f32));
             ui.label(format!("Recent Max: {:.2}ms", max * 1000f32));
 
-            let avg = self.durations.iter().map(Duration::as_secs_f32).sum::<f32>() / self.durations.len() as f32;
+            let avg = self
+                .durations
+                .iter()
+                .map(Duration::as_secs_f32)
+                .sum::<f32>()
+                / self.durations.len() as f32;
 
             ui.label(format!("Recent Average: {:.2}ms", avg * 1000f32));
-            ui.label(format!("Total Average: {:.2}ms", self.total_time.as_secs_f32() / self.total_sample_count as f32 * 1000f32));
+            ui.label(format!(
+                "Total Average: {:.2}ms",
+                self.total_time.as_secs_f32() / self.total_sample_count as f32 * 1000f32
+            ));
 
             let durations_path = Self::shape_from_vec(
                 &self.durations,
@@ -454,7 +469,7 @@ impl FrameTimeGraph {
                 max,
                 self.current_index,
                 &to_screen,
-                Stroke::new(1f32, Color32::RED.linear_multiply(0.7f32)),
+                Stroke::new(2f32, Color32::RED.linear_multiply(0.7f32)),
             );
 
             painter.add(epaint::RectShape::stroke(
