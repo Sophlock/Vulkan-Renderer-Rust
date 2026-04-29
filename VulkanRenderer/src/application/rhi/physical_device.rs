@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use vulkano::{
     device::physical::PhysicalDevice,
     format::{Format, FormatFeatures},
@@ -47,4 +48,13 @@ pub fn find_depth_format(physical_device: &PhysicalDevice) -> Format {
         ],
     )
     .unwrap()
+}
+
+pub fn has_dgc_support(physical_device: &PhysicalDevice) -> bool {
+    physical_device
+        .supported_extensions()
+        .nv_device_generated_commands
+        && physical_device
+            .supported_extensions()
+            .nv_device_generated_commands_compute
 }

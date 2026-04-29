@@ -211,6 +211,7 @@ impl VKRHI {
             .unwrap()
             .filter(|physical_device: &Arc<PhysicalDevice>| {
                 physical_device::is_physical_device_suitable_for_surface(physical_device, surface)
+                && physical_device::has_dgc_support(physical_device)
             })
             .last()
             .expect("No suitable physical device found");
@@ -222,29 +223,6 @@ impl VKRHI {
         physical_device: &Arc<PhysicalDevice>,
         queue_indices: &QueueFamilyIndices,
     ) -> (Arc<Device>, QueueCollection) {
-        /*let queue_create_infos = queue_indices.generate_create_infos();
-        let device_extensions = DeviceExtensions {
-            khr_swapchain: true,
-            ..DeviceExtensions::default()
-        };
-        let device_features = DeviceFeatures {
-            sampler_anisotropy: true,
-            compute_derivative_group_quads: true,
-            ..DeviceFeatures::default()
-        };
-        let device_create_info = DeviceCreateInfo {
-            queue_create_infos,
-            enabled_extensions: device_extensions,
-            enabled_features: device_features,
-            physical_devices: vec![physical_device.clone()].into(),
-            ..DeviceCreateInfo::default()
-        };
-
-        let (device, queues) = Device::new(physical_device.clone(), device_create_info).unwrap();
-        (
-            device,
-            QueueCollection::new(queues.collect(), queue_indices),
-        )*/
         device_helper::create_logical_device(physical_device, queue_indices)
     }
 
