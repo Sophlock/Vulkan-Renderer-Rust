@@ -209,48 +209,35 @@ impl Application {
         self.input.init();
     }
 
-    fn draw_gui(&mut self, delta_time: f32) {
+    fn draw_gui(&mut self) {
         let renderer = &self.renderer.as_ref().unwrap();
         let mut gui = renderer.rhi().gui_mut();
 
         gui.immediate_ui(|ui| {
             let ctx = ui.context();
-            //egui::CentralPanel::default()
-            //    .frame(Frame::default().fill(Color32::TRANSPARENT))
-            //    .show(&ctx, |ui| {
-                    egui::Window::new("GUI")
-                        .resizable(false)
-                        .default_size([300.0, 350.0])
-                        //.constrain_to(ui.available_rect_before_wrap())
-                        .show(&ctx, |ui| {
-                            ui.heading("Render Statistics");
-                            ui.label(format!("Frametime: {:.2}ms", delta_time * 1000f32));
-                            ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
-                            self.time_measurement
-                                .paint_graph_to_gui(&AppEvent::Render, ui);
-                            ui.label(format!(
-                                "Number of pipelines: {}",
-                                self.asset_manager
-                                    .borrow()
-                                    .resource_manager()
-                                    .get_iter::<Material>()
-                                    .unwrap()
-                                    .count()
-                            ));
+            egui::Window::new("GUI")
+                .resizable(false)
+                .default_size([300.0, 350.0])
+                .show(&ctx, |ui| {
+                    ui.heading("Render Statistics");
+                    //ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
+                    self.time_measurement
+                        .paint_graph_to_gui(&AppEvent::Render, ui);
+                    ui.label(format!(
+                        "Number of pipelines: {}",
+                        self.asset_manager
+                            .borrow()
+                            .resource_manager()
+                            .get_iter::<Material>()
+                            .unwrap()
+                            .count()
+                    ));
 
-                            ui.add_space(10f32);
-                            ui.heading("Render Settings");
-                            ui.label("Post Process:");
-                            renderer.post_process_settings().draw_gui(ui);
-
-                            //ui.text_edit_singleline(&mut name);
-                            //ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-                            //if ui.button("Increment").clicked() {
-                            // age += 1;
-                            //}
-                            //ui.label(format!("Hello '{name}', age {age}"));
-                        });
-                //});
+                    ui.add_space(10f32);
+                    ui.heading("Render Settings");
+                    ui.label("Post Process:");
+                    renderer.post_process_settings().draw_gui(ui);
+                });
         });
     }
 
@@ -327,13 +314,13 @@ impl ApplicationHandler<AppEvent> for Application {
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                let delta_time = self.mark_frame(&AppEvent::Render);
                 self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
-                self.draw_gui(delta_time);
+                self.draw_gui();
                 self.renderer
                     .as_ref()
                     .unwrap()
                     .redraw(self.rhi_scene_proxy.as_ref().unwrap());
+                self.mark_frame(&AppEvent::Render);
             }
             _ => {}
         }
@@ -366,7 +353,7 @@ impl TimeMeasureSystem {
     pub fn new() -> Self {
         Self {
             last_times: [SystemTime::now(); 2],
-            graphs: [FrameTimeGraph::new(), FrameTimeGraph::new()],
+            graphs: [FrameTimeGraph::new("Tick"), FrameTimeGraph::new("Total Frametime")],
         }
     }
 
@@ -395,6 +382,9 @@ struct FrameTimeGraph {
     durations: Vec<Duration>,
     smoothed_durations: Vec<Duration>,
     current_index: usize,
+    name: String,
+    total_time: Duration,
+    total_sample_count: usize,
 }
 
 impl FrameTimeGraph {
@@ -402,7 +392,7 @@ impl FrameTimeGraph {
     const SMOOTHING: usize = 10;
     const HEIGHT: f32 = 100f32;
     const WIDTH: f32 = 150f32;
-    pub fn new() -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         let mut durations = vec![];
         let mut smoothed_durations = vec![];
         durations.reserve_exact(Self::CAPACITY);
@@ -411,6 +401,9 @@ impl FrameTimeGraph {
             durations,
             smoothed_durations,
             current_index: 0,
+            name: name.into(),
+            total_time: Duration::ZERO,
+            total_sample_count: 0,
         }
     }
 
@@ -419,43 +412,61 @@ impl FrameTimeGraph {
             return;
         }
 
-        let (response, painter) =
-            ui.allocate_painter(Vec2::new(Self::WIDTH, Self::HEIGHT), Sense::hover());
+        ui.collapsing(&self.name, |ui| {
+            let current_time = if self.current_index == 0 {
+                self.durations.last().unwrap().as_secs_f32()
+            }
+            else {
+                self.durations[self.current_index - 1].as_secs_f32()
+            };
+            ui.label(format!("Current: {:.2}ms", current_time * 1000f32));
 
-        let to_screen = RectTransform::from_to(
-            Rect::from_min_size(Pos2::ZERO, response.rect.size()),
-            response.rect,
-        );
+            let (response, painter) =
+                ui.allocate_painter(Vec2::new(Self::WIDTH, Self::HEIGHT), Sense::hover());
 
-        let min = self.durations.iter().min().unwrap().as_secs_f32();
-        let max = self.durations.iter().max().unwrap().as_secs_f32();
+            let to_screen = RectTransform::from_to(
+                Rect::from_min_size(Pos2::ZERO, response.rect.size()),
+                response.rect,
+            );
 
-        let durations_path = Self::shape_from_vec(
-            &self.durations,
-            min,
-            max,
-            self.current_index,
-            &to_screen,
-            Stroke::new(1f32, Color32::CYAN.linear_multiply(0.3f32)),
-        );
-        let smoothed_durations_path = Self::shape_from_vec(
-            &self.smoothed_durations,
-            min,
-            max,
-            self.current_index,
-            &to_screen,
-            Stroke::new(1f32, Color32::RED.linear_multiply(0.7f32)),
-        );
+            let min = self.durations.iter().min().unwrap().as_secs_f32();
+            let max = self.durations.iter().max().unwrap().as_secs_f32();
 
-        painter.add(epaint::RectShape::stroke(
-            response.rect,
-            0,
-            Stroke::new(1f32, Color32::GRAY),
-            StrokeKind::Inside,
-        ));
+            ui.label(format!("Recent Min: {:.2}ms", min * 1000f32));
+            ui.label(format!("Recent Max: {:.2}ms", max * 1000f32));
 
-        painter.add(durations_path);
-        painter.add(smoothed_durations_path);
+            let avg = self.durations.iter().map(Duration::as_secs_f32).sum::<f32>() / self.durations.len() as f32;
+
+            ui.label(format!("Recent Average: {:.2}ms", avg * 1000f32));
+            ui.label(format!("Total Average: {:.2}ms", self.total_time.as_secs_f32() / self.total_sample_count as f32 * 1000f32));
+
+            let durations_path = Self::shape_from_vec(
+                &self.durations,
+                min,
+                max,
+                self.current_index,
+                &to_screen,
+                Stroke::new(1f32, Color32::CYAN.linear_multiply(0.3f32)),
+            );
+            let smoothed_durations_path = Self::shape_from_vec(
+                &self.smoothed_durations,
+                min,
+                max,
+                self.current_index,
+                &to_screen,
+                Stroke::new(1f32, Color32::RED.linear_multiply(0.7f32)),
+            );
+
+            painter.add(epaint::RectShape::stroke(
+                response.rect,
+                0,
+                Stroke::new(1f32, Color32::GRAY),
+                StrokeKind::Inside,
+            ));
+
+            painter.add(durations_path);
+            painter.add(smoothed_durations_path);
+        });
     }
 
     fn shape_from_vec(
@@ -475,8 +486,8 @@ impl FrameTimeGraph {
             .enumerate()
             .map(|(i, duration)| {
                 Pos2::new(
-                    (vec.len() - i) as f32 * sample_width,
-                    (duration.as_secs_f32() - min) * Self::HEIGHT / (max - min),
+                    Self::WIDTH - (vec.len() - i) as f32 * sample_width,
+                    (max - duration.as_secs_f32()) * Self::HEIGHT / (max - min),
                 )
             })
             .map(|pos| to_screen * pos)
@@ -518,5 +529,8 @@ impl FrameTimeGraph {
         }
 
         self.current_index = (self.current_index + 1) % Self::CAPACITY;
+
+        self.total_time += duration;
+        self.total_sample_count += 1;
     }
 }
