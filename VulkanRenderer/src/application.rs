@@ -204,8 +204,6 @@ impl Application {
             Quat::from_euler(EulerRot::YXZ, cam_euler.0, cam_euler.1, cam_euler.2);
 
         self.input.init();
-
-        self.draw_gui(delta_time);
     }
 
     fn draw_gui(&mut self, delta_time: f32) {
@@ -218,7 +216,7 @@ impl Application {
                 .frame(Frame::default().fill(Color32::TRANSPARENT))
                 .show(&ctx, |ui| {
                     ui.heading("Render Statistics");
-                    ui.label(format!("Frametime: {:.4}s", delta_time));
+                    ui.label(format!("Frametime: {:.2}ms", delta_time * 1000f32));
                     ui.label(format!("Framerate: {:.1}fps", 1f32 / delta_time));
                     ui.label(format!(
                         "Number of pipelines: {}",
@@ -276,9 +274,11 @@ impl ApplicationHandler<AppEvent> for Application {
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
-        let delta_time = self.mark_frame(&event);
         match event {
-            AppEvent::Tick => self.tick(delta_time),
+            AppEvent::Tick => {
+                let delta_time = self.mark_frame(&event);
+                self.tick(delta_time)
+            }
             AppEvent::Render => self
                 .renderer
                 .as_ref()
@@ -313,7 +313,9 @@ impl ApplicationHandler<AppEvent> for Application {
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
+                let delta_time = self.mark_frame(&AppEvent::Render);
                 self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
+                self.draw_gui(delta_time);
                 self.renderer
                     .as_ref()
                     .unwrap()
