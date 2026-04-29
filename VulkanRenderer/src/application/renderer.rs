@@ -3,6 +3,7 @@ mod post_processing;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
+mod profiling;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -24,6 +25,7 @@ use vulkano::{
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
+use vulkano::query::{QueryPool, QueryPoolCreateInfo, QueryType};
 use winit::dpi::PhysicalSize;
 
 use crate::application::{
@@ -50,6 +52,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::renderer::profiling::{Profiler, ProfilerStage};
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -73,6 +76,7 @@ pub struct VKRenderer {
     render_pass: Arc<RenderPass>,
     material_compiler: RefCell<MaterialCompiler>,
     post_process: PostProcessPass,
+    profiler: Profiler
 }
 
 struct MaterialCompiler {
@@ -162,6 +166,8 @@ impl VKRenderer {
             VisibilityBufferProcessingPass::new(rhi.as_ref(), &vis_buffer_data);
         let vis_buffer_shade = VisibilityBufferShadePass::new(rhi.clone(), vis_buffer_data.clone());
 
+        let profiler = Profiler::new(rhi.device().clone());
+
         Self {
             rhi,
             mutable_state: RefCell::new(MutableRenderState {
@@ -182,6 +188,7 @@ impl VKRenderer {
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
+            profiler
         }
     }
 
@@ -194,6 +201,8 @@ impl VKRenderer {
             .in_flight_future
             .as_ref()
             .map(|f| f.wait(None).unwrap());
+
+        self.profiler.read_results();
 
         if self.mutable_state_const().should_recreate_swapchain {
             self.mutable_state()
@@ -231,6 +240,7 @@ impl VKRenderer {
             .borrow_mut()
             .flush_writes(&mut command_buffer);
 
+        self.profiler.write(&mut command_buffer, ProfilerStage::PreVisbuffer).unwrap();
         self.mutable_state_const()
             .vis_buffer_rasterizer
             .record_command_buffer(
@@ -241,6 +251,7 @@ impl VKRenderer {
                 &self.mutable_state_const().vis_buffer_data,
             )
             .unwrap();
+        self.profiler.write(&mut command_buffer, ProfilerStage::PostVisbuffer).unwrap();
 
         /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
         .unwrap();*/

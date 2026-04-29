@@ -40,6 +40,7 @@ pub fn create_logical_device(
         robust_buffer_access: true,
         robust_buffer_access2: true,
         multi_draw_indirect: true,
+        host_query_reset: true,
         ..DeviceFeatures::default()
     };
     let device_create_info = DeviceCreateInfo {
