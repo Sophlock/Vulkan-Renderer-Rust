@@ -295,6 +295,7 @@ impl VKRenderer {
                 &mut compute_command_buffer,
                 swapchain_image_index as usize,
                 swapchain_extent,
+                self.profiler()
             )
             .unwrap();
 

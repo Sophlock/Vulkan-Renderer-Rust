@@ -39,9 +39,9 @@ struct SingleColorUnlitMaterial : IMaterial
         UnlitBRDF brdf = {};
         brdf.emissive = geometry.worldNormal; //float3(0, .8, 1);
 
-        for (int i = 0; i < 1000000; ++i) {
+        //for (int i = 0; i < 1000000; ++i) {
             brdf.emissive = float3(brdf.emissive.y, brdf.emissive.z, brdf.emissive.x);
-        }
+        //}
 
         return {brdf, geometry};
     }

@@ -77,14 +77,18 @@ impl Profiler {
     const PRE_VISBUFFER_PROCESS: u32 = 2;
     const POST_VISBUFFER_PROCESS: u32 = 3;
     const POST_VISBUFFER_SHADE: u32 = 4;
+    const POST_TEXEL_COUNT: u32 = 5;
+    const POST_EMPTY_CULL: u32 = 6;
 
-    const QUERY_COUNT: u32 = 5;
+    const QUERY_COUNT: u32 = 7;
 }
 
 pub enum ProfilerStage {
     PreVisbufferRaster,
     PostVisbufferRaster,
     PreVisbufferProcess,
+    PostTexelCount,
+    PostEmptyCull,
     PostVisbufferProcess,
     PostVisbufferShade,
 }
@@ -97,6 +101,8 @@ impl ProfilerStage {
             ProfilerStage::PreVisbufferProcess => Profiler::PRE_VISBUFFER_PROCESS,
             ProfilerStage::PostVisbufferProcess => Profiler::POST_VISBUFFER_PROCESS,
             ProfilerStage::PostVisbufferShade => Profiler::POST_VISBUFFER_SHADE,
+            ProfilerStage::PostTexelCount => Profiler::POST_TEXEL_COUNT,
+            ProfilerStage::PostEmptyCull => Profiler::POST_EMPTY_CULL,
         }
     }
 
@@ -114,6 +120,8 @@ pub enum ProfilerCategory {
     VisbufferRasterization,
     VisbufferProcess,
     VisbufferShade,
+    TexelCount,
+    EmptyCull,
 }
 
 pub struct ProfilerRecords {
@@ -152,6 +160,16 @@ impl ProfilerRecords {
             ProfilerCategory::VisbufferShade,
             ProfilerStage::PostVisbufferProcess,
             ProfilerStage::PostVisbufferShade,
+        );
+        self.update_time(
+            ProfilerCategory::TexelCount,
+            ProfilerStage::PreVisbufferProcess,
+            ProfilerStage::PostTexelCount,
+        );
+        self.update_time(
+            ProfilerCategory::EmptyCull,
+            ProfilerStage::PostTexelCount,
+            ProfilerStage::PostEmptyCull,
         );
         self.results_available = true;
     }

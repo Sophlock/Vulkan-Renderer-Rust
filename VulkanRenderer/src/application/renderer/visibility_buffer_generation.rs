@@ -43,6 +43,7 @@ use crate::application::{
         },
     },
 };
+use crate::application::renderer::profiling::{Profiler, ProfilerStage};
 
 pub struct VisibilityBufferProcessingPass {
     vis_buffer_texel_count: VisBufferStep,
@@ -154,6 +155,7 @@ impl VisibilityBufferProcessingPass {
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
         swapchain_extent: [u32; 2],
+        profiler: &Profiler
     ) -> Result<(), Box<ValidationError>> {
         // Count the texel for each pipeline
         self.vis_buffer_texel_count.record_command_buffer(
@@ -165,12 +167,18 @@ impl VisibilityBufferProcessingPass {
                 1,
             ],
         )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostTexelCount)?;
+
         // Cull all pipelines that are invisible
         self.shader_cull.record_command_buffer(
             command_buffer,
             image_index,
             [self.num_materials / 16 + 1, 1, 1],
         )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
+
         Ok(())
     }
 }
