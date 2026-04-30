@@ -45,6 +45,7 @@ use crate::{
         scene::{Scene, transform::Transform},
     },
 };
+use crate::application::assets::asset_traits::CameraInterface;
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,
@@ -146,6 +147,11 @@ impl Application {
             rhi,
             rhi.resource_manager_mut().deref_mut(),
         ));
+    }
+
+    // TODO: This should just be update_scene_proxy but that one is not optimized
+    fn update_scene_proxy_camera(&mut self, rhi: &VKRHI) {
+        self.rhi_scene_proxy.as_mut().unwrap().set_camera(self.scene.camera.rhi(rhi));
     }
 
     fn update_aspect_ratio(&mut self, x: u32, y: u32) {
@@ -323,7 +329,8 @@ impl ApplicationHandler<AppEvent> for Application {
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
+                //self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
+                self.update_scene_proxy_camera(self.renderer.clone().unwrap().rhi());
                 self.draw_gui();
                 self.renderer
                     .as_ref()

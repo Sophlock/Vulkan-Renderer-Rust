@@ -11,6 +11,7 @@ use crate::application::{
     rhi::rhi_assets::{RHIHandle, RHIResourceManager},
     scene::transform::Transform,
 };
+use crate::application::rhi::rhi_assets::vulkan_camera::VKCamera;
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
@@ -176,6 +177,8 @@ pub trait RHISceneInterface {
     fn models(&self)
     -> &[RHIHandle<<<Self as RHISceneInterface>::RHI as RHIInterface>::ModelType>];
     fn camera(&self) -> &<<Self as RHISceneInterface>::RHI as RHIInterface>::CameraType;
+    // TODO: This function is very unidiomatic
+    fn set_camera(&mut self, camera: VKCamera);
 }
 
 pub trait MaterialInterface: Asset {

@@ -45,7 +45,7 @@ use crate::application::{
 };
 
 pub struct VisibilityBufferProcessingPass {
-    vis_buffer_scan: VisBufferStep,
+    vis_buffer_texel_count: VisBufferStep,
     shader_cull: VisBufferStep,
     num_materials: u32,
 }
@@ -87,7 +87,7 @@ impl VisibilityBufferProcessingPass {
     pub fn new(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> Self {
         let vis_buffer_scan = VisBufferStep::new(
             rhi,
-            "Engine/VisibilityBuffer/visBufferScan",
+            "Engine/VisibilityBuffer/visBufferTexelCount",
             "countTexels",
             data.clone(),
         );
@@ -143,7 +143,7 @@ impl VisibilityBufferProcessingPass {
             .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
         Self {
-            vis_buffer_scan,
+            vis_buffer_texel_count: vis_buffer_scan,
             shader_cull,
             num_materials: data.global_data.num_materials(),
         }
@@ -155,7 +155,8 @@ impl VisibilityBufferProcessingPass {
         image_index: usize,
         swapchain_extent: [u32; 2],
     ) -> Result<(), Box<ValidationError>> {
-        self.vis_buffer_scan.record_command_buffer(
+        // Count the texel for each pipeline
+        self.vis_buffer_texel_count.record_command_buffer(
             command_buffer,
             image_index,
             [
@@ -164,6 +165,7 @@ impl VisibilityBufferProcessingPass {
                 1,
             ],
         )?;
+        // Cull all pipelines that are invisible
         self.shader_cull.record_command_buffer(
             command_buffer,
             image_index,

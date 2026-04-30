@@ -39,4 +39,8 @@ impl RHISceneInterface for VKScene {
     fn camera(&self) -> &VKCamera {
         &self.camera
     }
+    
+    fn set_camera(&mut self, camera: VKCamera) {
+        self.camera = camera;
+    }
 }
