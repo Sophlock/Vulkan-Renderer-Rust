@@ -5,7 +5,26 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::application::renderer::profiling::{Profiler, ProfilerStage};
+use crate::application::renderer::visibility_buffer_shading::VisibilityBufferShadePass;
+use crate::application::{
+    assets::asset_traits::{RHICameraInterface, RHIInterface, RHISceneInterface, Vertex},
+    renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData},
+    rhi::{
+        VKRHI,
+        pipeline::{compute_pipeline, graphics_pipeline},
+        render_pass::RenderPassBuilder,
+        rhi_assets::vulkan_scene::VKScene,
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+        swapchain::Swapchain,
+        swapchain_resources::{
+            SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
+        },
+    },
+};
 use smallvec::smallvec;
+use vulkano::command_buffer::CopyBufferInfo;
 use vulkano::{
     DeviceAddress, ValidationError,
     buffer::BufferContents,
@@ -27,28 +46,21 @@ use vulkano::{
     shader::{ShaderStages, spirv::bytes_to_words},
 };
 
-use crate::application::{
-    assets::asset_traits::{RHICameraInterface, RHIInterface, RHISceneInterface, Vertex},
-    renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData},
-    rhi::{
-        VKRHI,
-        pipeline::{compute_pipeline, graphics_pipeline},
-        render_pass::RenderPassBuilder,
-        rhi_assets::vulkan_scene::VKScene,
-        shader_cursor::ShaderCursor,
-        shader_object::{ShaderObject, ShaderObjectLayout},
-        swapchain::Swapchain,
-        swapchain_resources::{
-            SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
-        },
-    },
-};
-use crate::application::renderer::profiling::{Profiler, ProfilerStage};
-
 pub struct VisibilityBufferProcessingPass {
-    vis_buffer_texel_count: VisBufferStep,
+    texel_count: VisBufferStep,
+    naive_shader_cull: VisBufferStep,
+
+    fill_commands: VisBufferStep,
+
     shader_cull: VisBufferStep,
+    resolve_unsure: VisBufferStep,
+    drawn_offset: VisBufferStep,
+    culled_offset: VisBufferStep,
+    texel_bin: VisBufferStep,
+    generate_commands: VisBufferStep,
+
     num_materials: u32,
+    data: Arc<VisibilityBufferData>,
 }
 
 struct VisBufferStep {
@@ -86,20 +98,170 @@ pub struct VisBufferPushConstant {
 
 impl VisibilityBufferProcessingPass {
     pub fn new(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> Self {
-        let vis_buffer_scan = VisBufferStep::new(
+        Self {
+            texel_count: Self::texel_count_shader(rhi, data),
+            naive_shader_cull: Self::naive_shader_cull_shader(rhi, data),
+            fill_commands: Self::fill_all_pipelines_shader(rhi, data),
+            shader_cull: Self::shader_cull_shader(rhi, data),
+            resolve_unsure: Self::resolve_unsure_shader(rhi, data),
+            drawn_offset: Self::drawn_pipeline_offset_shader(rhi, data),
+            culled_offset: Self::culled_pipeline_offset_shader(rhi, data),
+            texel_bin: Self::texel_bin_shader(rhi, data),
+            generate_commands: Self::generate_commands_shader(rhi, data),
+            num_materials: data.global_data.num_materials(),
+            data: data.clone(),
+        }
+    }
+
+    pub fn record_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+        swapchain_extent: [u32; 2],
+        profiler: &Profiler,
+    ) -> Result<(), Box<ValidationError>> {
+        self.record_naive_culling_command_buffer(
+            command_buffer,
+            image_index,
+            swapchain_extent,
+            profiler,
+        )
+    }
+
+    fn record_naive_culling_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+        swapchain_extent: [u32; 2],
+        profiler: &Profiler,
+    ) -> Result<(), Box<ValidationError>> {
+        // Count the texel for each pipeline
+        self.texel_count.record_command_buffer(
+            command_buffer,
+            image_index,
+            [
+                swapchain_extent[0] / 16 + 1,
+                swapchain_extent[1] / 16 + 1,
+                1,
+            ],
+        )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostTexelCount)?;
+
+        // Cull all pipelines that are invisible
+        self.naive_shader_cull.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16 + 1, 1, 1],
+        )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
+
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.data.drawn_index_counter_buffer.clone(),
+            self.data.final_material_count_buffer.clone(),
+        ))?;
+
+        Ok(())
+    }
+
+    fn record_filled_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+        swapchain_extent: [u32; 2],
+        profiler: &Profiler,
+    ) -> Result<(), Box<ValidationError>> {
+        self.fill_commands.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16 + 1, 1, 1],
+        )?;
+
+        Ok(())
+    }
+
+    fn record_binned_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+        swapchain_extent: [u32; 2],
+        profiler: &Profiler,
+    ) -> Result<(), Box<ValidationError>> {
+        // Count the texel for each pipeline
+        self.texel_count.record_command_buffer(
+            command_buffer,
+            image_index,
+            [
+                swapchain_extent[0] / 16 + 1,
+                swapchain_extent[1] / 16 + 1,
+                1,
+            ],
+        )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostTexelCount)?;
+
+        self.shader_cull.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16 + 1, 1, 1],
+        )?;
+
+        self.resolve_unsure.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16 + 1, 1, 1],
+        )?;
+
+        self.drawn_offset.record_command_buffer(
+            command_buffer,
+            image_index,
+            [
+                (VisibilityBufferShadePass::MAX_SEQUENCE_COUNT - 1) / 16 + 1,
+                1,
+                1,
+            ],
+        )?;
+
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.data.offset_accumulator_buffer.clone(),
+            self.data.no_fallback_texel_count_buffer.clone(),
+        ))?;
+
+        self.culled_offset.record_command_buffer(
+            command_buffer,
+            image_index,
+            [self.num_materials / 16 + 1, 1, 1],
+        )?;
+
+        self.texel_bin.record_command_buffer(
+            command_buffer,
+            image_index,
+            [
+                swapchain_extent[0] / 16 + 1,
+                swapchain_extent[1] / 16 + 1,
+                1,
+            ],
+        )?;
+
+        self.generate_commands.record_command_buffer(
+            command_buffer,
+            image_index,
+            [VisibilityBufferShadePass::MAX_SEQUENCE_COUNT / 16 + 1, 1, 1],
+        )?;
+
+        Ok(())
+    }
+
+    fn texel_count_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let count_texel = VisBufferStep::new(
             rhi,
             "Engine/VisibilityBuffer/visBufferTexelCount",
             "countTexels",
             data.clone(),
         );
-        let shader_cull = VisBufferStep::new(
-            rhi,
-            "Engine/VisibilityBuffer/visBufferShaderCull",
-            "cullShaders",
-            data.clone(),
-        );
 
-        let cursor = ShaderCursor::new(vis_buffer_scan.shader_object.clone());
+        let cursor = ShaderCursor::new(count_texel.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
         input_cursor
             .field("visBuffer")
@@ -109,11 +271,26 @@ impl VisibilityBufferProcessingPass {
             .field("materialFragmentCounts")
             .unwrap()
             .write_buffer(data.material_fragment_count_buffer.clone());
+        input_cursor
+            .field("relativePerMaterialOffset")
+            .unwrap()
+            .write_swapchain_image(data.relative_per_material_offsets_buffer.clone());
 
         data.global_data
             .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
-        let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
+        count_texel
+    }
+
+    fn naive_shader_cull_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let shader_cull_naive = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferShaderCullNaive",
+            "cullShaders",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(shader_cull_naive.shader_object.clone());
         let input_cursor = cursor.field("gInput").unwrap();
         input_cursor
             .field("texelCounts")
@@ -122,11 +299,7 @@ impl VisibilityBufferProcessingPass {
         input_cursor
             .field("index")
             .unwrap()
-            .write_buffer(data.index_counter_buffer.clone());
-        input_cursor
-            .field("materialIndices")
-            .unwrap()
-            .write_buffer(data.material_indices_buffer.clone());
+            .write_buffer(data.drawn_index_counter_buffer.clone());
         input_cursor
             .field("pipelineBindParameters")
             .unwrap()
@@ -143,43 +316,321 @@ impl VisibilityBufferProcessingPass {
         data.global_data
             .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
-        Self {
-            vis_buffer_texel_count: vis_buffer_scan,
-            shader_cull,
-            num_materials: data.global_data.num_materials(),
-        }
+        shader_cull_naive
     }
 
-    pub fn record_command_buffer(
-        &self,
-        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        image_index: usize,
-        swapchain_extent: [u32; 2],
-        profiler: &Profiler
-    ) -> Result<(), Box<ValidationError>> {
-        // Count the texel for each pipeline
-        self.vis_buffer_texel_count.record_command_buffer(
-            command_buffer,
-            image_index,
-            [
-                swapchain_extent[0] / 16 + 1,
-                swapchain_extent[1] / 16 + 1,
-                1,
-            ],
-        )?;
+    fn fill_all_pipelines_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let fill_all = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferFillAll",
+            "fillIndirectCommandsStreams",
+            data.clone(),
+        );
 
-        profiler.write(command_buffer, ProfilerStage::PostTexelCount)?;
+        let cursor = ShaderCursor::new(fill_all.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("pipelineBindParameters")
+            .unwrap()
+            .write_buffer(data.pipeline_bind_commands.clone());
+        input_cursor
+            .field("computeDispatchParameters")
+            .unwrap()
+            .write_buffer(data.compute_dispatch_commands.clone());
+        input_cursor
+            .field("shadePushConstants")
+            .unwrap()
+            .write_buffer(data.push_constants.clone());
 
-        // Cull all pipelines that are invisible
-        self.shader_cull.record_command_buffer(
-            command_buffer,
-            image_index,
-            [self.num_materials / 16 + 1, 1, 1],
-        )?;
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
-        profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
+        fill_all
+    }
 
-        Ok(())
+    fn shader_cull_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let shader_cull = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferShaderCull",
+            "cullShaders",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(shader_cull.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+        input_cursor
+            .field("drawn")
+            .unwrap()
+            .field("currentIndex")
+            .unwrap()
+            .write_buffer(data.drawn_index_counter_buffer.clone());
+        input_cursor
+            .field("drawn")
+            .unwrap()
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.drawn_material_indices_buffer.clone());
+        input_cursor
+            .field("culled")
+            .unwrap()
+            .field("currentIndex")
+            .unwrap()
+            .write_buffer(data.culled_index_counter_buffer.clone());
+        input_cursor
+            .field("culled")
+            .unwrap()
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.culled_material_indices_buffer.clone());
+        input_cursor
+            .field("unsure")
+            .unwrap()
+            .field("currentIndex")
+            .unwrap()
+            .write_buffer(data.unsure_index_counter_buffer.clone());
+        input_cursor
+            .field("unsure")
+            .unwrap()
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.unsure_material_indices_buffer.clone());
+
+        input_cursor
+            .field("minDrawnPixelFootprint")
+            .unwrap()
+            .write(&0.0001f32);
+        input_cursor
+            .field("maxCulledPixelFootprint")
+            .unwrap()
+            .write(&0.01f32);
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+
+        shader_cull
+    }
+
+    fn resolve_unsure_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let resolve_unsure = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferResolveUnsure",
+            "resolveUnsure",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(resolve_unsure.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+
+        input_cursor
+            .field("unsureCount")
+            .unwrap()
+            .write_buffer(data.unsure_index_counter_buffer.clone());
+        input_cursor
+            .field("unsureIndices")
+            .unwrap()
+            .write_buffer(data.unsure_material_indices_buffer.clone());
+        input_cursor
+            .field("currentDrawnIndex")
+            .unwrap()
+            .write_buffer(data.drawn_index_counter_buffer.clone());
+        input_cursor
+            .field("drawnIndices")
+            .unwrap()
+            .write_buffer(data.drawn_material_indices_buffer.clone());
+        input_cursor
+            .field("culled")
+            .unwrap()
+            .field("currentIndex")
+            .unwrap()
+            .write_buffer(data.culled_index_counter_buffer.clone());
+        input_cursor
+            .field("culled")
+            .unwrap()
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.culled_material_indices_buffer.clone());
+
+        resolve_unsure
+    }
+
+    fn drawn_pipeline_offset_shader(
+        rhi: &VKRHI,
+        data: &Arc<VisibilityBufferData>,
+    ) -> VisBufferStep {
+        let prefix_sum = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferMaterialPrefixSum",
+            "computeOffsets",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(prefix_sum.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+
+        input_cursor
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.drawn_material_indices_buffer.clone());
+        input_cursor
+            .field("materialCount")
+            .unwrap()
+            .write_buffer(data.drawn_index_counter_buffer.clone());
+
+        input_cursor
+            .field("currentOffset")
+            .unwrap()
+            .write_buffer(data.offset_accumulator_buffer.clone());
+        input_cursor
+            .field("outPerMaterialOffset")
+            .unwrap()
+            .write_buffer(data.per_material_offset_buffer.clone());
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+
+        prefix_sum
+    }
+
+    fn culled_pipeline_offset_shader(
+        rhi: &VKRHI,
+        data: &Arc<VisibilityBufferData>,
+    ) -> VisBufferStep {
+        let prefix_sum = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferMaterialPrefixSum",
+            "computeOffsets",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(prefix_sum.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+
+        input_cursor
+            .field("materialIndices")
+            .unwrap()
+            .write_buffer(data.culled_material_indices_buffer.clone());
+        input_cursor
+            .field("materialCount")
+            .unwrap()
+            .write_buffer(data.culled_index_counter_buffer.clone());
+
+        input_cursor
+            .field("currentOffset")
+            .unwrap()
+            .write_buffer(data.offset_accumulator_buffer.clone());
+        input_cursor
+            .field("outPerMaterialOffset")
+            .unwrap()
+            .write_buffer(data.per_material_offset_buffer.clone());
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+
+        prefix_sum
+    }
+
+    fn texel_bin_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let texel_bin = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferTexelBin",
+            "binTexels",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(texel_bin.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("visBuffer")
+            .unwrap()
+            .write_swapchain_image(data.visibility_buffer.clone());
+        input_cursor
+            .field("relativePerMaterialOffsets")
+            .unwrap()
+            .write_swapchain_image(data.relative_per_material_offsets_buffer.clone());
+        input_cursor
+            .field("perMaterialOffsets")
+            .unwrap()
+            .write_buffer(data.per_material_offset_buffer.clone());
+        input_cursor
+            .field("outBinnedTexels")
+            .unwrap()
+            .write_buffer(data.binned_texel_buffer.clone());
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+
+        texel_bin
+    }
+
+    fn generate_commands_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let generate_commands = VisBufferStep::new(
+            rhi,
+            "Engine/VisibilityBuffer/visBufferGenerateCommandsStreams",
+            "generateCommandsStreams",
+            data.clone(),
+        );
+
+        let cursor = ShaderCursor::new(generate_commands.shader_object.clone());
+        let input_cursor = cursor.field("gInput").unwrap();
+        input_cursor
+            .field("drawnMaterials")
+            .unwrap()
+            .write_buffer(data.culled_material_indices_buffer.clone());
+        input_cursor
+            .field("drawnMaterialCount")
+            .unwrap()
+            .write_buffer(data.culled_index_counter_buffer.clone());
+        input_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+
+        input_cursor
+            .field("texelsWithoutFallback")
+            .unwrap()
+            .write_buffer(data.no_fallback_texel_count_buffer.clone());
+        input_cursor
+            .field("totalTexelCount")
+            .unwrap()
+            .write_buffer(data.offset_accumulator_buffer.clone());
+        input_cursor
+            .field("finalMaterialCount")
+            .unwrap()
+            .write_buffer(data.final_material_count_buffer.clone());
+        input_cursor
+            .field("perMaterialOffsets")
+            .unwrap()
+            .write_buffer(data.per_material_offset_buffer.clone());
+
+        input_cursor
+            .field("pipelineBindParameters")
+            .unwrap()
+            .write_buffer(data.pipeline_bind_commands.clone());
+        input_cursor
+            .field("computeDispatchParameters")
+            .unwrap()
+            .write_buffer(data.compute_dispatch_commands.clone());
+        input_cursor
+            .field("shadePushConstants")
+            .unwrap()
+            .write_buffer(data.push_constants.clone());
+
+        data.global_data
+            .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
+
+        generate_commands
     }
 }
 

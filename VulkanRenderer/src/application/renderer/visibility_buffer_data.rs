@@ -4,6 +4,25 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::application::{
+    assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
+    renderer::visibility_buffer_generation::{
+        ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+    },
+    rhi::{
+        VKRHI,
+        buffer::buffer_from_slice,
+        pipeline::compute_pipeline,
+        rhi_assets::{
+            vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+            vulkan_mesh::VKMesh, vulkan_model::VKModel,
+        },
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+        swapchain::Swapchain,
+        swapchain_resources::SwapchainImage,
+    },
+};
 use shader_slang::{Blob, ComponentType, structs::specialization_arg::SpecializationArg};
 use vulkano::{
     DeviceAddress, DeviceSize, ValidationError,
@@ -27,26 +46,6 @@ use vulkano::{
     sync::{GpuFuture, now},
 };
 
-use crate::application::{
-    assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
-    renderer::visibility_buffer_generation::{
-        ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
-    },
-    rhi::{
-        VKRHI,
-        buffer::buffer_from_slice,
-        pipeline::compute_pipeline,
-        rhi_assets::{
-            vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
-            vulkan_mesh::VKMesh, vulkan_model::VKModel,
-        },
-        shader_cursor::ShaderCursor,
-        shader_object::{ShaderObject, ShaderObjectLayout},
-        swapchain::Swapchain,
-        swapchain_resources::SwapchainImage,
-    },
-};
-
 #[derive(Clone)]
 pub struct VisibilityBufferData {
     // The packed visibility buffer
@@ -55,11 +54,42 @@ pub struct VisibilityBufferData {
     // Stores the number of texels for each material
     pub material_fragment_count_buffer: Subbuffer<[u32]>,
 
-    // Used to atomically increment an index counter. After the culling step, this will hold the number of materials to be shaded
-    pub index_counter_buffer: Subbuffer<u32>,
+    // Used to atomically increment an index counter. In the end, this will hold the number of materials that want to be shaded
+    pub drawn_index_counter_buffer: Subbuffer<u32>,
 
     // Stores for each shading step the index of the material to be used
-    pub material_indices_buffer: Subbuffer<[u32]>,
+    pub drawn_material_indices_buffer: Subbuffer<[u32]>,
+
+    // Counts the materials that are culled
+    pub culled_index_counter_buffer: Subbuffer<u32>,
+
+    // Stores all material indices that are culled (needed for the fallback pipeline)
+    pub culled_material_indices_buffer: Subbuffer<[u32]>,
+
+    // Counts the materials that might be shaded or culled. Only temporary
+    pub unsure_index_counter_buffer: Subbuffer<u32>,
+
+    // Stores the materials that might be shaded or culled. Only temporary
+    pub unsure_material_indices_buffer: Subbuffer<[u32]>,
+
+    // Atomic accumulator for the per material offset. In the end, this holds the number of texels that will be shaded
+    pub offset_accumulator_buffer: Subbuffer<u32>,
+
+    // Holds, for each material, the offset in the binned buffer. Note: Not all data in this buffer is valid!
+    pub per_material_offset_buffer: Subbuffer<[u32]>,
+
+    // Number of texels that are shaded with their requested material. This is obtained from taking a snapshot of the offset accumulator
+    pub no_fallback_texel_count_buffer: Subbuffer<u32>,
+
+    // Final number of materials to be shaded (including fallback material)
+    pub final_material_count_buffer: Subbuffer<u32>,
+
+    // For every texel, the offset of the texel in the binned buffer relative to its material
+    pub relative_per_material_offsets_buffer: Arc<RwLock<SwapchainImage>>,
+
+    // All texel positions, grouped by their materials
+    // TODO: This should be resized with the swapchain
+    pub binned_texel_buffer: Subbuffer<[[u32; 2]]>,
 
     // Holds the pipeline bind data
     pub pipeline_bind_commands: Subbuffer<[PipelineBindParameter]>,
@@ -169,18 +199,49 @@ impl VisibilityBufferData {
             global_data.num_materials(),
         );
 
-        let index_counter_buffer = Buffer::new_sized(
-            rhi.buffer_allocator().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo::default(),
-        )
-        .unwrap();
+        let drawn_index_counter_buffer = Self::create_counter_buffer(rhi);
 
-        let material_indices_buffer =
-            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count);
+        let drawn_material_indices_buffer =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, max_sequence_count - 1);
+
+        let culled_index_counter_buffer = Self::create_counter_buffer(rhi);
+
+        let culled_material_indices_buffer = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER,
+            global_data.num_materials(),
+        );
+
+        let unsure_index_counter_buffer = Self::create_counter_buffer(rhi);
+
+        let unsure_material_indices_buffer = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER,
+            global_data.num_materials(),
+        );
+
+        let offset_accumulator_buffer = Self::create_counter_buffer(rhi);
+
+        let per_material_offset_buffer = Self::create_slice_buffer(
+            rhi,
+            BufferUsage::STORAGE_BUFFER,
+            global_data.num_materials(),
+        );
+
+        let no_fallback_texel_count_buffer = Self::create_counter_buffer(rhi);
+
+        let final_material_count_buffer = Self::create_counter_buffer(rhi);
+
+        let relative_per_material_offsets_buffer = swapchain.create_gbuffer(
+            rhi,
+            Format::R32_UINT,
+            ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ImageAspects::COLOR,
+        );
+
+        // TODO: The hardcoded 4K resolution should be changed to depend on the swapchain but this requires more backend
+        let binned_texel_buffer =
+            Self::create_slice_buffer(rhi, BufferUsage::STORAGE_BUFFER, 3840 * 2160);
 
         let pipeline_bind_commands = Self::create_slice_buffer(
             rhi,
@@ -204,7 +265,7 @@ impl VisibilityBufferData {
             rhi.buffer_allocator().clone(),
             rhi.command_buffer_interface(),
             rhi.queues().compute_queue.clone(),
-            (0..max_sequence_count)
+            (0..global_data.num_materials())
                 .map(|_| 0u32)
                 .collect::<Vec<_>>()
                 .as_slice(),
@@ -227,8 +288,18 @@ impl VisibilityBufferData {
         Self {
             visibility_buffer,
             material_fragment_count_buffer,
-            index_counter_buffer,
-            material_indices_buffer,
+            drawn_index_counter_buffer,
+            drawn_material_indices_buffer,
+            culled_index_counter_buffer,
+            culled_material_indices_buffer,
+            unsure_index_counter_buffer,
+            unsure_material_indices_buffer,
+            offset_accumulator_buffer,
+            per_material_offset_buffer,
+            no_fallback_texel_count_buffer,
+            final_material_count_buffer,
+            relative_per_material_offsets_buffer,
+            binned_texel_buffer,
             pipeline_bind_commands,
             compute_dispatch_commands,
             push_constants,
@@ -256,6 +327,18 @@ impl VisibilityBufferData {
         .unwrap()
     }
 
+    fn create_counter_buffer<T: BufferContents>(rhi: &VKRHI) -> Subbuffer<T> {
+        Buffer::new_sized(
+            rhi.buffer_allocator().clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::TRANSFER_SRC,
+                ..BufferCreateInfo::default()
+            },
+            AllocationCreateInfo::default(),
+        )
+        .unwrap()
+    }
+
     pub fn clear(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
@@ -266,7 +349,19 @@ impl VisibilityBufferData {
         ))?;
         command_buffer.copy_buffer(CopyBufferInfo::buffers(
             self.clear_buffer.clone(),
-            self.index_counter_buffer.clone(),
+            self.drawn_index_counter_buffer.clone(),
+        ))?;
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.culled_index_counter_buffer.clone(),
+        ))?;
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.unsure_index_counter_buffer.clone(),
+        ))?;
+        command_buffer.copy_buffer(CopyBufferInfo::buffers(
+            self.clear_buffer.clone(),
+            self.offset_accumulator_buffer.clone(),
         ))?;
         Ok(())
     }
@@ -466,7 +561,9 @@ impl VisibilityBufferGlobalData {
             .session()
             .load_module("Engine/VisibilityBuffer/visBufferComputeShade")
             .unwrap();
-        let entry = module.find_entry_point_by_name("shadeVisBuffer").unwrap();
+        let entry = module
+            .find_entry_point_by_name("shadeVisBufferNaive")
+            .unwrap();
         let module_component: ComponentType = module.into();
         let material_module = compiler
             .session()

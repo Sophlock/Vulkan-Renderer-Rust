@@ -3,21 +3,13 @@ module visBufferShaderCull;
 import visBufferData;
 import Core.largeBlock;
 
-struct PipelineBindParameter {
-    uint64_t pipelineAddress; 
-}
-
-struct ComputeDispatchParameter {
-    uint3 dispatch;
-}
-
 struct MaterialCountData {
     StructuredBuffer<uint> texelCounts;
-    RWStructuredBuffer<Atomic<uint>> index;
-    RWStructuredBuffer<uint> materialIndices;
-    RWStructuredBuffer<PipelineBindParameter> pipelineBindParameters;
-    RWStructuredBuffer<ComputeDispatchParameter> computeDispatchParameters;
-    RWStructuredBuffer<VisBufferShadeInput> shadePushConstants;
+    MaterialCollection drawn;
+    MaterialCollection culled;
+    MaterialCollection unsure;
+    float minDrawnPixelFootprint;
+    float maxCulledPixelFootprint;
 }
 
 uniform LargeBlock _;
@@ -33,16 +25,23 @@ func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
 
     let materialIndex = dispatch;
     let texelCount = gInput.texelCounts[materialIndex];
-    if (texelCount > 0) {
-        let myIndex = gInput.index[0].add(1);
-        uint maxSequence, _;
-        gInput.materialIndices.GetDimensions(maxSequence, _);
-        if (myIndex >= maxSequence) return;
-        gInput.materialIndices[myIndex] = materialIndex;
-        let material = gGlobalData.materials.Load(materialIndex);
-        let pipelineAddress = material.pipelineAddress;
-        gInput.pipelineBindParameters[myIndex] = {pipelineAddress};
-        gInput.computeDispatchParameters[myIndex] = { uint3(gGlobalData.mutData.Load(0).screenSize / 16 + 1, 1) };
-        gInput.shadePushConstants[myIndex] = { pipelineAddress };
+
+    if (texelCount <= 0) {
+        return;
+    }
+
+    let screenSize = gGlobalData.mutData.Load(0).screenSize;
+    let pixelFootprint = texelCount * 1.0f / (screenSize.x * screenSize.y);
+
+    if (pixelFootprint > gInput.maxCulledPixelFootprint) {
+        // Draw this pipeline
+        gInput.drawn.write(materialIndex);
+    }
+    if (pixelFootprint < gInput.minDrawnPixelFootprint) {
+        // Cull this pipeline
+        gInput.culled.write(materialIndex);
+    }
+    else {
+        gInput.unsure.write(materialIndex);
     }
 }

@@ -105,6 +105,20 @@ impl VisibilityBufferShadePass {
             .unwrap()
             .write_swapchain_image(data.final_render_target.clone());
 
+        let bin_cursor = cursor.field("gBinInput").unwrap();
+        bin_cursor
+            .field("texelCounts")
+            .unwrap()
+            .write_buffer(data.material_fragment_count_buffer.clone());
+        bin_cursor
+            .field("offsets")
+            .unwrap()
+            .write_buffer(data.per_material_offset_buffer.clone());
+        bin_cursor
+            .field("binnedTexels")
+            .unwrap()
+            .write_buffer(data.binned_texel_buffer.clone());
+
         data.global_data
             .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
 
@@ -142,7 +156,7 @@ impl VisibilityBufferShadePass {
                 },
             ],
             sequence_count: Self::MAX_SEQUENCE_COUNT,
-            sequence_count_buffer: Some(self.data.index_counter_buffer.clone()),
+            sequence_count_buffer: Some(self.data.final_material_count_buffer.clone()),
             ..GeneratedCommandsInfo::dynamic_pipeline(
                 self.commands_layout.clone(),
                 self.preprocess_buffer.clone(),

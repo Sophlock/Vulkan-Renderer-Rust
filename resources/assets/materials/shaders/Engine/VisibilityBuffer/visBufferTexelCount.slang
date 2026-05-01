@@ -6,6 +6,7 @@ import Core.largeBlock;
 struct VisBufferData {
     Texture2D<uint4> visBuffer;
     RWStructuredBuffer<Atomic<uint>> materialFragmentCounts;
+    RWTexture2D<uint> relativePerMaterialOffset;
 }
 
 uniform LargeBlock _;
@@ -29,5 +30,5 @@ func countTexels(uint2 dispatch: SV_DispatchThreadID)->void {
 
     let instance = gGlobalData.instances.Load(instanceID);
     let materialInstance = gGlobalData.materialInstances.Load(instance.materialInstanceIndex);
-    gInput.materialFragmentCounts[materialInstance.materialIndex].add(1);
+    gInput.relativePerMaterialOffset[dispatch] = gInput.materialFragmentCounts[materialInstance.materialIndex].add(1);
 }

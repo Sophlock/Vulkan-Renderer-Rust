@@ -6,6 +6,14 @@ import Core.globalData;
 import visBufferData;
 import Core.largeBlock;
 
+struct BinnedShadeInput {
+    StructuredBuffer<uint> texelCounts;
+    StructuredBuffer<uint> offsets;
+
+    StructuredBuffer<uint2> binnedTexels;
+}
+
+uniform BinnedShadeInput gBinInput;
 uniform Texture2D<uint4> visBuffer;
 uniform RWTexture2D<float4> outputRT;
 uniform GlobalData gGlobalData;
@@ -13,7 +21,7 @@ uniform LargeBlock _;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadID, uniform VisBufferShadeInput gInput)->void {
+func shadeVisBufferNaive<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadID, uniform VisBufferShadeInput gInput)->void {
     float width, height;
     visBuffer.GetDimensions(width, height);
     if (dispatch.x >= width || dispatch.y >= height) {
@@ -32,9 +40,43 @@ func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadI
     let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
     let material = gGlobalData.materials[materialInstance.materialIndex];
 
-    if (gInput.thisPipelineAddress != material.pipelineAddress) {
+    if (gInput.thisMaterialIndex != materialInstance.materialIndex) {
         return;
     }
+
+    outputRT[dispatch] = performVisBufferShade<MaterialType>(packedVisBuffer);
+}
+
+[shader("compute")]
+[numthreads(16, 1, 1)]
+func shadeVisBufferBinned<MaterialType : IMaterial>(uint dispatch: SV_DispatchThreadID, uniform VisBufferShadeInput gInput)->void {
+    if (dispatch >= gBinInput.texelCounts[gInput.thisMaterialIndex]) {
+        return;
+    }
+
+    let texelIndex = dispatch + gBinInput.offsets[gInput.thisMaterialIndex];
+    let texelPos = gBinInput.binnedTexels[texelIndex];
+
+    let packedVisBuffer = visBuffer.Load(int3(texelPos, 0));
+
+    outputRT[texelPos] = performVisBufferShade<MaterialType>(packedVisBuffer);
+}
+
+func transformVertex(Vertex vertex, ModelData modelData)->Vertex {
+    Vertex result = {};
+    result.worldPosition = mul(modelData.modelTransform, float4(vertex.worldPosition.xyz, 1)).xyz;
+    result.worldNormal = mul(modelData.inverseTransposeModelTransform, float4(vertex.worldNormal, 0)).xyz;
+    result.worldTangent = mul(modelData.inverseTransposeModelTransform, float4(vertex.worldTangent, 0)).xyz;
+    result.textureCoordinate = vertex.textureCoordinate;
+    return result;
+}
+
+func performVisBufferShade<MaterialType : IMaterial>(uint4 packedVisBuffer)->float4 {
+    let instanceID = packedVisBuffer.y - 1;
+
+    let instance = gGlobalData.instances[instanceID];
+    let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
+    let material = gGlobalData.materials[materialInstance.materialIndex];
 
     let mesh = gGlobalData.meshes[instance.meshIndex];
     let triangle = gGlobalData.indexBuffer[mesh.firstPrimitive + packedVisBuffer.x];
@@ -75,14 +117,5 @@ func shadeVisBuffer<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchThreadI
     let materialResult = materialInstanceData.evaluate(geometry);
     // Shades the BRDF using the light environment*/
     float3 color = max(/*gLightEnvironment.illuminate(materialResult.geometry, materialResult.brdf, viewDirection) +*/ materialResult.brdf.evaluateEmissive(viewDirection), 0.f);
-    outputRT[dispatch] = float4(color, 1.);
-}
-
-Vertex transformVertex(Vertex vertex, ModelData modelData) {
-    Vertex result = {};
-    result.worldPosition = mul(modelData.modelTransform, float4(vertex.worldPosition.xyz, 1)).xyz;
-    result.worldNormal = mul(modelData.inverseTransposeModelTransform, float4(vertex.worldNormal, 0)).xyz;
-    result.worldTangent = mul(modelData.inverseTransposeModelTransform, float4(vertex.worldTangent, 0)).xyz;
-    result.textureCoordinate = vertex.textureCoordinate;
-    return result;
+    return float4(color, 1.);
 }

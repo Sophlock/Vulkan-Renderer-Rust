@@ -75,6 +75,15 @@ public Vertex normalize(Vertex v) {
 }
 
 public struct VisBufferShadeInput {
-    public uint64_t thisPipelineAddress;
+    public uint thisMaterialIndex;
 }
 
+public struct MaterialCollection {
+    RWStructuredBuffer<Atomic<uint>> currentIndex;
+    RWStructuredBuffer<uint> materialIndices;
+
+    public func write(uint materialIndex)->void {
+        let myIndex = currentIndex[0].add(1);
+        materialIndices[myIndex] = materialIndex;
+    }
+}
