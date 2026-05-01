@@ -29,3 +29,4 @@ emath = "0.31.1"
 [features]
 default = ["winit/rwh_06", "glam/bytemuck"]
 validation_layers = []
+binned_visbuffer = []

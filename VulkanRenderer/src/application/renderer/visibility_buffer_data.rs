@@ -331,7 +331,9 @@ impl VisibilityBufferData {
         Buffer::new_sized(
             rhi.buffer_allocator().clone(),
             BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_DST | BufferUsage::TRANSFER_SRC,
+                usage: BufferUsage::STORAGE_BUFFER
+                    | BufferUsage::TRANSFER_DST
+                    | BufferUsage::TRANSFER_SRC,
                 ..BufferCreateInfo::default()
             },
             AllocationCreateInfo::default(),
@@ -561,9 +563,6 @@ impl VisibilityBufferGlobalData {
             .session()
             .load_module("Engine/VisibilityBuffer/visBufferComputeShade")
             .unwrap();
-        /*let entry = module
-            .find_entry_point_by_name("shadeVisBufferNaive")
-            .unwrap();*/
         let entry = module
             .find_entry_point_by_name(Self::shade_entry_point_name())
             .unwrap();
@@ -589,10 +588,9 @@ impl VisibilityBufferGlobalData {
     }
 
     fn shade_entry_point_name() -> &'static str {
-        if cfg!(binned-visbuffer) {
+        if cfg!(feature = "binned_visbuffer") {
             "shadeVisBufferBinned"
-        }
-        else {
+        } else {
             "shadeVisBufferNaive"
         }
     }
