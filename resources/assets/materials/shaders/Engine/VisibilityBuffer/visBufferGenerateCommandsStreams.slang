@@ -15,7 +15,7 @@ struct GenerateCommandsStreamsInput {
     StructuredBuffer<uint> drawnMaterials;
     StructuredBuffer<uint> drawnMaterialCount;
 
-    StructuredBuffer<uint> texelCounts;
+    RWStructuredBuffer<uint> texelCounts;
 
     StructuredBuffer<uint> texelsWithoutFallback;
     StructuredBuffer<uint> totalTexelCount;
@@ -49,6 +49,8 @@ func generateCommandsStreams(uint dispatch: SV_DispatchThreadID)->void {
         // We need to 'register' the fallback pipeline here
         gInput.finalMaterialCount[0] = count + 1;
         gInput.perMaterialOffsets[materialIndex] = gInput.texelsWithoutFallback[0];
+
+        gInput.texelCounts[0] = texelCount;
     }
     else {
         materialIndex = gInput.drawnMaterials[dispatch];
