@@ -120,12 +120,13 @@ impl VisibilityBufferProcessingPass {
         swapchain_extent: [u32; 2],
         profiler: &Profiler,
     ) -> Result<(), Box<ValidationError>> {
-        self.record_naive_culling_command_buffer(
+        /*self.record_naive_culling_command_buffer(
             command_buffer,
             image_index,
             swapchain_extent,
             profiler,
-        )
+        )*/
+        self.record_binned_command_buffer(command_buffer, image_index, swapchain_extent, profiler)
     }
 
     fn record_naive_culling_command_buffer(

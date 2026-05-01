@@ -60,6 +60,7 @@ func shadeVisBufferBinned<MaterialType : IMaterial>(uint dispatch: SV_DispatchTh
     let packedVisBuffer = visBuffer.Load(int3(texelPos, 0));
 
     outputRT[texelPos] = performVisBufferShade<MaterialType>(packedVisBuffer);
+    outputRT[texelPos] = float4(1, 1, 1, 1);
 }
 
 func transformVertex(Vertex vertex, ModelData modelData)->Vertex {

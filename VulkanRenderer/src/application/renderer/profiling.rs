@@ -59,7 +59,7 @@ impl Profiler {
                     .get_results(
                         0..Self::query_count(),
                         results.as_mut_slice(),
-                        QueryResultFlags::WAIT,
+                        QueryResultFlags::empty(),
                     )
                     .unwrap();
             }

@@ -561,8 +561,11 @@ impl VisibilityBufferGlobalData {
             .session()
             .load_module("Engine/VisibilityBuffer/visBufferComputeShade")
             .unwrap();
-        let entry = module
+        /*let entry = module
             .find_entry_point_by_name("shadeVisBufferNaive")
+            .unwrap();*/
+        let entry = module
+            .find_entry_point_by_name(Self::shade_entry_point_name())
             .unwrap();
         let module_component: ComponentType = module.into();
         let material_module = compiler
@@ -583,6 +586,15 @@ impl VisibilityBufferGlobalData {
             .specialize(&[SpecializationArg::new(material_reflection)])
             .unwrap();
         specialized.link().unwrap()
+    }
+
+    fn shade_entry_point_name() -> &'static str {
+        if cfg!(binned-visbuffer) {
+            "shadeVisBufferBinned"
+        }
+        else {
+            "shadeVisBufferNaive"
+        }
     }
 
     fn create_shader_object(rhi: &VKRHI, linked: ComponentType) -> Arc<ShaderObject> {

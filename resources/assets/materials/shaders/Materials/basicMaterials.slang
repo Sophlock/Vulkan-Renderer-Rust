@@ -37,12 +37,27 @@ struct SingleColorUnlitMaterial : IMaterial
     MaterialResult<UnlitBRDF> evaluate(SurfaceGeometry geometry)
     {
         UnlitBRDF brdf = {};
-        brdf.emissive = geometry.worldNormal; //float3(0, .8, 1);
+        brdf.emissive = geometry.worldNormal;
 
         //for (int i = 0; i < 1000000; ++i) {
             brdf.emissive = float3(brdf.emissive.y, brdf.emissive.z, brdf.emissive.x);
         //}
 
         return {brdf, geometry};
+    }
+}
+
+struct FallbackMaterial : IMaterial
+{
+    typedef UnlitBRDF BRDF;
+
+    LargeBlock _;
+
+    MaterialResult<UnlitBRDF> evaluate(SurfaceGeometry geometry)
+    {
+        UnlitBRDF brdf = {};
+        brdf.emissive = float3(1, 0, 1);
+
+        return { brdf, geometry };
     }
 }
