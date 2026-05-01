@@ -98,7 +98,7 @@ impl VKRenderer {
         let color_render_target = swapchain.create_gbuffer(
             rhi.as_ref(),
             Format::R32G32B32A32_SFLOAT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE,
+            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE | ImageUsage::TRANSFER_DST,
             ImageAspects::COLOR,
         );
         let pp_render_target = swapchain.create_gbuffer(

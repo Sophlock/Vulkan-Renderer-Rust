@@ -427,7 +427,7 @@ impl VisibilityBufferGlobalData {
             .enumerate()
             .map(|(index, pipeline)| MaterialData {
                 pipeline_address: if cfg!(feature = "renderdoc_compatibility") {
-                    index as u64
+                    (index + 10) as u64
                 } else {
                     PipelineBindParameter::pipeline(pipeline).pipeline_address
                 },

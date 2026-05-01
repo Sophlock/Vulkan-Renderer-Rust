@@ -29,7 +29,7 @@ use winit::{
     window::WindowId,
 };
 use winit_input_map::{InputCode, InputMap, input_map};
-
+use asset_system::assets::AssetHandle;
 use crate::application::assets::asset_traits::CameraInterface;
 use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
 use crate::{
@@ -52,6 +52,7 @@ pub struct Application {
     asset_manager: Arc<RefCell<AssetManager>>,
     rhi_scene_proxy: Option<VKScene>,
     scene: Scene,
+    fallback_material: AssetHandle<Material>,
     input: InputMap<InputAction>,
     time_measurement: TimeMeasureSystem,
     gilrs: Gilrs,
@@ -60,12 +61,18 @@ pub struct Application {
 impl Application {
     pub fn new() -> Self {
         let asset_manager = AssetManager::new();
+        let fallback_material = asset_manager.borrow_mut().add_material(
+            "FallbackMaterial",
+            "Materials/basicMaterials",
+            "FallbackMaterial",
+        );
         let scene = Self::scene(asset_manager.borrow_mut().deref_mut());
         Self {
             renderer: None,
             rhi_scene_proxy: None,
             asset_manager,
             scene,
+            fallback_material,
             input: Self::build_input_map(),
             time_measurement: TimeMeasureSystem::new(),
             gilrs: Gilrs::new().unwrap(),
@@ -84,12 +91,6 @@ impl Application {
         // Get an RNG:
         let mut rng = rand::rng();
         let bounds = -200f32..200f32;
-
-        asset_manager.add_material(
-            "FallbackMaterial",
-            "Materials/basicMaterials",
-            "FallbackMaterial",
-        );
 
         for i in 0..num_materials {
             let material = asset_manager.add_material(
@@ -147,6 +148,9 @@ impl Application {
     }
 
     fn update_scene_proxy(&mut self, rhi: &VKRHI) {
+        // TODO: This is super hacky
+        rhi.resource_manager_mut().create_material(self.fallback_material.clone());
+
         // TODO: This should be more lazy
         self.rhi_scene_proxy = Some(VKScene::create(
             &self.scene,

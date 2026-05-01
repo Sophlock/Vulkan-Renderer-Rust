@@ -24,7 +24,8 @@ use crate::application::{
     },
 };
 use smallvec::smallvec;
-use vulkano::command_buffer::CopyBufferInfo;
+use vulkano::command_buffer::{ClearColorImageInfo, CopyBufferInfo};
+use vulkano::image::ImageLayout;
 use vulkano::{
     DeviceAddress, ValidationError,
     buffer::BufferContents,
@@ -93,7 +94,7 @@ pub struct ComputeDispatchParameter {
 #[derive(Copy, Clone, BufferContents)]
 #[repr(C)]
 pub struct VisBufferPushConstant {
-    pub this_pipeline_address: DeviceAddress,
+    pub this_material_index: u32,
 }
 
 impl VisibilityBufferProcessingPass {
@@ -120,6 +121,19 @@ impl VisibilityBufferProcessingPass {
         swapchain_extent: [u32; 2],
         profiler: &Profiler,
     ) -> Result<(), Box<ValidationError>> {
+        command_buffer.clear_color_image(ClearColorImageInfo {
+            image_layout: ImageLayout::General,
+            ..ClearColorImageInfo::image(
+                self.data
+                    .final_render_target
+                    .read()
+                    .unwrap()
+                    .image_view()
+                    .image()
+                    .clone(),
+            )
+        })?;
+
         if cfg!(feature = "binned_visbuffer") {
             self.record_binned_command_buffer(
                 command_buffer,

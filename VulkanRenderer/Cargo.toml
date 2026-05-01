@@ -27,7 +27,7 @@ rand = "0.10.0"
 emath = "0.31.1"
 
 [features]
-default = ["winit/rwh_06", "glam/bytemuck", "renderdoc_compatibility", "binned_visbuffer"]
+default = ["winit/rwh_06", "glam/bytemuck", "binned_visbuffer"]
 validation_layers = []
 binned_visbuffer = []
 renderdoc_compatibility = []
