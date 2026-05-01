@@ -49,6 +49,12 @@ pub fn find_depth_format(physical_device: &PhysicalDevice) -> Format {
     .unwrap()
 }
 
+#[cfg(feature = "renderdoc_compatibility")]
+pub fn has_dgc_support(physical_device: &PhysicalDevice) -> bool {
+    true
+}
+
+#[cfg(not(feature = "renderdoc_compatibility"))]
 pub fn has_dgc_support(physical_device: &PhysicalDevice) -> bool {
     physical_device
         .supported_extensions()

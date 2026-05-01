@@ -15,7 +15,6 @@ use vulkano::{
     pipeline::PipelineBindPoint,
     shader::ShaderStages,
 };
-
 use crate::application::{
     renderer::{
         visibility_buffer_data::VisibilityBufferData,
@@ -28,13 +27,25 @@ use crate::application::{
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
+    #[cfg(not(feature = "renderdoc_compatibility"))]
     commands_layout: Arc<IndirectCommandsLayout>,
+    #[cfg(not(feature = "renderdoc_compatibility"))]
     preprocess_buffer: Subbuffer<[u8]>,
     data: Arc<VisibilityBufferData>,
 }
 
 impl VisibilityBufferShadePass {
     pub const MAX_SEQUENCE_COUNT: u32 = 1000u32;
+
+    #[cfg(feature = "renderdoc_compatibility")]
+    pub fn new(rhi: Rc<VKRHI>, data: Arc<VisibilityBufferData>) -> Self {
+        Self {
+            rhi,
+            data,
+        }
+    }
+
+    #[cfg(not(feature = "renderdoc_compatibility"))]
     pub fn new(rhi: Rc<VKRHI>, data: Arc<VisibilityBufferData>) -> Self {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
@@ -130,6 +141,17 @@ impl VisibilityBufferShadePass {
         }
     }
 
+
+    #[cfg(feature = "renderdoc_compatibility")]
+    pub fn record_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+    ) -> Result<(), Box<ValidationError>> {
+        Ok(())
+    }
+
+    #[cfg(not(feature = "renderdoc_compatibility"))]
     pub fn record_command_buffer(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,

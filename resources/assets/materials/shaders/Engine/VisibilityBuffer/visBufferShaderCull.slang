@@ -37,7 +37,7 @@ func cullShaders(uint dispatch: SV_DispatchThreadID)->void {
         // Draw this pipeline
         gInput.drawn.write(materialIndex);
     }
-    if (pixelFootprint < gInput.minDrawnPixelFootprint) {
+    else if (pixelFootprint < gInput.minDrawnPixelFootprint) {
         // Cull this pipeline
         gInput.culled.write(materialIndex);
     }

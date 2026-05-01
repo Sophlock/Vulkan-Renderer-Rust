@@ -14,6 +14,7 @@ struct VertexInput {
 
 struct VertexOutput {
     float4 position : SV_Position;
+    uint instanceID : INSTANCE_ID;
 }
 
 struct FragmentResult {
@@ -23,14 +24,15 @@ struct FragmentResult {
 uniform ViewData gViewData;
 
 [shader("vertex")]
-func vertexMain(VertexInput vertexInput, InstanceInput instanceInput)->VertexOutput {
+func vertexMain(VertexInput vertexInput, InstanceInput instanceInput, uint instanceID: SV_VulkanInstanceID)->VertexOutput {
     VertexOutput output = {};
     output.position = mul(gViewData.viewProjection, mul(instanceInput.transform, float4(vertexInput.position, 1.)));
+    output.instanceID = instanceID;
     return output;
 }
 
 [shader("fragment")]
-func fragmentMain(float3 barycentric : SV_BaryCentrics, uint triangleID : SV_PrimitiveID, uint instanceID : SV_InstanceID) -> FragmentResult
+func fragmentMain(float3 barycentric: SV_BaryCentrics, uint triangleID: SV_PrimitiveID, uint instanceID: INSTANCE_ID) -> FragmentResult
 {
     FragmentResult result = {};
 

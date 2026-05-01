@@ -596,11 +596,11 @@ impl VisibilityBufferProcessingPass {
         input_cursor
             .field("drawnMaterials")
             .unwrap()
-            .write_buffer(data.culled_material_indices_buffer.clone());
+            .write_buffer(data.drawn_material_indices_buffer.clone());
         input_cursor
             .field("drawnMaterialCount")
             .unwrap()
-            .write_buffer(data.culled_index_counter_buffer.clone());
+            .write_buffer(data.drawn_index_counter_buffer.clone());
         input_cursor
             .field("texelCounts")
             .unwrap()

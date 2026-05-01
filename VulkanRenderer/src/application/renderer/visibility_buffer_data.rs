@@ -424,8 +424,13 @@ impl VisibilityBufferGlobalData {
 
         let materials = pipelines
             .iter()
-            .map(|pipeline| MaterialData {
-                pipeline_address: PipelineBindParameter::pipeline(pipeline).pipeline_address,
+            .enumerate()
+            .map(|(index, pipeline)| MaterialData {
+                pipeline_address: if cfg!(feature = "renderdoc_compatibility") {
+                    index as u64
+                } else {
+                    PipelineBindParameter::pipeline(pipeline).pipeline_address
+                },
             })
             .collect::<Vec<_>>();
 
@@ -641,10 +646,47 @@ impl VisibilityBufferGlobalData {
             )
             .build_create_info_with_flags(
                 pipeline_layout.clone(),
-                PipelineCreateFlags::INDIRECT_BINDABLE,
+                if cfg!(feature = "renderdoc_compatibility") {
+                    PipelineCreateFlags::empty()
+                } else {
+                    PipelineCreateFlags::INDIRECT_BINDABLE
+                },
             )
     }
 
+    #[cfg(feature = "renderdoc_compatibility")]
+    fn compile_pipelines(
+        rhi: &VKRHI,
+        pipeline_layout: &Arc<PipelineLayout>,
+    ) -> Vec<Arc<ComputePipeline>> {
+        let resources = rhi.resource_manager();
+
+        let mut spirv_cache = HashMap::new();
+
+        let pipeline_create_infos =
+            resources
+                .resource_iterator::<VKMaterial>()
+                .unwrap()
+                .map(|material| {
+                    Self::make_pipeline_create_info(
+                        rhi,
+                        material,
+                        pipeline_layout.clone(),
+                        &mut spirv_cache,
+                    )
+                });
+
+        let pipelines = pipeline_create_infos
+            .enumerate()
+            .map(|(i, create_info)| {
+                ComputePipeline::new(rhi.device().clone(), None, create_info).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        pipelines
+    }
+
+    #[cfg(not(feature = "renderdoc_compatibility"))]
     fn compile_pipelines(
         rhi: &VKRHI,
         pipeline_layout: &Arc<PipelineLayout>,

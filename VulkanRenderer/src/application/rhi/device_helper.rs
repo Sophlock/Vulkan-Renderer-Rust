@@ -14,12 +14,14 @@ pub fn create_logical_device(
     physical_device: &Arc<PhysicalDevice>,
     queue_indices: &QueueFamilyIndices,
 ) -> (Arc<Device>, QueueCollection) {
+    let use_dgc = !cfg!(feature = "renderdoc_compatibility");
+
     let queue_create_infos = queue_indices.generate_create_infos();
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
         khr_fragment_shader_barycentric: true,
-        nv_device_generated_commands: true,
-        nv_device_generated_commands_compute: true,
+        nv_device_generated_commands: use_dgc,
+        nv_device_generated_commands_compute: use_dgc,
         khr_buffer_device_address: true,
         khr_synchronization2: true,
         khr_calibrated_timestamps: true,
@@ -30,9 +32,9 @@ pub fn create_logical_device(
         sampler_anisotropy: true,
         //compute_derivative_group_quads: true,
         synchronization2: true,
-        device_generated_commands: true,
-        device_generated_compute: true,
-        device_generated_compute_pipelines: true,
+        device_generated_commands: use_dgc,
+        device_generated_compute: use_dgc,
+        device_generated_compute_pipelines: use_dgc,
         geometry_shader: true,
         fragment_shader_barycentric: true,
         shader_int64: true,
