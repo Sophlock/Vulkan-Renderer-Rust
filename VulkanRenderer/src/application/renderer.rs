@@ -8,25 +8,13 @@ mod visibility_buffer_shading;
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
-    ops::{Deref, DerefMut},
     rc::Rc,
     sync::{Arc, RwLock},
 };
 
-use core::slice::ChunkBy;
-use smallvec::smallvec;
-use vulkano::command_buffer::{
-    RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
-};
-use vulkano::format::ClearValue;
-use vulkano::pipeline::PipelineBindPoint;
-use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
-use vulkano::query::{QueryPool, QueryPoolCreateInfo, QueryType};
-use vulkano::swapchain::SwapchainAcquireFuture;
 use vulkano::{
-    Validated, ValidationError, VulkanError,
+    Validated, VulkanError,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     format::Format,
     image::{ImageAspects, ImageLayout, ImageUsage},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter},
@@ -37,16 +25,12 @@ use vulkano::{
 };
 use winit::dpi::PhysicalSize;
 
-use crate::application::assets::material_instance;
-use crate::application::renderer::profiling::{Profiler, ProfilerStage};
 use crate::application::{
-    assets::asset_traits::{
-        RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
-        RendererInterface,
-    },
+    assets::asset_traits::{RHICameraInterface, RHIResource, RHISceneInterface, RendererInterface},
     renderer::{
         full_screen_pass::FullScreenPass,
         post_processing::{PostProcessPass, PostProcessSettings},
+        profiling::{Profiler, ProfilerStage},
         visibility_buffer_data::{MutatingData, VisibilityBufferData, VisibilityBufferGlobalData},
         visibility_buffer_generation::{
             VisibilityBufferProcessingPass, VisibilityBufferRasterizer,
@@ -87,7 +71,7 @@ pub struct VKRenderer {
     material_compiler: RefCell<MaterialCompiler>,
     post_process: PostProcessPass,
     profiler: Profiler,
-    scene_statistics: RefCell<SceneStatistics>
+    scene_statistics: RefCell<SceneStatistics>,
 }
 
 struct MaterialCompiler {
@@ -203,7 +187,7 @@ impl VKRenderer {
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
             profiler,
-            scene_statistics: RefCell::new(SceneStatistics::default())
+            scene_statistics: RefCell::new(SceneStatistics::default()),
         }
     }
 
@@ -353,7 +337,8 @@ impl VKRenderer {
         scene: &VKScene,
         image_index: usize,
         before_future: impl GpuFuture,
-    ) /*-> Result<impl GpuFuture, Box<ValidationError>>*/ {
+    ) /*-> Result<impl GpuFuture, Box<ValidationError>>*/
+    {
         // Command buffer for a graphics queue. This will do all the rasterization work
         /*let mut command_buffer = self
             .rhi
@@ -632,7 +617,8 @@ impl VKRenderer {
         statistics.visible_materials = *data.drawn_index_counter_buffer.read().unwrap();
         statistics.culled_materials = *data.culled_index_counter_buffer.read().unwrap();
         statistics.drawn_materials = *data.final_material_count_buffer.read().unwrap();
-        statistics.fallback_pixels = *data.offset_accumulator_buffer.read().unwrap() - *data.no_fallback_texel_count_buffer.read().unwrap();
+        statistics.fallback_pixels = *data.offset_accumulator_buffer.read().unwrap()
+            - *data.no_fallback_texel_count_buffer.read().unwrap();
     }
 
     pub fn compile_materials(&self) {

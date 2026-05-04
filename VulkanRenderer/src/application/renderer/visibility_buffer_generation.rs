@@ -5,11 +5,36 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::application::renderer::profiling::{Profiler, ProfilerStage};
-use crate::application::renderer::visibility_buffer_shading::VisibilityBufferShadePass;
+use smallvec::smallvec;
+use vulkano::{
+    DeviceAddress, ValidationError,
+    buffer::BufferContents,
+    command_buffer::{
+        AutoCommandBufferBuilder, ClearColorImageInfo, CopyBufferInfo, PrimaryAutoCommandBuffer,
+        RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
+    },
+    device::DeviceOwned,
+    format::{ClearValue, Format},
+    image::ImageLayout,
+    pipeline::{
+        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
+        graphics::{
+            subpass::PipelineSubpassType,
+            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
+            viewport::{Scissor, Viewport},
+        },
+    },
+    render_pass::RenderPass,
+    shader::{ShaderStages, spirv::bytes_to_words},
+};
+
 use crate::application::{
-    assets::asset_traits::{RHICameraInterface, RHIInterface, RHISceneInterface, Vertex},
-    renderer::visibility_buffer_data::{InstanceData, VisibilityBufferData},
+    assets::asset_traits::{RHICameraInterface, RHISceneInterface, Vertex},
+    renderer::{
+        profiling::{Profiler, ProfilerStage},
+        visibility_buffer_data::{InstanceData, VisibilityBufferData},
+        visibility_buffer_shading::VisibilityBufferShadePass,
+    },
     rhi::{
         VKRHI,
         pipeline::{compute_pipeline, graphics_pipeline},
@@ -22,29 +47,6 @@ use crate::application::{
             SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage,
         },
     },
-};
-use smallvec::smallvec;
-use vulkano::command_buffer::{ClearColorImageInfo, CopyBufferInfo};
-use vulkano::image::ImageLayout;
-use vulkano::{
-    DeviceAddress, ValidationError,
-    buffer::BufferContents,
-    command_buffer::{
-        AutoCommandBufferBuilder, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo,
-        SubpassContents, SubpassEndInfo,
-    },
-    device::DeviceOwned,
-    format::{ClearValue, Format},
-    pipeline::{
-        ComputePipeline, DynamicState, GraphicsPipeline, PipelineBindPoint,
-        graphics::{
-            subpass::PipelineSubpassType,
-            vertex_input::{VertexBufferDescription, VertexInputRate, VertexMemberInfo},
-            viewport::{Scissor, Viewport},
-        },
-    },
-    render_pass::RenderPass,
-    shader::{ShaderStages, spirv::bytes_to_words},
 };
 
 pub struct VisibilityBufferProcessingPass {
@@ -141,8 +143,7 @@ impl VisibilityBufferProcessingPass {
                 swapchain_extent,
                 profiler,
             )
-        }
-        else if cfg!(feature = "binned_visbuffer") {
+        } else if cfg!(feature = "binned_visbuffer") {
             self.record_binned_command_buffer(
                 command_buffer,
                 image_index,
@@ -270,7 +271,7 @@ impl VisibilityBufferProcessingPass {
         )?;
 
         profiler.write(command_buffer, ProfilerStage::PostPrefixSum)?;
-        
+
         self.texel_bin.record_command_buffer(
             command_buffer,
             image_index,

@@ -1,13 +1,18 @@
+use std::{
+    cell::{Ref, RefCell},
+    collections::BTreeMap,
+    sync::Arc,
+    time::Duration,
+};
+
 use enum_iterator::Sequence;
-use std::cell::{Ref, RefCell};
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::time::Duration;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
-use vulkano::device::Device;
-use vulkano::query::{QueryPool, QueryPoolCreateInfo, QueryResultFlags, QueryType};
-use vulkano::sync::PipelineStage;
-use vulkano::{ValidationError, VulkanError};
+use vulkano::{
+    ValidationError,
+    command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
+    device::Device,
+    query::{QueryPool, QueryPoolCreateInfo, QueryResultFlags, QueryType},
+    sync::PipelineStage,
+};
 
 pub struct Profiler {
     query_pool: Arc<QueryPool>,

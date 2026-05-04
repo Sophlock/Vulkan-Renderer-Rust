@@ -1,5 +1,5 @@
 use crate::application::{
-    assets::asset_traits::{CameraInterface, RHIModelInterface, RHISceneInterface, SceneInterface},
+    assets::asset_traits::{CameraInterface, RHISceneInterface, SceneInterface},
     rhi::{
         VKRHI,
         rhi_assets::{
@@ -39,7 +39,7 @@ impl RHISceneInterface for VKScene {
     fn camera(&self) -> &VKCamera {
         &self.camera
     }
-    
+
     fn set_camera(&mut self, camera: VKCamera) {
         self.camera = camera;
     }

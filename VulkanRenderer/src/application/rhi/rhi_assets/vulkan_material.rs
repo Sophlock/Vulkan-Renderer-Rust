@@ -5,9 +5,7 @@ use shader_slang::ComponentType;
 use vulkano::device::Device;
 
 use crate::application::{
-    assets::asset_traits::{
-        MaterialInterface, RHIMaterialInterface, RHIResource, RendererInterface,
-    },
+    assets::asset_traits::{MaterialInterface, RHIMaterialInterface, RHIResource},
     rhi::{VKRHI, rhi_assets::RHIResourceManager, shaders::SlangCompiler},
 };
 

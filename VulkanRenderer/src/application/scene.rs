@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use asset_system::assets::AssetHandle;
 use egui_winit_vulkano::egui::Ui;
 use model::Model;

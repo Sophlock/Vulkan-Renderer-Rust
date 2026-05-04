@@ -1,14 +1,5 @@
 use std::{rc::Rc, sync::Arc};
 
-use crate::application::{
-    renderer::{
-        visibility_buffer_data::VisibilityBufferData,
-        visibility_buffer_generation::{
-            ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
-        },
-    },
-    rhi::{VKRHI, shader_cursor::ShaderCursor},
-};
 use vulkano::{
     ValidationError,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
@@ -23,6 +14,16 @@ use vulkano::{
     memory::allocator::AllocationCreateInfo,
     pipeline::PipelineBindPoint,
     shader::ShaderStages,
+};
+
+use crate::application::{
+    renderer::{
+        visibility_buffer_data::VisibilityBufferData,
+        visibility_buffer_generation::{
+            ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+        },
+    },
+    rhi::{VKRHI, shader_cursor::ShaderCursor},
 };
 
 pub struct VisibilityBufferShadePass {

@@ -16,7 +16,6 @@ pub mod swapchain_resources;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
-    ops::Deref,
     rc::Rc,
     sync::Arc,
 };
@@ -51,13 +50,11 @@ use vulkano::{
         AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter, StandardMemoryAllocator,
     },
     swapchain::Surface,
-    sync::{GpuFuture, Sharing},
+    sync::Sharing,
 };
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
-use super::assets::asset_traits::{
-    RHICameraInterface, RHIInterface, RHIModelInterface, RHISceneInterface,
-};
+use super::assets::asset_traits::RHIInterface;
 use crate::application::{
     assets::AssetManager::AssetManager,
     rhi::{

@@ -55,9 +55,8 @@ impl Swapchain {
             create_info.clone(),
         )
         .unwrap();
-        let mut result = Self::from_raw(swapchain, images, create_info);
+        Self::from_raw(swapchain, images, create_info)
         //result.persistent_image_views = result.image_views.iter().map(|view| Arc::new(RwLock::new()))
-        result
     }
 
     pub fn acquire_next_image(

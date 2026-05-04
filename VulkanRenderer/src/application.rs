@@ -4,23 +4,15 @@ mod renderer;
 mod rhi;
 mod scene;
 
-use crate::application::assets::asset_traits::CameraInterface;
-use crate::application::assets::mesh::Mesh;
-use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
-use crate::{
-    AppEvent,
-    application::{
-        assets::{
-            AssetManager::AssetManager,
-            asset_traits::{Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex},
-            material::Material,
-        },
-        input::InputAction,
-        renderer::VKRenderer,
-        rhi::rhi_assets::vulkan_scene::VKScene,
-        scene::{Scene, transform::Transform},
-    },
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    ops::DerefMut,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
+
 use asset_system::assets::AssetHandle;
 use egui_winit_vulkano::{
     egui,
@@ -31,14 +23,6 @@ use enum_iterator::all;
 use gilrs::Gilrs;
 use glam::{EulerRot, Quat, Vec3};
 use rhi::VKRHI;
-use std::collections::BTreeMap;
-use std::{
-    cell::RefCell,
-    ops::DerefMut,
-    rc::Rc,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
 use vulkano::buffer::BufferUsage;
 use winit::{
     application::ApplicationHandler,
@@ -47,6 +31,26 @@ use winit::{
     window::WindowId,
 };
 use winit_input_map::{InputCode, InputMap, input_map};
+
+use crate::{
+    AppEvent,
+    application::{
+        assets::{
+            AssetManager::AssetManager,
+            asset_traits::{
+                CameraInterface, Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex,
+            },
+            material::Material,
+        },
+        input::InputAction,
+        renderer::{
+            VKRenderer,
+            profiling::{Profiler, ProfilerCategory},
+        },
+        rhi::rhi_assets::vulkan_scene::VKScene,
+        scene::{Scene, transform::Transform},
+    },
+};
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,

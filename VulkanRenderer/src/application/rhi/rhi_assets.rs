@@ -1,9 +1,8 @@
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     cell::{Ref, RefCell},
     collections::HashMap,
     marker::PhantomData,
-    ops::Deref,
     rc::{Rc, Weak},
     sync::Arc,
 };

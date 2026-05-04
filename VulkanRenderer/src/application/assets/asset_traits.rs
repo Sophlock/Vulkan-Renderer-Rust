@@ -8,10 +8,9 @@ use glam::{Mat4, Vec3};
 use vulkano::{buffer::BufferContents, pipeline::graphics::vertex_input};
 
 use crate::application::{
-    rhi::rhi_assets::{RHIHandle, RHIResourceManager},
+    rhi::rhi_assets::{RHIHandle, RHIResourceManager, vulkan_camera::VKCamera},
     scene::transform::Transform,
 };
-use crate::application::rhi::rhi_assets::vulkan_camera::VKCamera;
 
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]

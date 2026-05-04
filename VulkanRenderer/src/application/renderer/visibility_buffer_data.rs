@@ -4,25 +4,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::application::{
-    assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
-    renderer::visibility_buffer_generation::{
-        ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
-    },
-    rhi::{
-        VKRHI,
-        buffer::buffer_from_slice,
-        pipeline::compute_pipeline,
-        rhi_assets::{
-            vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
-            vulkan_mesh::VKMesh, vulkan_model::VKModel,
-        },
-        shader_cursor::ShaderCursor,
-        shader_object::{ShaderObject, ShaderObjectLayout},
-        swapchain::Swapchain,
-        swapchain_resources::SwapchainImage,
-    },
-};
 use shader_slang::{Blob, ComponentType, structs::specialization_arg::SpecializationArg};
 use vulkano::{
     DeviceAddress, DeviceSize, ValidationError,
@@ -44,6 +25,26 @@ use vulkano::{
     },
     shader::{ShaderStages, spirv::bytes_to_words},
     sync::{GpuFuture, now},
+};
+
+use crate::application::{
+    assets::asset_traits::{Index, RHIInterface, RHIModelInterface, Vertex},
+    renderer::visibility_buffer_generation::{
+        ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+    },
+    rhi::{
+        VKRHI,
+        buffer::buffer_from_slice,
+        pipeline::compute_pipeline,
+        rhi_assets::{
+            vulkan_material::VKMaterial, vulkan_material_instance::VKMaterialInstance,
+            vulkan_mesh::VKMesh, vulkan_model::VKModel,
+        },
+        shader_cursor::ShaderCursor,
+        shader_object::{ShaderObject, ShaderObjectLayout},
+        swapchain::Swapchain,
+        swapchain_resources::SwapchainImage,
+    },
 };
 
 #[derive(Clone)]
@@ -337,7 +338,8 @@ impl VisibilityBufferData {
                 ..BufferCreateInfo::default()
             },
             AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
                 ..AllocationCreateInfo::default()
             },
         )
