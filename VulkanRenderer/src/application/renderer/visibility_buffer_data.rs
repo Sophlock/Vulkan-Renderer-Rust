@@ -123,7 +123,7 @@ pub struct VisibilityBufferGlobalData {
     pub indices: Subbuffer<[u32]>,
     pub vertices: Subbuffer<[Vertex]>,
     pub mutating_data: Subbuffer<MutatingData>,
-    pipelines: Vec<Arc<ComputePipeline>>,
+    pub pipelines: Vec<Arc<ComputePipeline>>,
     shader_object: Arc<ShaderObject>,
     material_count: u32,
     pub draw_indirect_commands: Subbuffer<[DrawIndexedIndirectCommand]>,
@@ -253,7 +253,7 @@ impl VisibilityBufferData {
         let compute_dispatch_commands = Self::create_slice_buffer(
             rhi,
             BufferUsage::STORAGE_BUFFER | BufferUsage::INDIRECT_BUFFER,
-            max_sequence_count,
+            if cfg!(feature = "no_indirect") {global_data.num_materials()} else {max_sequence_count},
         );
 
         let push_constants = Self::create_slice_buffer(

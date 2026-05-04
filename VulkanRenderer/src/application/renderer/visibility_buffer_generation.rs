@@ -615,10 +615,16 @@ impl VisibilityBufferProcessingPass {
     }
 
     fn generate_commands_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
+        let entry_point = if cfg!(feature = "no_indirect") {
+            "generateCommandsStreamsNoIndirect"
+        }
+        else {
+            "generateCommandsStreams"
+        };
         let generate_commands = VisBufferStep::new(
             rhi,
             "Engine/VisibilityBuffer/visBufferGenerateCommandsStreams",
-            "generateCommandsStreams",
+            entry_point,
             data.clone(),
         );
 

@@ -42,15 +42,15 @@ func generateCommandsStreams(uint dispatch: SV_DispatchThreadID)->void {
     uint materialIndex;
     uint texelCount;
     if (dispatch == count) {
-        // Fallback pipeline is always at index 0
+        // Fallback material is always at index 0
         materialIndex = 0;
         texelCount = gInput.totalTexelCount[0] - gInput.texelsWithoutFallback[0];
 
         // We need to 'register' the fallback pipeline here
         gInput.finalMaterialCount[0] = count + 1;
-        gInput.perMaterialOffsets[materialIndex] = gInput.texelsWithoutFallback[0];
 
-        gInput.texelCounts[0] = texelCount;
+        gInput.perMaterialOffsets[materialIndex] = gInput.texelsWithoutFallback[0];
+        gInput.texelCounts[materialIndex] = texelCount;
     }
     else {
         materialIndex = gInput.drawnMaterials[dispatch];
@@ -62,4 +62,28 @@ func generateCommandsStreams(uint dispatch: SV_DispatchThreadID)->void {
     gInput.pipelineBindParameters[dispatch] = { pipelineAddress };
     gInput.computeDispatchParameters[dispatch] = { uint3(texelCount / 16 + 1, 1, 1) };
     gInput.shadePushConstants[dispatch] = { materialIndex };
+}
+
+[shader("compute")]
+[numthreads(16, 1, 1)]
+func generateCommandsStreamsNoIndirect(uint dispatch: SV_DispatchThreadID)->void {
+    if (dispatch >= gGlobalData.materials.getCount()) {
+        return;
+    }
+
+    let materialIndex = dispatch;
+
+    uint texelCount;
+    if (dispatch == 0) {
+        // Fallback material
+        texelCount = gInput.totalTexelCount[0] - gInput.texelsWithoutFallback[0];
+
+        gInput.perMaterialOffsets[materialIndex] = gInput.texelsWithoutFallback[0];
+        gInput.texelCounts[materialIndex] = texelCount;
+    }
+    else {
+        texelCount = gInput.texelCounts[materialIndex];
+    }
+
+    gInput.computeDispatchParameters[materialIndex] = { uint3(texelCount / 16 + 1, 1, 1) };
 }

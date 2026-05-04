@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use vulkano::{
-    ValidationError,
+    DeviceSize, ValidationError,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     device::DeviceOwned,
@@ -16,6 +16,8 @@ use vulkano::{
     shader::ShaderStages,
 };
 
+use crate::application::assets::asset_traits::RHIInterface;
+use crate::application::rhi::rhi_assets::vulkan_material::VKMaterial;
 use crate::application::{
     renderer::{
         visibility_buffer_data::VisibilityBufferData,
@@ -37,10 +39,10 @@ pub struct VisibilityBufferShadePass {
 
 impl VisibilityBufferShadePass {
     #[cfg(not(feature = "no_cull_visbuffer"))]
-    pub const MAX_SEQUENCE_COUNT: u32 = 1000u32;
+    pub const MAX_SEQUENCE_COUNT: u32 = 2000u32;
 
     #[cfg(feature = "no_cull_visbuffer")]
-    pub const MAX_SEQUENCE_COUNT: u32 = 10000u32;
+    pub const MAX_SEQUENCE_COUNT: u32 = 100000u32;
 
     #[cfg(feature = "renderdoc_compatibility")]
     pub fn new(rhi: Rc<VKRHI>, data: Arc<VisibilityBufferData>) -> Self {
@@ -153,7 +155,7 @@ impl VisibilityBufferShadePass {
         Ok(())
     }
 
-    #[cfg(not(feature = "renderdoc_compatibility"))]
+    #[cfg(not(any(feature = "renderdoc_compatibility", feature = "no_indirect")))]
     pub fn record_command_buffer(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
@@ -202,6 +204,49 @@ impl VisibilityBufferShadePass {
         unsafe { command_buffer.preprocess_generated_commands(commands_info.clone()) }?;
 
         unsafe { command_buffer.execute_generated_commands(true, commands_info) }?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "no_indirect")]
+    pub fn record_command_buffer(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        image_index: usize,
+    ) -> Result<(), Box<ValidationError>> {
+        let shader_object = self.data.global_data.shader_object();
+        command_buffer.bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            shader_object.pipeline_layout().clone(),
+            0,
+            shader_object.descriptor_sets()[image_index].clone(),
+        )?;
+
+        self.data
+            .global_data
+            .pipelines
+            .iter()
+            .enumerate()
+            .for_each(|(index, pipeline)| {
+                command_buffer
+                    .bind_pipeline_compute(pipeline.clone())
+                    .unwrap();
+
+                command_buffer
+                    .push_constants(shader_object.pipeline_layout().clone(), 0, index as u32)
+                    .unwrap();
+
+                unsafe {
+                    command_buffer.dispatch_indirect(
+                        self.data
+                            .compute_dispatch_commands
+                            .clone()
+                            .slice(index as DeviceSize..=index as DeviceSize)
+                            .reinterpret(),
+                    )
+                }
+                .unwrap();
+            });
 
         Ok(())
     }

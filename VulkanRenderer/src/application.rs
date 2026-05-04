@@ -85,8 +85,8 @@ impl Application {
     }
 
     fn scene(asset_manager: &mut AssetManager) -> Scene {
-        let num_materials = 1000;
-        let num_instances = 200;
+        let num_materials = 4000;
+        let num_instances = 50;
 
         let mut scene = Scene::new();
         let sphere = asset_manager.add_mesh("TestMesh1", "resources/assets/meshes/sphere.glb");
