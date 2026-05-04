@@ -50,7 +50,7 @@ impl VisibilityBufferShadePass {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
-                flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS,
+                flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS | IndirectCommandsLayoutUsageFlags::UNORDERED_SEQUENCES,
                 pipeline_bind_point: PipelineBindPoint::Compute,
                 tokens: vec![
                     IndirectCommandsLayoutToken {

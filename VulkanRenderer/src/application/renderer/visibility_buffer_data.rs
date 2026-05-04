@@ -628,7 +628,7 @@ impl VisibilityBufferGlobalData {
         pipeline_layout: Arc<PipelineLayout>,
         spirv_cache: &mut HashMap<String, Blob>,
     ) -> ComputePipelineCreateInfo {
-        let material_key = format!("{}_{}", material.module_name(), material.module_name());
+        let material_key = format!("{}_{}", material.module_name(), material.material_name());
 
         let spirv = if let Some(spirv) = spirv_cache.get(&material_key) {
             spirv.clone()

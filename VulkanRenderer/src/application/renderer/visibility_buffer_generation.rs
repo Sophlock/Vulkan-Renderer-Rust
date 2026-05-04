@@ -429,7 +429,7 @@ impl VisibilityBufferProcessingPass {
         input_cursor
             .field("maxCulledPixelFootprint")
             .unwrap()
-            .write(&0.01f32);
+            .write(&0.0015f32);
 
         data.global_data
             .write_to_shader_cursor(&mut cursor.field("gGlobalData").unwrap());
