@@ -5,6 +5,7 @@ mod rhi;
 mod scene;
 
 use crate::application::assets::asset_traits::CameraInterface;
+use crate::application::assets::mesh::Mesh;
 use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
 use crate::{
     AppEvent,
@@ -84,7 +85,13 @@ impl Application {
         let num_instances = 200;
 
         let mut scene = Scene::new();
-        let mesh = asset_manager.add_mesh("TestMesh", "resources/assets/meshes/sphere.glb");
+        let sphere = asset_manager.add_mesh("TestMesh1", "resources/assets/meshes/sphere.glb");
+        let meshes = [
+            sphere.clone(),
+            sphere.clone(),
+            sphere,
+            asset_manager.add_mesh("TestMesh2", "resources/assets/meshes/Suzanne.glb"),
+        ];
 
         use rand::prelude::*;
 
@@ -108,8 +115,15 @@ impl Application {
                         rng.random_range(bounds.clone()),
                         rng.random_range(bounds.clone()),
                     ),
+                    rotation: Quat::from_euler(
+                        EulerRot::XYZ,
+                        rng.random_range(0f32..6.28f32),
+                        rng.random_range(-3.14f32..3.14f32) * 0.5f32,
+                        0f32,
+                    ),
                     ..Transform::default()
                 };
+                let mesh = &meshes[rng.random::<u32>() as usize % meshes.len()];
                 scene.models.push(asset_manager.add_model(
                     format!("TestModel_{}_{}", i, j).as_str(),
                     transform,
