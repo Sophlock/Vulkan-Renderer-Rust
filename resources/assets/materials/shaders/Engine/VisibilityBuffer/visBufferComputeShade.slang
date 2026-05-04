@@ -29,13 +29,14 @@ func shadeVisBufferNaive<MaterialType : IMaterial>(uint2 dispatch: SV_DispatchTh
     }
 
     let packedVisBuffer = visBuffer.Load(int3(dispatch.xy, 0));
-    
+
     let instanceID = packedVisBuffer.y - 1;
 
     let instance = gGlobalData.instances[instanceID];
     let materialInstance = gGlobalData.materialInstances[instance.materialInstanceIndex];
     let material = gGlobalData.materials[materialInstance.materialIndex];
 
+    [branch]
     if (gInput.thisMaterialIndex != materialInstance.materialIndex) {
         return;
     }
