@@ -1,5 +1,14 @@
 use std::{rc::Rc, sync::Arc};
 
+use crate::application::{
+    renderer::{
+        visibility_buffer_data::VisibilityBufferData,
+        visibility_buffer_generation::{
+            ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
+        },
+    },
+    rhi::{VKRHI, shader_cursor::ShaderCursor},
+};
 use vulkano::{
     ValidationError,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
@@ -15,15 +24,6 @@ use vulkano::{
     pipeline::PipelineBindPoint,
     shader::ShaderStages,
 };
-use crate::application::{
-    renderer::{
-        visibility_buffer_data::VisibilityBufferData,
-        visibility_buffer_generation::{
-            ComputeDispatchParameter, PipelineBindParameter, VisBufferPushConstant,
-        },
-    },
-    rhi::{VKRHI, shader_cursor::ShaderCursor},
-};
 
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
@@ -35,14 +35,15 @@ pub struct VisibilityBufferShadePass {
 }
 
 impl VisibilityBufferShadePass {
+    #[cfg(not(feature = "no_cull_visbuffer"))]
     pub const MAX_SEQUENCE_COUNT: u32 = 1000u32;
+
+    #[cfg(feature = "no_cull_visbuffer")]
+    pub const MAX_SEQUENCE_COUNT: u32 = 10000u32;
 
     #[cfg(feature = "renderdoc_compatibility")]
     pub fn new(rhi: Rc<VKRHI>, data: Arc<VisibilityBufferData>) -> Self {
-        Self {
-            rhi,
-            data,
-        }
+        Self { rhi, data }
     }
 
     #[cfg(not(feature = "renderdoc_compatibility"))]
@@ -50,7 +51,8 @@ impl VisibilityBufferShadePass {
         let commands_layout = IndirectCommandsLayout::new(
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
-                flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS | IndirectCommandsLayoutUsageFlags::UNORDERED_SEQUENCES,
+                flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS
+                    | IndirectCommandsLayoutUsageFlags::UNORDERED_SEQUENCES,
                 pipeline_bind_point: PipelineBindPoint::Compute,
                 tokens: vec![
                     IndirectCommandsLayoutToken {
@@ -141,7 +143,6 @@ impl VisibilityBufferShadePass {
         }
     }
 
-
     #[cfg(feature = "renderdoc_compatibility")]
     pub fn record_command_buffer(
         &self,
@@ -165,6 +166,18 @@ impl VisibilityBufferShadePass {
             shader_object.descriptor_sets()[image_index].clone(),
         )?;
 
+        let sequence_count = if cfg!(feature = "no_cull_visbuffer") {
+            self.data.global_data.num_materials()
+        } else {
+            Self::MAX_SEQUENCE_COUNT
+        };
+
+        let sequence_count_buffer = if cfg!(feature = "no_cull_visbuffer") {
+            None
+        } else {
+            Some(self.data.final_material_count_buffer.clone())
+        };
+
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
                 IndirectCommandsStream {
@@ -177,8 +190,8 @@ impl VisibilityBufferShadePass {
                     buffer: self.data.compute_dispatch_commands.clone().reinterpret(),
                 },
             ],
-            sequence_count: Self::MAX_SEQUENCE_COUNT,
-            sequence_count_buffer: Some(self.data.final_material_count_buffer.clone()),
+            sequence_count,
+            sequence_count_buffer,
             ..GeneratedCommandsInfo::dynamic_pipeline(
                 self.commands_layout.clone(),
                 self.preprocess_buffer.clone(),

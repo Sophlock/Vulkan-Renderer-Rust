@@ -32,5 +32,5 @@ func fillIndirectCommandsStreams(uint dispatch: SV_DispatchThreadID)->void {
 
     gInput.pipelineBindParameters[dispatch] = { pipelineAddress };
     gInput.computeDispatchParameters[dispatch] = { uint3(gGlobalData.mutData.Load(0).screenSize / 16 + 1, 1) };
-    gInput.shadePushConstants[dispatch] = { pipelineAddress };
+    gInput.shadePushConstants[dispatch] = { dispatch };
 }

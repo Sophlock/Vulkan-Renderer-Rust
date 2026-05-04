@@ -134,7 +134,15 @@ impl VisibilityBufferProcessingPass {
             )
         })?;
 
-        if cfg!(feature = "binned_visbuffer") {
+        if cfg!(feature = "no_cull_visbuffer") {
+            self.record_filled_command_buffer(
+                command_buffer,
+                image_index,
+                swapchain_extent,
+                profiler,
+            )
+        }
+        else if cfg!(feature = "binned_visbuffer") {
             self.record_binned_command_buffer(
                 command_buffer,
                 image_index,
