@@ -1,9 +1,9 @@
 mod full_screen_pass;
 mod post_processing;
+pub mod profiling;
 mod visibility_buffer_data;
 mod visibility_buffer_generation;
 mod visibility_buffer_shading;
-pub mod profiling;
 
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -13,8 +13,18 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use core::slice::ChunkBy;
+use smallvec::smallvec;
+use vulkano::command_buffer::{
+    RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
+};
+use vulkano::format::ClearValue;
+use vulkano::pipeline::PipelineBindPoint;
+use vulkano::pipeline::graphics::viewport::{Scissor, Viewport};
+use vulkano::query::{QueryPool, QueryPoolCreateInfo, QueryType};
+use vulkano::swapchain::SwapchainAcquireFuture;
 use vulkano::{
-    Validated, ValidationError, VulkanError, VulkanObject,
+    Validated, ValidationError, VulkanError,
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer},
     format::Format,
@@ -25,9 +35,10 @@ use vulkano::{
     swapchain::{SwapchainPresentInfo, present},
     sync::{AccessFlags, GpuFuture, PipelineStages, future::FenceSignalFuture},
 };
-use vulkano::query::{QueryPool, QueryPoolCreateInfo, QueryType};
 use winit::dpi::PhysicalSize;
 
+use crate::application::assets::material_instance;
+use crate::application::renderer::profiling::{Profiler, ProfilerStage};
 use crate::application::{
     assets::asset_traits::{
         RHICameraInterface, RHIInterface, RHIModelInterface, RHIResource, RHISceneInterface,
@@ -52,7 +63,6 @@ use crate::application::{
         },
     },
 };
-use crate::application::renderer::profiling::{Profiler, ProfilerStage};
 
 pub struct MutableRenderState {
     swapchain: Swapchain,
@@ -76,7 +86,7 @@ pub struct VKRenderer {
     render_pass: Arc<RenderPass>,
     material_compiler: RefCell<MaterialCompiler>,
     post_process: PostProcessPass,
-    profiler: Profiler
+    profiler: Profiler,
 }
 
 struct MaterialCompiler {
@@ -98,7 +108,10 @@ impl VKRenderer {
         let color_render_target = swapchain.create_gbuffer(
             rhi.as_ref(),
             Format::R32G32B32A32_SFLOAT,
-            ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE | ImageUsage::TRANSFER_DST,
+            ImageUsage::COLOR_ATTACHMENT
+                | ImageUsage::SAMPLED
+                | ImageUsage::STORAGE
+                | ImageUsage::TRANSFER_DST,
             ImageAspects::COLOR,
         );
         let pp_render_target = swapchain.create_gbuffer(
@@ -188,7 +201,7 @@ impl VKRenderer {
             render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
-            profiler
+            profiler,
         }
     }
 
@@ -235,94 +248,12 @@ impl VKRenderer {
 
         let swapchain_extent = self.mutable_state_const().swapchain.extent;
 
-        // Command buffer for a graphics queue. This will do all the rasterization work
-        let mut command_buffer = self
-            .rhi
-            .command_buffer_interface()
-            .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
-
-        // Flush any pending writes to shader parameters
-        self.rhi
-            .as_ref()
-            .shader_object_update_queue()
-            .borrow_mut()
-            .flush_writes(&mut command_buffer);
-
-        // Rasterize the visibility buffer
-        self.profiler.write(&mut command_buffer, ProfilerStage::PreVisbufferRaster).unwrap();
-        self.mutable_state_const()
-            .vis_buffer_rasterizer
-            .record_command_buffer(
-                &mut command_buffer,
-                swapchain_image_index as usize,
-                swapchain_extent,
-                scene,
-                &self.mutable_state_const().vis_buffer_data,
-            )
-            .unwrap();
-        self.profiler.write(&mut command_buffer, ProfilerStage::PostVisbufferRaster).unwrap();
-
-        /*self.record_draw_command_buffer(&mut command_buffer, swapchain_image_index as usize, scene)
-        .unwrap();*/
-
-        // Submit to graphics queue
-        let vis_buffer_generated_future = image_available_future
-            .then_execute(
-                self.rhi.queues().graphics_queue.clone(),
-                command_buffer.build().unwrap(),
-            )
-            .unwrap();
-
-        // Command buffer for compute queue. This will perform processing on the visibility buffer
-        // and execute device generated commands to shade the final image.
-        let mut compute_command_buffer = self
-            .rhi
-            .command_buffer_interface()
-            .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
-
-        // Clear outdated visibility buffer data
-        self.mutable_state_const()
-            .vis_buffer_data
-            .clear(&mut compute_command_buffer)
-            .unwrap();
-
-        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PreVisbufferProcess).unwrap();
-
-        // Perform visibility buffer processing
-        self.mutable_state_const()
-            .vis_buffer_processing
-            .record_command_buffer(
-                &mut compute_command_buffer,
-                swapchain_image_index as usize,
-                swapchain_extent,
-                self.profiler()
-            )
-            .unwrap();
-
-        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PostVisbufferProcess).unwrap();
-
-        // Shade the visibility buffer
-        self.mutable_state_const()
-            .vis_buffer_shade
-            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
-            .unwrap();
-
-        self.profiler.write(&mut compute_command_buffer, ProfilerStage::PostVisbufferShade).unwrap();
-
-        // Submit to compute queue
-        let draw_finished_future = vis_buffer_generated_future
-            .then_execute(
-                self.rhi.queues().compute_queue.clone(),
-                compute_command_buffer.build().unwrap(),
-            )
-            .unwrap();
-
-        /*let draw_finished_future = image_available_future
-        .then_execute(
-            self.rhi.queues().graphics_queue.clone(),
-            command_buffer.build().unwrap(),
-        )
-        .unwrap();*/
+        let draw_finished_future = self.draw_frame_visbuffer(
+            scene,
+            swapchain_image_index,
+            swapchain_extent,
+            image_available_future,
+        );
 
         // Command buffer for post-processing
         let mut compute_command_buffer = self
@@ -412,13 +343,19 @@ impl VKRenderer {
         in_flight_future
     }
 
-    fn record_draw_command_buffer(
+    fn draw_frame_forward(
         &self,
-        command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-        image_index: usize,
         scene: &VKScene,
-    ) -> Result<(), Box<ValidationError>> {
-        /* command_buffer
+        image_index: usize,
+        before_future: impl GpuFuture,
+    ) /*-> Result<impl GpuFuture, Box<ValidationError>>*/ {
+        // Command buffer for a graphics queue. This will do all the rasterization work
+        /*let mut command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
+
+        command_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
                     render_area_offset: [0, 0],
@@ -459,6 +396,59 @@ impl VKRenderer {
         let resources = self.rhi.resource_manager();
         let compiler = self.material_compiler.borrow();
         let rcs = resources.deref();
+
+        let data = &self.mutable_state_const().vis_buffer_data;
+
+        command_buffer
+            .bind_vertex_buffers(0, data.global_data.vertices.clone())?
+            .bind_vertex_buffers(1, data.global_data.instances.clone())?
+            .bind_index_buffer(data.global_data.indices.clone())?;
+
+        let mut sorted = scene
+            .models()
+            .iter()
+            .map(|model| {
+                let material_instance = model.get(rcs).unwrap().material();
+                let material = material_instance.get(rcs).unwrap().material();
+                let mesh = model.get(rcs).unwrap().mesh();
+                (model, material_instance, material, mesh)
+            })
+            .collect::<Vec<_>>();
+
+        sorted.sort_unstable_by_key(|(_, material_instance, material, mesh)| {
+            (material.id(), material_instance.id(), mesh.id())
+        });
+
+        sorted
+            .chunk_by(|(_, _, material1, _), (_, _, material2, _)| material1.id() == material2.id())
+            .into_iter()
+            .for_each(|models| {
+                let material = models[0].2.get(rcs).unwrap();
+                let compiled_material = compiler.find_compiled_material(material).unwrap();
+
+                command_buffer
+                    .bind_pipeline_graphics(compiled_material.pipeline.clone())
+                    .unwrap();
+
+                models
+                    .chunk_by(|(_, instance1, _, _), (_, instance2, _, _)| {
+                        instance1.id() == instance2.id()
+                    })
+                    .for_each(|models| {
+                        let material_instance = models[0].1.get(rcs).unwrap();
+
+                        command_buffer.bind_descriptor_sets(
+                            PipelineBindPoint::Graphics,
+                            material.pipeline_layout().clone(),
+                            0,
+                            material_instance.descriptor_sets()[image_index].clone(),
+                        ).unwrap();
+
+                        models.chunk_by(|(_, _, _, mesh1), (_, _, _, mesh2)| mesh1.id() == mesh2.id()).for_each(|models| {
+
+                        });
+                    })
+            });
 
         scene
             .models()
@@ -507,10 +497,125 @@ impl VKRenderer {
             .reduce(Result::or)
             .unwrap_or(Ok(()))?;
 
-        command_buffer
-            .end_render_pass(SubpassEndInfo::default())
-            .map(|_| ())*/
+        command_buffer.end_render_pass(SubpassEndInfo::default())?;
+
+        let draw_finished_future = before_future
+            .then_execute(
+                self.rhi.queues().graphics_queue.clone(),
+                command_buffer.build().unwrap(),
+            )
+            .unwrap();
+
+        Ok(draw_finished_future)*/
         unimplemented!()
+    }
+
+    fn draw_frame_visbuffer(
+        &self,
+        scene: &VKScene,
+        swapchain_image_index: u32,
+        swapchain_extent: [u32; 2],
+        before_future: impl GpuFuture + 'static,
+    ) -> impl GpuFuture + 'static {
+        // Command buffer for a graphics queue. This will do all the rasterization work
+        let mut command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().graphics_family);
+
+        // Flush any pending writes to shader parameters
+        self.rhi
+            .as_ref()
+            .shader_object_update_queue()
+            .borrow_mut()
+            .flush_writes(&mut command_buffer);
+
+        // Rasterize the visibility buffer
+        self.profiler
+            .write(&mut command_buffer, ProfilerStage::PreVisbufferRaster)
+            .unwrap();
+        self.mutable_state_const()
+            .vis_buffer_rasterizer
+            .record_command_buffer(
+                &mut command_buffer,
+                swapchain_image_index as usize,
+                swapchain_extent,
+                scene,
+                &self.mutable_state_const().vis_buffer_data,
+            )
+            .unwrap();
+        self.profiler
+            .write(&mut command_buffer, ProfilerStage::PostVisbufferRaster)
+            .unwrap();
+
+        // Submit to graphics queue
+        let vis_buffer_generated_future = before_future
+            .then_execute(
+                self.rhi.queues().graphics_queue.clone(),
+                command_buffer.build().unwrap(),
+            )
+            .unwrap();
+
+        // Command buffer for compute queue. This will perform processing on the visibility buffer
+        // and execute device generated commands to shade the final image.
+        let mut compute_command_buffer = self
+            .rhi
+            .command_buffer_interface()
+            .primary_command_buffer(self.rhi.queue_family_indices().compute_family);
+
+        // Clear outdated visibility buffer data
+        self.mutable_state_const()
+            .vis_buffer_data
+            .clear(&mut compute_command_buffer)
+            .unwrap();
+
+        self.profiler
+            .write(
+                &mut compute_command_buffer,
+                ProfilerStage::PreVisbufferProcess,
+            )
+            .unwrap();
+
+        // Perform visibility buffer processing
+        self.mutable_state_const()
+            .vis_buffer_processing
+            .record_command_buffer(
+                &mut compute_command_buffer,
+                swapchain_image_index as usize,
+                swapchain_extent,
+                self.profiler(),
+            )
+            .unwrap();
+
+        self.profiler
+            .write(
+                &mut compute_command_buffer,
+                ProfilerStage::PostVisbufferProcess,
+            )
+            .unwrap();
+
+        // Shade the visibility buffer
+        self.mutable_state_const()
+            .vis_buffer_shade
+            .record_command_buffer(&mut compute_command_buffer, swapchain_image_index as usize)
+            .unwrap();
+
+        self.profiler
+            .write(
+                &mut compute_command_buffer,
+                ProfilerStage::PostVisbufferShade,
+            )
+            .unwrap();
+
+        // Submit to compute queue
+        let draw_finished_future = vis_buffer_generated_future
+            .then_execute(
+                self.rhi.queues().compute_queue.clone(),
+                compute_command_buffer.build().unwrap(),
+            )
+            .unwrap();
+
+        draw_finished_future
     }
 
     pub fn compile_materials(&self) {
