@@ -238,11 +238,15 @@ impl VisibilityBufferProcessingPass {
             [self.num_materials / 16 + 1, 1, 1],
         )?;
 
+        profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
+
         self.resolve_unsure.record_command_buffer(
             command_buffer,
             image_index,
             [self.num_materials / 16 + 1, 1, 1],
         )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostCull)?;
 
         self.drawn_offset.record_command_buffer(
             command_buffer,
@@ -265,6 +269,8 @@ impl VisibilityBufferProcessingPass {
             [self.num_materials / 16 + 1, 1, 1],
         )?;
 
+        profiler.write(command_buffer, ProfilerStage::PostPrefixSum)?;
+        
         self.texel_bin.record_command_buffer(
             command_buffer,
             image_index,
@@ -274,6 +280,8 @@ impl VisibilityBufferProcessingPass {
                 1,
             ],
         )?;
+
+        profiler.write(command_buffer, ProfilerStage::PostTexelBin)?;
 
         self.generate_commands.record_command_buffer(
             command_buffer,
@@ -723,14 +731,7 @@ impl VisBufferStep {
                 self.shader_object.pipeline_layout().clone(),
                 0,
                 self.shader_object.descriptor_sets()[image_index].clone(),
-            )?
-            /*.push_constants(
-                self.shader_object
-                    .pipeline_layout()
-                    .clone(),
-                0,
-                self.data.global_data_buffer_address(),
-            )?*/;
+            )?;
         unsafe { command_buffer.dispatch(dispatch) }?;
         Ok(())
     }

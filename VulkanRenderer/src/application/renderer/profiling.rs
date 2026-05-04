@@ -79,8 +79,11 @@ impl Profiler {
     const POST_VISBUFFER_SHADE: u32 = 4;
     const POST_TEXEL_COUNT: u32 = 5;
     const POST_EMPTY_CULL: u32 = 6;
+    const POST_CULL: u32 = 7;
+    const POST_PREFIX_SUM: u32 = 8;
+    const POST_TEXEL_BIN: u32 = 9;
 
-    const QUERY_COUNT: u32 = 7;
+    const QUERY_COUNT: u32 = 10;
 }
 
 pub enum ProfilerStage {
@@ -89,6 +92,9 @@ pub enum ProfilerStage {
     PreVisbufferProcess,
     PostTexelCount,
     PostEmptyCull,
+    PostCull,
+    PostPrefixSum,
+    PostTexelBin,
     PostVisbufferProcess,
     PostVisbufferShade,
 }
@@ -103,6 +109,9 @@ impl ProfilerStage {
             ProfilerStage::PostVisbufferShade => Profiler::POST_VISBUFFER_SHADE,
             ProfilerStage::PostTexelCount => Profiler::POST_TEXEL_COUNT,
             ProfilerStage::PostEmptyCull => Profiler::POST_EMPTY_CULL,
+            ProfilerStage::PostCull => Profiler::POST_CULL,
+            ProfilerStage::PostPrefixSum => Profiler::POST_PREFIX_SUM,
+            ProfilerStage::PostTexelBin => Profiler::POST_TEXEL_BIN,
         }
     }
 
@@ -122,6 +131,9 @@ pub enum ProfilerCategory {
     VisbufferShade,
     TexelCount,
     EmptyCull,
+    Cull,
+    PrefixSum,
+    TexelBin,
 }
 
 pub struct ProfilerRecords {
@@ -170,6 +182,21 @@ impl ProfilerRecords {
             ProfilerCategory::EmptyCull,
             ProfilerStage::PostTexelCount,
             ProfilerStage::PostEmptyCull,
+        );
+        self.update_time(
+            ProfilerCategory::Cull,
+            ProfilerStage::PostTexelCount,
+            ProfilerStage::PostCull,
+        );
+        self.update_time(
+            ProfilerCategory::PrefixSum,
+            ProfilerStage::PostCull,
+            ProfilerStage::PostPrefixSum,
+        );
+        self.update_time(
+            ProfilerCategory::TexelBin,
+            ProfilerStage::PostPrefixSum,
+            ProfilerStage::PostTexelBin,
         );
         self.results_available = true;
     }
