@@ -87,6 +87,7 @@ pub struct VKRenderer {
     material_compiler: RefCell<MaterialCompiler>,
     post_process: PostProcessPass,
     profiler: Profiler,
+    scene_statistics: RefCell<SceneStatistics>
 }
 
 struct MaterialCompiler {
@@ -202,6 +203,7 @@ impl VKRenderer {
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
             profiler,
+            scene_statistics: RefCell::new(SceneStatistics::default())
         }
     }
 
@@ -218,6 +220,9 @@ impl VKRenderer {
 
         // Update profiler measurements on CPU and reset query pool
         self.profiler.read_results();
+
+        // Update scene statistics
+        self.update_scene_statistics();
 
         // Recreate swapchain if needed
         if self.mutable_state_const().should_recreate_swapchain {
@@ -618,6 +623,18 @@ impl VKRenderer {
         draw_finished_future
     }
 
+    fn update_scene_statistics(&self) {
+        let mut_state = self.mutable_state_const();
+        let data = &mut_state.vis_buffer_data;
+
+        let mut statistics = self.scene_statistics.borrow_mut();
+
+        statistics.visible_materials = *data.drawn_index_counter_buffer.read().unwrap();
+        statistics.culled_materials = *data.culled_index_counter_buffer.read().unwrap();
+        statistics.drawn_materials = *data.final_material_count_buffer.read().unwrap();
+        statistics.fallback_pixels = *data.offset_accumulator_buffer.read().unwrap() - *data.no_fallback_texel_count_buffer.read().unwrap();
+    }
+
     pub fn compile_materials(&self) {
         self.material_compiler
             .borrow_mut()
@@ -651,6 +668,14 @@ impl VKRenderer {
     pub fn profiler(&self) -> &Profiler {
         &self.profiler
     }
+
+    pub fn scene_statistics(&self) -> Ref<SceneStatistics> {
+        self.scene_statistics.borrow()
+    }
+
+    pub fn swapchain_extent(&self) -> [u32; 2] {
+        self.mutable_state_const().swapchain.extent
+    }
 }
 impl RendererInterface for VKRenderer {
     type RHI = VKRHI;
@@ -678,6 +703,14 @@ impl MutableRenderState {
 
         self.should_recreate_swapchain = false;
     }
+}
+
+#[derive(Default)]
+pub struct SceneStatistics {
+    pub visible_materials: u32,
+    pub drawn_materials: u32,
+    pub culled_materials: u32,
+    pub fallback_pixels: u32,
 }
 
 impl MaterialCompiler {

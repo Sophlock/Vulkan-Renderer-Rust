@@ -4,6 +4,23 @@ mod renderer;
 mod rhi;
 mod scene;
 
+use crate::application::assets::asset_traits::CameraInterface;
+use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
+use crate::{
+    AppEvent,
+    application::{
+        assets::{
+            AssetManager::AssetManager,
+            asset_traits::{Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex},
+            material::Material,
+        },
+        input::InputAction,
+        renderer::VKRenderer,
+        rhi::rhi_assets::vulkan_scene::VKScene,
+        scene::{Scene, transform::Transform},
+    },
+};
+use asset_system::assets::AssetHandle;
 use egui_winit_vulkano::{
     egui,
     egui::{Color32, Sense, Stroke, StrokeKind, Ui, Vec2, epaint, epaint::PathShape},
@@ -29,23 +46,6 @@ use winit::{
     window::WindowId,
 };
 use winit_input_map::{InputCode, InputMap, input_map};
-use asset_system::assets::AssetHandle;
-use crate::application::assets::asset_traits::CameraInterface;
-use crate::application::renderer::profiling::{Profiler, ProfilerCategory};
-use crate::{
-    AppEvent,
-    application::{
-        assets::{
-            AssetManager::AssetManager,
-            asset_traits::{Index, RHIInterface, RHISceneInterface, RendererInterface, Vertex},
-            material::Material,
-        },
-        input::InputAction,
-        renderer::VKRenderer,
-        rhi::rhi_assets::vulkan_scene::VKScene,
-        scene::{Scene, transform::Transform},
-    },
-};
 
 pub struct Application {
     renderer: Option<Rc<VKRenderer>>,
@@ -149,7 +149,8 @@ impl Application {
 
     fn update_scene_proxy(&mut self, rhi: &VKRHI) {
         // TODO: This is super hacky
-        rhi.resource_manager_mut().create_material(self.fallback_material.clone());
+        rhi.resource_manager_mut()
+            .create_material(self.fallback_material.clone());
 
         // TODO: This should be more lazy
         self.rhi_scene_proxy = Some(VKScene::create(
@@ -235,10 +236,16 @@ impl Application {
         gui.immediate_ui(|ui| {
             let ctx = ui.context();
             egui::Window::new("GUI")
-                .resizable(false)
-                .default_size([400.0, 500.0])
+                .resizable(true)
+                .vscroll(true)
+                .default_size([200.0, 500.0])
                 .show(&ctx, |ui| {
                     ui.heading("Render Statistics");
+                    ui.label(format!(
+                        "Screen Resolution:\t {}x{}",
+                        renderer.swapchain_extent()[0],
+                        renderer.swapchain_extent()[1]
+                    ));
                     ui.label(format!(
                         "Framerate: {:.1}fps",
                         1f32 / self
@@ -248,7 +255,7 @@ impl Application {
                             .as_secs_f32()
                     ));
                     ui.label(format!(
-                        "Number of pipelines: {}",
+                        "Materials in Scene:\t {}",
                         self.asset_manager
                             .borrow()
                             .resource_manager()
@@ -256,6 +263,29 @@ impl Application {
                             .unwrap()
                             .count()
                     ));
+                    ui.label(format!(
+                        "Visible Materials:\t {}",
+                        renderer.scene_statistics().visible_materials
+                    ));
+                    ui.label(format!(
+                        "Drawn Materials:\t {}",
+                        renderer.scene_statistics().drawn_materials
+                    ));
+                    ui.label(format!(
+                        "Culled Materials:\t {}",
+                        renderer.scene_statistics().culled_materials
+                    ));
+                    ui.label(format!(
+                        "Fallback Pixels:\t {}",
+                        renderer.scene_statistics().fallback_pixels
+                    ));
+                    ui.label(format!(
+                        "Fallback Percentage:\t {:.2}%",
+                        renderer.scene_statistics().fallback_pixels as f32 * 100f32
+                            / (renderer.swapchain_extent()[0] * renderer.swapchain_extent()[1])
+                                as f32
+                    ));
+
                     self.time_measurement
                         .paint_graph_to_gui(&AppEvent::Render, ui);
                     self.time_measurement.paint_detail_graphs_to_gui(ui);

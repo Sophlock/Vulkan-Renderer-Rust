@@ -336,7 +336,10 @@ impl VisibilityBufferData {
                     | BufferUsage::TRANSFER_SRC,
                 ..BufferCreateInfo::default()
             },
-            AllocationCreateInfo::default(),
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..AllocationCreateInfo::default()
+            },
         )
         .unwrap()
     }
