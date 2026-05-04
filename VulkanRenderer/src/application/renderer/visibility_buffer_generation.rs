@@ -907,9 +907,6 @@ impl VisibilityBufferRasterizer {
                 self.shader_object.descriptor_sets()[image_index].clone(),
             )?;
 
-        let resources = self.rhi.resource_manager();
-        let rcs = resources.deref();
-
         command_buffer
             .bind_vertex_buffers(0, data.global_data.vertices.clone())?
             .bind_vertex_buffers(1, data.global_data.instances.clone())?
@@ -918,26 +915,6 @@ impl VisibilityBufferRasterizer {
         unsafe {
             command_buffer.draw_indexed_indirect(data.global_data.draw_indirect_commands.clone())
         }?;
-
-        /*scene
-        .models()
-        .iter()
-        .map(|model_handle| {
-            let model = model_handle.get(rcs).unwrap();
-            let mesh = model.mesh().get(rcs).unwrap();
-            unsafe {
-                command_buffer.draw_indexed(
-                    mesh.index_size() as u32,
-                    1,
-                    mesh.index_offset() as u32,
-                    mesh.vertex_offset() as i32,
-                    rcs.index(model.uuid()).unwrap() as u32,
-                )
-            }
-            .map(|_| ())
-        })
-        .reduce(Result::or)
-        .unwrap_or(Ok(()))?;*/
 
         command_buffer
             .end_render_pass(SubpassEndInfo::default())
