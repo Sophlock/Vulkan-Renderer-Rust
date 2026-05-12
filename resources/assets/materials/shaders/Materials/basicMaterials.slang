@@ -3,7 +3,7 @@
 import Core.material;
 import Core.geometry;
 
-import BRDF.basicBRDFS;
+import BRDF.basicBRDFs;
 
 import Core.largeBlock;
 
@@ -28,6 +28,8 @@ struct SkySphereMaterial : IMaterial
     }
 }
 
+// The test material that is used as the desired material for all objects
+// This will be created many times. All of them use the same code but this is invisible to the GPU and driver
 struct SingleColorUnlitMaterial : IMaterial
 {
     typedef UnlitBRDF BRDF;
@@ -36,9 +38,11 @@ struct SingleColorUnlitMaterial : IMaterial
 
     MaterialResult<UnlitBRDF> evaluate(SurfaceGeometry geometry)
     {
+        // The actual shading is very simple: We just output the world normal, to show that we can accurately reconstruct data
         UnlitBRDF brdf = {};
         brdf.emissive = geometry.worldNormal;
 
+        // Then we waste a bit of time to have the material be more represenatative of real world applications
         for (int i = 0; i < 100000; ++i) {
             brdf.emissive = float3(brdf.emissive.y, brdf.emissive.z, brdf.emissive.x);
         }
@@ -47,6 +51,7 @@ struct SingleColorUnlitMaterial : IMaterial
     }
 }
 
+// Global fallback material. This is just pink, but in reality, this would be a Uber shader
 struct FallbackMaterial : IMaterial
 {
     typedef UnlitBRDF BRDF;

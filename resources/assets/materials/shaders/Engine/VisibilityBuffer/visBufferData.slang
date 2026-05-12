@@ -67,6 +67,8 @@ public Vertex operator *(Vertex v, float s) {
     return result;
 }
 
+// Normalizes the VECTORS in the vertex that must be normalized (i.e., normal and tangent)
+// Position etc. are NOT touched by this
 public Vertex normalize(Vertex v) {
     Vertex result = v;
     result.worldNormal = normalize(v.worldNormal);
@@ -74,10 +76,12 @@ public Vertex normalize(Vertex v) {
     return result;
 }
 
+// Wrapper for what is passed as push constants to the shader
 public struct VisBufferShadeInput {
     public uint thisMaterialIndex;
 }
 
+// Wrapper for a buffer into which materials can be appended concurrently
 public struct MaterialCollection {
     RWStructuredBuffer<Atomic<uint>> currentIndex;
     RWStructuredBuffer<uint> materialIndices;
