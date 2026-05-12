@@ -52,14 +52,26 @@ use crate::{
     },
 };
 
+/// Central struct of the application
+///
+/// Handles input, game loop, rendering loop, time measurements, etc.
+
 pub struct Application {
+    /// Renderer to render the scene
     renderer: Option<Rc<VKRenderer>>,
+    /// Stores all assets
     asset_manager: Arc<RefCell<AssetManager>>,
+    /// Rendering proxy of the scene
     rhi_scene_proxy: Option<VKScene>,
+    /// Game version of the scene
     scene: Scene,
+    /// Global fallback material
     fallback_material: AssetHandle<Material>,
+    /// Input mapping
     input: InputMap<InputAction>,
+    /// System to measure and print timings
     time_measurement: TimeMeasureSystem,
+    /// Input system for gamepad
     gilrs: Gilrs,
 }
 
@@ -85,10 +97,14 @@ impl Application {
     }
 
     fn scene(asset_manager: &mut AssetManager) -> Scene {
+        // The total number of materials in the scene
         let num_materials = 1000;
+
+        // We always want 200K instances
         let num_instances = 200000 / num_materials;
 
         let mut scene = Scene::new();
+        // We have 2 meshes, a sphere and the blender monkey
         let sphere = asset_manager.add_mesh("TestMesh1", "resources/assets/meshes/sphere.glb");
         let meshes = [
             sphere.clone(),
@@ -103,6 +119,7 @@ impl Application {
         let mut rng = rand::rng();
         let bounds = -200f32..200f32;
 
+        // Randomly spawn instances
         for i in 0..num_materials {
             let material = asset_manager.add_material(
                 format!("TestMat_{}", i).as_str(),
@@ -190,6 +207,7 @@ impl Application {
         self.scene.camera.aspect = x as f32 / y as f32;
     }
 
+    /// Game loop tick function. This is responsible for camera updates
     fn tick(&mut self, delta_time: f32) {
         use InputAction::*;
 
@@ -247,6 +265,7 @@ impl Application {
         self.input.init();
     }
 
+    /// Renders the GUI
     fn draw_gui(&mut self) {
         let renderer = &self.renderer.as_ref().unwrap();
         let mut gui = renderer.rhi().gui_mut();
@@ -322,9 +341,12 @@ impl Application {
 }
 
 impl ApplicationHandler<AppEvent> for Application {
+    /// This is called once to 'start' the application
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Initialize RHI
         let rhi = VKRHI::new(event_loop, self.asset_manager.clone());
 
+        // Allocate global vertex and index buffers
         rhi.resource_manager_mut().allocate_shared_buffer::<Vertex>(
             1000000,
             BufferUsage::VERTEX_BUFFER
@@ -341,18 +363,22 @@ impl ApplicationHandler<AppEvent> for Application {
         );
         self.update_scene_proxy(rhi.as_ref());
 
+        // Initialize renderer and time measurement system
         self.renderer = Some(Rc::new(VKRenderer::new(rhi)));
         // TODO: This should be called on demand as well
         self.renderer.as_ref().unwrap().compile_materials();
         self.time_measurement.reset();
     }
 
+    /// Handles a user event. This is what triggers updates and rendering
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         match event {
+            // Run game update
             AppEvent::Tick => {
                 let delta_time = self.mark_frame(&event);
                 self.tick(delta_time)
             }
+            // Issue a redraw request, i.e., render the scene
             AppEvent::Render => self
                 .renderer
                 .as_ref()
@@ -369,6 +395,7 @@ impl ApplicationHandler<AppEvent> for Application {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Handle inputs
         let input_consumed = self
             .renderer
             .as_ref()
@@ -380,6 +407,7 @@ impl ApplicationHandler<AppEvent> for Application {
             self.input.update_with_window_event(&event);
         }
         match event {
+            // Resizing must recreate the swapchain
             WindowEvent::Resized(size) => {
                 self.update_aspect_ratio(size.width, size.height);
                 self.renderer
@@ -388,9 +416,10 @@ impl ApplicationHandler<AppEvent> for Application {
                     .mutable_state()
                     .request_recreate_swapchain()
             }
+            // Close the window
             WindowEvent::CloseRequested => event_loop.exit(),
+            // Render the scene
             WindowEvent::RedrawRequested => {
-                //self.update_scene_proxy(self.renderer.clone().unwrap().rhi());
                 self.update_scene_proxy_camera(self.renderer.clone().unwrap().rhi());
                 self.draw_gui();
                 self.renderer

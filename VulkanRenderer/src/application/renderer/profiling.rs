@@ -14,6 +14,7 @@ use vulkano::{
     sync::PipelineStage,
 };
 
+/// Profiling system to measure the execution time of different GPU operations
 pub struct Profiler {
     query_pool: Arc<QueryPool>,
     records: RefCell<ProfilerRecords>,
@@ -40,6 +41,7 @@ impl Profiler {
         Self::QUERY_COUNT
     }
 
+    /// Write the timestamp to a profiler stage
     pub fn write(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
@@ -77,6 +79,8 @@ impl Profiler {
         self.records.borrow()
     }
 
+    // These consts below need to assign an integer to every variant in ProfilerStage
+
     const PRE_VISBUFFER_RASTER: u32 = 0;
     const POST_VISBUFFER_RASTER: u32 = 1;
     const PRE_VISBUFFER_PROCESS: u32 = 2;
@@ -91,6 +95,7 @@ impl Profiler {
     const QUERY_COUNT: u32 = 10;
 }
 
+/// Enumeration of the stages where a timestamp can be written
 pub enum ProfilerStage {
     PreVisbufferRaster,
     PostVisbufferRaster,
@@ -105,6 +110,7 @@ pub enum ProfilerStage {
 }
 
 impl ProfilerStage {
+    /// Maps each variant of ProfilerStage onto its query id integer
     fn query_id(&self) -> u32 {
         match self {
             ProfilerStage::PreVisbufferRaster => Profiler::PRE_VISBUFFER_RASTER,
@@ -120,6 +126,7 @@ impl ProfilerStage {
         }
     }
 
+    /// Maps which pipeline stage a ProfilerStage should be recorded on
     fn pipeline_stage(&self) -> PipelineStage {
         match self {
             ProfilerStage::PreVisbufferRaster => PipelineStage::TopOfPipe,
@@ -129,6 +136,9 @@ impl ProfilerStage {
     }
 }
 
+/// Categories of time measurements
+/// 
+/// These essentially are the steps for which we can measure execution times
 #[derive(Copy, Clone, Ord, Eq, PartialEq, PartialOrd, Sequence, Debug)]
 pub enum ProfilerCategory {
     VisbufferRasterization,
@@ -162,6 +172,7 @@ impl ProfilerRecords {
         }
     }
 
+    /// This function is responsible for mapping ProfilerStages onto ProfilerCategories
     fn update_times(&mut self) {
         self.update_time(
             ProfilerCategory::VisbufferRasterization,

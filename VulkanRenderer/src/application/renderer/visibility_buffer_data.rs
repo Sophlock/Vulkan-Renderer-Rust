@@ -47,6 +47,7 @@ use crate::application::{
     },
 };
 
+/// Collection of all buffers that are needed for the entire visibility buffer rendering process
 #[derive(Clone)]
 pub struct VisibilityBufferData {
     // The packed visibility buffer
@@ -114,18 +115,31 @@ pub struct VisibilityBufferData {
     pub global_data_buffer: Subbuffer<VisBufferGlobalDataPointers>,
 }
 
+/// Global data that the visibility buffer setup needs to access.
+/// This is essentially a GPU representation of the entire scene.
 #[derive(Clone)]
 pub struct VisibilityBufferGlobalData {
+    /// All instances in the scene, grouped by mesh to allow using multi draw indirect
     pub instances: Subbuffer<[InstanceData]>,
+    /// All materials in the scene
     pub materials: Subbuffer<[MaterialData]>,
+    /// All material instances in the scene
     pub material_instances: Subbuffer<[MaterialInstanceData]>,
+    /// All meshes in the scene
     pub meshes: Subbuffer<[MeshData]>,
+    /// Global index buffer
     pub indices: Subbuffer<[u32]>,
+    /// Global vertex buffer
     pub vertices: Subbuffer<[Vertex]>,
+    /// Buffer with frequently changing data
     pub mutating_data: Subbuffer<MutatingData>,
+    /// Collection of all pipelines that are used for indirect shading
     pub pipelines: Vec<Arc<ComputePipeline>>,
+    /// Common shader object to all pipelines
     shader_object: Arc<ShaderObject>,
+    /// Number of materials
     material_count: u32,
+    /// Buffer of draw indexed indirect commands to be used for rasterizing the visibility buffer with multi draw indirect
     pub draw_indirect_commands: Subbuffer<[DrawIndexedIndirectCommand]>,
 }
 

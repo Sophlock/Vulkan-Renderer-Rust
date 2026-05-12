@@ -47,6 +47,8 @@ use crate::application::rhi::{
     swapchain_resources::{SwapchainFramebuffer, SwapchainFramebufferCreateInfo, SwapchainImage},
 };
 
+/// Render pass that copies an image onto another image by using a fullscreen rectangle pass.
+/// Useful when you need to copy to an image that does not support transfer operations or storage image writes.
 pub struct FullScreenPass {
     render_pass: Arc<RenderPass>,
     vertex_buffer: Subbuffer<[FullScreenPassVertex]>,
@@ -58,6 +60,7 @@ pub struct FullScreenPass {
     sampler: Arc<Sampler>,
 }
 
+/// Vertex for the fullscreen pass
 #[derive(BufferContents, Copy, Clone, vertex_input::Vertex)]
 #[repr(C)]
 struct FullScreenPassVertex {

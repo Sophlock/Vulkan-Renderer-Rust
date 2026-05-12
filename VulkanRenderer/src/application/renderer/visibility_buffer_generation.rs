@@ -49,17 +49,27 @@ use crate::application::{
     },
 };
 
+/// Processing step for the visibility buffer
 pub struct VisibilityBufferProcessingPass {
+    /// Texel counting substep
     texel_count: VisBufferStep,
+    /// Shader culling substep for the culled implementation (naive culling)
     naive_shader_cull: VisBufferStep,
 
+    /// Processing step for the naive implementation (fill all commands streams with all possible data)
     fill_commands: VisBufferStep,
 
+    /// Empty culling step for the main implementation
     shader_cull: VisBufferStep,
+    /// Second culling step to resolve the materials between the thresholds
     resolve_unsure: VisBufferStep,
+    /// Prefix sum of drawn materials
     drawn_offset: VisBufferStep,
+    /// Prefix sum of culled materials
     culled_offset: VisBufferStep,
+    /// Texel binning substep
     texel_bin: VisBufferStep,
+    /// Write data into commands streams
     generate_commands: VisBufferStep,
 
     num_materials: u32,
@@ -72,6 +82,7 @@ struct VisBufferStep {
     data: Arc<VisibilityBufferData>,
 }
 
+/// Rasterization step for the visibility buffer
 pub struct VisibilityBufferRasterizer {
     shader_object: Arc<ShaderObject>,
     pipeline: Arc<GraphicsPipeline>,
@@ -116,6 +127,7 @@ impl VisibilityBufferProcessingPass {
         }
     }
 
+    /// Records the correct command buffer based on enabled variant
     pub fn record_command_buffer(
         &self,
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
@@ -189,6 +201,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
 
+        // Set the sequence count to be the number of visible materials
         command_buffer.copy_buffer(CopyBufferInfo::buffers(
             self.data.drawn_index_counter_buffer.clone(),
             self.data.final_material_count_buffer.clone(),
@@ -204,6 +217,7 @@ impl VisibilityBufferProcessingPass {
         swapchain_extent: [u32; 2],
         profiler: &Profiler,
     ) -> Result<(), Box<ValidationError>> {
+        // Fill all commands streams with all possible materials
         self.fill_commands.record_command_buffer(
             command_buffer,
             image_index,
@@ -233,6 +247,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostTexelCount)?;
 
+        // Group materials into drawn, culled, unsure
         self.shader_cull.record_command_buffer(
             command_buffer,
             image_index,
@@ -241,6 +256,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostEmptyCull)?;
 
+        // Group the materials in unsure into drawn and culled
         self.resolve_unsure.record_command_buffer(
             command_buffer,
             image_index,
@@ -249,6 +265,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostCull)?;
 
+        // Prefix sum over drawn materials
         self.drawn_offset.record_command_buffer(
             command_buffer,
             image_index,
@@ -259,11 +276,13 @@ impl VisibilityBufferProcessingPass {
             ],
         )?;
 
+        // Save the accumulator as it is the number of texels that are shaded with their desired material
         command_buffer.copy_buffer(CopyBufferInfo::buffers(
             self.data.offset_accumulator_buffer.clone(),
             self.data.no_fallback_texel_count_buffer.clone(),
         ))?;
 
+        // Prefix sum over culled materials, keeping the accumulator to essentially put the culled materials at the end of the buffer
         self.culled_offset.record_command_buffer(
             command_buffer,
             image_index,
@@ -272,6 +291,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostPrefixSum)?;
 
+        // Bin the texels by their actually used material
         self.texel_bin.record_command_buffer(
             command_buffer,
             image_index,
@@ -284,6 +304,7 @@ impl VisibilityBufferProcessingPass {
 
         profiler.write(command_buffer, ProfilerStage::PostTexelBin)?;
 
+        // Finally, write the commands streams
         self.generate_commands.record_command_buffer(
             command_buffer,
             image_index,
@@ -292,6 +313,8 @@ impl VisibilityBufferProcessingPass {
 
         Ok(())
     }
+
+    // Below are helper functions that create the individual substeps and write data into their shader objects
 
     fn texel_count_shader(rhi: &VKRHI, data: &Arc<VisibilityBufferData>) -> VisBufferStep {
         let count_texel = VisBufferStep::new(
@@ -775,6 +798,7 @@ impl VisibilityBufferRasterizer {
             rhi.in_flight_frames() as u32,
             rhi.shader_object_update_queue().clone(),
         );
+        // Global pipeline for the entire scene (as we do not support custom vertex materials yet)
         let pipeline = unsafe {
             graphics_pipeline()
                 .input_assembly(None, None)
@@ -785,6 +809,7 @@ impl VisibilityBufferRasterizer {
                         .deref(),
                 )
                 .vertex_buffer_description(&[
+                    // Use the global vertex buffer, but we only need the positions
                     VertexBufferDescription {
                         members: [(
                             String::from("vertexInput.position"),
@@ -801,6 +826,7 @@ impl VisibilityBufferRasterizer {
                         stride: size_of::<Vertex>() as u32,
                         input_rate: VertexInputRate::Vertex,
                     },
+                    // Use the global instance buffer, but we only need the transforms
                     VertexBufferDescription {
                         members: [(
                             String::from("instanceInput.transform"),
@@ -818,7 +844,6 @@ impl VisibilityBufferRasterizer {
                         input_rate: VertexInputRate::Instance { divisor: 1 },
                     },
                 ])
-                //.vertex_input::<Vertex>()
                 .rasterizer(None, None, None, None, None, None)
                 .skip_multisample()
                 .fragment_shader(
@@ -869,6 +894,7 @@ impl VisibilityBufferRasterizer {
         scene: &VKScene,
         data: &VisibilityBufferData,
     ) -> Result<(), Box<ValidationError>> {
+        // Begin the render pass (includes clear operations)
         command_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
@@ -898,14 +924,15 @@ impl VisibilityBufferRasterizer {
                 extent,
             }])?;
 
+        // Write the camera data into the shader (this is not the ideal way but it works)
         let cursor = ShaderCursor::new(self.shader_object.clone());
-
         let view_cursor = cursor.field("gViewData").unwrap();
         view_cursor
             .field("viewProjection")
             .unwrap()
             .write(scene.camera().view_projection().as_ref());
 
+        // Bind pipeline and descriptor sets
         command_buffer
             .bind_pipeline_graphics(self.pipeline.clone())?
             .bind_descriptor_sets(
@@ -915,15 +942,18 @@ impl VisibilityBufferRasterizer {
                 self.shader_object.descriptor_sets()[image_index].clone(),
             )?;
 
+        // Bind vertex, index and instance buffers
         command_buffer
             .bind_vertex_buffers(0, data.global_data.vertices.clone())?
             .bind_vertex_buffers(1, data.global_data.instances.clone())?
             .bind_index_buffer(data.global_data.indices.clone())?;
 
+        // Do a single multi draw indirect to rasterize the entire scene
         unsafe {
             command_buffer.draw_indexed_indirect(data.global_data.draw_indirect_commands.clone())
         }?;
 
+        // End the render pass
         command_buffer
             .end_render_pass(SubpassEndInfo::default())
             .map(|_| ())

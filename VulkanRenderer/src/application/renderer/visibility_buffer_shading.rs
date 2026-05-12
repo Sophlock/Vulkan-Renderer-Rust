@@ -28,16 +28,23 @@ use crate::application::{
     rhi::{VKRHI, shader_cursor::ShaderCursor},
 };
 
+/// Shading step of the visibility buffer
 pub struct VisibilityBufferShadePass {
     rhi: Rc<VKRHI>,
+
+    /// Indirect commands layout. This defines what kinds of indirect commands are executed
     #[cfg(not(feature = "renderdoc_compatibility"))]
     commands_layout: Arc<IndirectCommandsLayout>,
+
+    /// Preprocess buffer for indirect commands (this is mostly an implementation detail of DGC)
     #[cfg(not(feature = "renderdoc_compatibility"))]
     preprocess_buffer: Subbuffer<[u8]>,
+
     data: Arc<VisibilityBufferData>,
 }
 
 impl VisibilityBufferShadePass {
+    /// Upper bound for the number of rendered materials/indirect commands sequences
     #[cfg(not(feature = "no_cull_visbuffer"))]
     pub const MAX_SEQUENCE_COUNT: u32 = 2000u32;
 
@@ -55,14 +62,17 @@ impl VisibilityBufferShadePass {
             rhi.device().clone(),
             IndirectCommandsLayoutCreateInfo {
                 flags: IndirectCommandsLayoutUsageFlags::EXPLICIT_PREPROCESS
+                    // Unordered sequences should make the execution more parallel but it does not seem to have a measurable impact
                     | IndirectCommandsLayoutUsageFlags::UNORDERED_SEQUENCES,
                 pipeline_bind_point: PipelineBindPoint::Compute,
                 tokens: vec![
+                    // First token binds the pipeline
                     IndirectCommandsLayoutToken {
                         token_type: IndirectCommandsTokenType::Pipeline,
                         stream: 0,
                         ..IndirectCommandsLayoutToken::default()
                     },
+                    // Then we pass the material IDs as push constants
                     IndirectCommandsLayoutToken {
                         token_type: IndirectCommandsTokenType::PushConstant,
                         pushconstant_data: Some(IndirectCommandsLayoutTokenPushConstant {
@@ -78,6 +88,7 @@ impl VisibilityBufferShadePass {
                         stream: 1,
                         ..IndirectCommandsLayoutToken::default()
                     },
+                    // Then we dispatch compute shaders to write to the output target
                     IndirectCommandsLayoutToken {
                         token_type: IndirectCommandsTokenType::Dispatch,
                         stream: 2,
@@ -94,6 +105,7 @@ impl VisibilityBufferShadePass {
         )
         .unwrap();
 
+        // Allocate the preprocess buffer according to the memory requirements
         let requirements = commands_layout.memory_requirements(
             &GeneratedCommandsPipeline::Dynamic(),
             Self::MAX_SEQUENCE_COUNT,
@@ -111,6 +123,7 @@ impl VisibilityBufferShadePass {
             .unwrap(),
         );
 
+        // Write data into the shader objects
         let cursor = ShaderCursor::new(data.global_data.shader_object().clone());
         cursor
             .field("visBuffer")
@@ -146,6 +159,7 @@ impl VisibilityBufferShadePass {
         }
     }
 
+    /// When supporting render doc, no commands are recorded
     #[cfg(feature = "renderdoc_compatibility")]
     pub fn record_command_buffer(
         &self,
@@ -161,6 +175,7 @@ impl VisibilityBufferShadePass {
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
     ) -> Result<(), Box<ValidationError>> {
+        // Bind the global descriptor set (this will be used by all pipelines dispatched from the execute indirect commands below)
         let shader_object = self.data.global_data.shader_object();
         command_buffer.bind_descriptor_sets(
             PipelineBindPoint::Compute,
@@ -169,18 +184,20 @@ impl VisibilityBufferShadePass {
             shader_object.descriptor_sets()[image_index].clone(),
         )?;
 
+        // In the naive implementation, we use the number of materials as the (static) sequence count
+        // In other implementations, we use the max sequence count as the static upper bound and material count buffer as the actual, GPU-driven, count
         let sequence_count = if cfg!(feature = "no_cull_visbuffer") {
             self.data.global_data.num_materials()
         } else {
             Self::MAX_SEQUENCE_COUNT
         };
-
         let sequence_count_buffer = if cfg!(feature = "no_cull_visbuffer") {
             None
         } else {
             Some(self.data.final_material_count_buffer.clone())
         };
 
+        // Build the commands info using the commands streams and sequence counts
         let commands_info = GeneratedCommandsInfo {
             streams: vec![
                 IndirectCommandsStream {
@@ -195,14 +212,17 @@ impl VisibilityBufferShadePass {
             ],
             sequence_count,
             sequence_count_buffer,
+            // We bind pipelines using pipeline tokens
             ..GeneratedCommandsInfo::dynamic_pipeline(
                 self.commands_layout.clone(),
                 self.preprocess_buffer.clone(),
             )
         };
 
+        // Explicit preprocessing step
         unsafe { command_buffer.preprocess_generated_commands(commands_info.clone()) }?;
 
+        // Execute the generated commands
         unsafe { command_buffer.execute_generated_commands(true, commands_info) }?;
 
         Ok(())
@@ -214,6 +234,7 @@ impl VisibilityBufferShadePass {
         command_buffer: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         image_index: usize,
     ) -> Result<(), Box<ValidationError>> {
+        // Bind the global descriptor set. This will be used by all pipelines
         let shader_object = self.data.global_data.shader_object();
         command_buffer.bind_descriptor_sets(
             PipelineBindPoint::Compute,
@@ -222,20 +243,26 @@ impl VisibilityBufferShadePass {
             shader_object.descriptor_sets()[image_index].clone(),
         )?;
 
+        // The below mimics what the indirect commands layout does, except that is has to use all pipelines
+
+        // For every material/pipeline
         self.data
             .global_data
             .pipelines
             .iter()
             .enumerate()
             .for_each(|(index, pipeline)| {
+                // Bind the pipeline
                 command_buffer
                     .bind_pipeline_compute(pipeline.clone())
                     .unwrap();
 
+                // Pass the ID/index as a push constant
                 command_buffer
                     .push_constants(shader_object.pipeline_layout().clone(), 0, index as u32)
                     .unwrap();
 
+                // Dispatch a compute shader, indirectly and based on the computed dispatch size
                 unsafe {
                     command_buffer.dispatch_indirect(
                         self.data

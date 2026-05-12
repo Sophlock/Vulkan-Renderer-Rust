@@ -23,6 +23,9 @@ use crate::application::rhi::{
     swapchain_resources::SwapchainImage,
 };
 
+/// Post processing pass
+/// 
+/// Currently mostly placeholder 
 pub struct PostProcessPass {
     shader_object_layout: Arc<ShaderObjectLayout>,
     shader_object: Arc<ShaderObject>,

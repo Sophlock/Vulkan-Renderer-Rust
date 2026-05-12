@@ -48,36 +48,61 @@ use crate::application::{
     },
 };
 
+/// Data inside the renderer that may be mutated.
+/// Some of the members do not need to be mutable anymore but are left in here for now to avoid breaking changes.
 pub struct MutableRenderState {
+    /// The swapchain (i.e., the source of presentable images)
     swapchain: Swapchain,
     depth_image_view: Arc<RwLock<SwapchainImage>>,
+    /// The render target where the raw render output is drawn to
     color_render_target: Arc<RwLock<SwapchainImage>>,
+    /// The render target that post processing renders into
     pp_render_target: Arc<RwLock<SwapchainImage>>,
     rt_framebuffer: Arc<RwLock<SwapchainFramebuffer>>,
+    /// True if a swapchain recreation request was queued
     should_recreate_swapchain: bool,
+    /// The future that represents the previous frame being presented
     in_flight_future: Option<FenceSignalFuture<Box<dyn GpuFuture>>>,
+    
+    /// Fullscreen rectangle pass to transfer the rendered image from compute to graphics.
+    /// This is needed because it may not always be possible to write to the swapchain images from compute
     fullscreen_pass: FullScreenPass,
+    
+    /// Rasterization step of the Visibility Buffer
     vis_buffer_rasterizer: VisibilityBufferRasterizer,
+    /// Processing step of the Visibility Buffer
     vis_buffer_processing: VisibilityBufferProcessingPass,
+    /// All data needed for the Visibility Buffer
     vis_buffer_data: Arc<VisibilityBufferData>,
+    /// Shading step of the Visibility Buffer
     vis_buffer_shade: VisibilityBufferShadePass,
+    /// A buffer of data that changes often, e.g., the camera data.
     mutating_data: Subbuffer<MutatingData>,
 }
 
+/// Renderer struct that is responsible for drawing scenes
 pub struct VKRenderer {
+    /// Render Hardware Interface
     rhi: Rc<VKRHI>,
+    /// Internally mutable data
     mutable_state: RefCell<MutableRenderState>,
-    render_pass: Arc<RenderPass>,
+    //render_pass: Arc<RenderPass>,
+    /// Material compiler for forward rendering. Deprecated
     material_compiler: RefCell<MaterialCompiler>,
+    /// Post processing pass
     post_process: PostProcessPass,
+    /// Profiler for measuring GPU times
     profiler: Profiler,
+    /// System to record data about the scene (e.g., number of visible materials)
     scene_statistics: RefCell<SceneStatistics>,
 }
 
+/// Material compiler for forward rendering. Not currently used and to be considered deprecated.
 struct MaterialCompiler {
     compiled_materials: HashMap<usize, CompiledMaterial>,
 }
 
+/// A compiled material for forward rendering. Not currently used and to be considered deprecated.
 struct CompiledMaterial {
     pipeline: Arc<GraphicsPipeline>,
 }
@@ -183,7 +208,7 @@ impl VKRenderer {
                 vis_buffer_shade,
                 mutating_data,
             }),
-            render_pass,
+            //render_pass,
             material_compiler: RefCell::new(MaterialCompiler::new()),
             post_process,
             profiler,
@@ -191,10 +216,13 @@ impl VKRenderer {
         }
     }
 
+    /// Draw and present a new frame. If needed, waits for the previous frame to be finished
     pub fn redraw(&self, scene: &VKScene) {
+        // Essentially just delegates to draw_frame and updates the in flight future
         self.mutable_state().in_flight_future = self.draw_frame(scene);
     }
 
+    /// Perform drawing and present operations. Returns a future representing a successful present or None in case of any errors
     fn draw_frame(&self, scene: &VKScene) -> Option<FenceSignalFuture<Box<dyn GpuFuture>>> {
         // Wait for the previous frame to finish
         self.mutable_state_const()
@@ -211,7 +239,7 @@ impl VKRenderer {
         // Recreate swapchain if needed
         if self.mutable_state_const().should_recreate_swapchain {
             self.mutable_state()
-                .recreate_swapchain_internal(self.rhi.as_ref(), &self.render_pass);
+                .recreate_swapchain_internal(self.rhi.as_ref());
         }
 
         // Update camera matrix and screen data
@@ -237,6 +265,7 @@ impl VKRenderer {
 
         let swapchain_extent = self.mutable_state_const().swapchain.extent;
 
+        // Render the scene using the visibility buffer setup
         let draw_finished_future = self.draw_frame_visbuffer(
             scene,
             swapchain_image_index,
@@ -500,6 +529,10 @@ impl VKRenderer {
         unimplemented!()
     }
 
+    /// Render the scene using the visibility buffer setup
+    /// Returns a future representing the finished rendering operation
+    /// Everything will be executed after before_future.
+    /// Note that this will transition from before_future's queue into the graphics queue and return a future on the compute queue
     fn draw_frame_visbuffer(
         &self,
         scene: &VKScene,
@@ -624,7 +657,7 @@ impl VKRenderer {
     pub fn compile_materials(&self) {
         self.material_compiler
             .borrow_mut()
-            .compile_materials(&self.rhi, &self.render_pass);
+            .compile_materials(&self.rhi);
     }
 
     pub fn mutable_state_const(&self) -> Ref<MutableRenderState> {
@@ -634,6 +667,7 @@ impl VKRenderer {
         self.mutable_state.borrow_mut()
     }
 
+    /// Update camera and screen data
     fn update_mutating_data(&self, scene: &VKScene) {
         let data = MutatingData {
             screen_size: self.mutable_state_const().swapchain.extent,
@@ -675,7 +709,7 @@ impl MutableRenderState {
         self.should_recreate_swapchain = true;
     }
 
-    fn recreate_swapchain_internal(&mut self, rhi: &VKRHI, render_pass: &Arc<RenderPass>) {
+    fn recreate_swapchain_internal(&mut self, rhi: &VKRHI) {
         //unsafe { self.device.wait_idle().unwrap() }
         if rhi.window().inner_size() == PhysicalSize::new(0, 0) {
             return;
@@ -748,7 +782,7 @@ impl MaterialCompiler {
         self.compiled_materials.get(&material.uuid())
     }
 
-    pub fn compile_materials(&mut self, rhi: &VKRHI, render_pass: &Arc<RenderPass>) {
+    pub fn compile_materials(&mut self, rhi: &VKRHI/*, render_pass: &Arc<RenderPass>*/) {
         /*let resource_manager = rhi.resource_manager();
         self.compiled_materials = resource_manager
             .resource_iterator::<VKMaterial>()

@@ -69,6 +69,9 @@ use crate::application::{
     },
 };
 
+/// Render Hardware Interface implementation for Vulkan
+/// 
+/// This is responsible for creating and managing Vulkan objects and Vulkan representations of game assets
 pub struct VKRHI {
     frames_in_flight: usize,
     window: Arc<Window>,
